@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -32,6 +32,18 @@ jobs:
         env:
           NEXT_PUBLIC_SUPABASE_URL: ${{ vars.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY }}
+      - name: Publish compiled files to the branch root
+        run: |
+          cp dist/index.html index.html
+          rm -rf pages-assets
+          cp -R dist/pages-assets pages-assets
+          git add index.html pages-assets
+          if ! git diff --cached --quiet; then
+            git -c user.name="github-actions[bot]" \
+              -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+              commit -m "Publish GitHub Pages build [skip ci]"
+            git push
+          fi
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
       - name: Upload build artifact
