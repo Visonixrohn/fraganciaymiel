@@ -1,4 +1,4 @@
--- Fragancia y Miel: esquema privado para Supabase.
+-- Fragancia y Miel: esquema compartido para Supabase.
 -- Ejecuta este archivo en Supabase > SQL Editor. No uses una clave service_role en el cliente.
 
 create extension if not exists pgcrypto;
@@ -83,12 +83,48 @@ create table if not exists public.batches (
   unique (owner_id, code)
 );
 
+create sequence if not exists public.sales_invoice_number_seq;
+
+create table if not exists public.sales (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  status text not null default 'draft' check (status in ('draft', 'issued')),
+  invoice_number text unique,
+  invoice_date date,
+  customer_name text not null default 'Cliente general',
+  customer_phone text,
+  payment_method text not null default 'cash' check (payment_method in ('cash', 'transfer', 'card', 'other')),
+  subtotal numeric(14, 2) not null default 0 check (subtotal >= 0),
+  total numeric(14, 2) not null default 0 check (total >= 0),
+  created_at timestamptz not null default now(),
+  issued_at timestamptz,
+  check (
+    (status = 'draft' and invoice_number is null and invoice_date is null and issued_at is null)
+    or (status = 'issued' and invoice_number is not null and invoice_date is not null and issued_at is not null)
+  )
+);
+
+create table if not exists public.sale_items (
+  id uuid primary key default gen_random_uuid(),
+  sale_id uuid not null references public.sales(id) on delete cascade,
+  recipe_id uuid not null references public.recipes(id) on delete restrict,
+  recipe_name text not null,
+  quantity integer not null check (quantity > 0),
+  price_type text not null check (price_type in ('detail', 'wholesale', 'event')),
+  unit_price numeric(14, 2) not null check (unit_price >= 0),
+  line_total numeric(14, 2) not null check (line_total >= 0),
+  created_at timestamptz not null default now()
+);
+
 create index if not exists materials_owner_idx on public.materials(owner_id);
 create index if not exists indirects_owner_idx on public.indirects(owner_id);
 create index if not exists utensils_owner_idx on public.utensils(owner_id);
 create index if not exists recipes_owner_idx on public.recipes(owner_id);
 create index if not exists batches_owner_date_idx on public.batches(owner_id, batch_date desc);
 create index if not exists recipe_items_recipe_idx on public.recipe_items(recipe_id);
+create index if not exists sales_created_at_idx on public.sales(created_at desc);
+create index if not exists sale_items_sale_idx on public.sale_items(sale_id);
+create index if not exists sale_items_recipe_idx on public.sale_items(recipe_id);
 
 alter table public.materials enable row level security;
 alter table public.indirects enable row level security;
@@ -96,6 +132,8 @@ alter table public.utensils enable row level security;
 alter table public.recipes enable row level security;
 alter table public.recipe_items enable row level security;
 alter table public.batches enable row level security;
+alter table public.sales enable row level security;
+alter table public.sale_items enable row level security;
 
 drop policy if exists "Owners manage their materials" on public.materials;
 drop policy if exists "Authenticated users manage shared materials" on public.materials;
@@ -127,7 +165,16 @@ drop policy if exists "Authenticated users manage shared batches" on public.batc
 create policy "Authenticated users manage shared batches" on public.batches
   for all to authenticated using (true) with check (true);
 
-grant select, insert, update, delete on public.materials, public.indirects, public.utensils, public.recipes, public.recipe_items, public.batches to authenticated;
+drop policy if exists "Authenticated users manage shared sales" on public.sales;
+create policy "Authenticated users manage shared sales" on public.sales
+  for all to authenticated using (true) with check (true);
+
+drop policy if exists "Authenticated users manage shared sale items" on public.sale_items;
+create policy "Authenticated users manage shared sale items" on public.sale_items
+  for all to authenticated using (true) with check (true);
+
+grant select, insert, update, delete on public.materials, public.indirects, public.utensils, public.recipes, public.recipe_items, public.batches, public.sales, public.sale_items to authenticated;
+grant usage, select on sequence public.sales_invoice_number_seq to authenticated;
 
 drop function if exists public.save_recipe(uuid, text, integer, numeric, uuid, uuid, numeric, jsonb);
 
@@ -239,7 +286,8 @@ begin
   end if;
 
   select * into v_recipe from public.recipes
-  where id = p_recipe_id;
+  where id = p_recipe_id
+  for update;
   if not found then
     raise exception 'No se encontró la receta seleccionada.';
   end if;
@@ -281,7 +329,175 @@ begin
 end;
 $$;
 
+create or replace function public.save_sales_order(
+  p_sale_id uuid,
+  p_customer_name text,
+  p_customer_phone text,
+  p_payment_method text,
+  p_items jsonb
+)
+returns uuid
+language plpgsql
+set search_path = ''
+as $$
+declare
+  v_owner uuid := auth.uid();
+  v_sale_id uuid;
+  v_total numeric(14, 2);
+begin
+  if v_owner is null then
+    raise exception 'Debes iniciar sesión para guardar pedidos.';
+  end if;
+  if p_payment_method is null or p_payment_method not in ('cash', 'transfer', 'card', 'other') then
+    raise exception 'Selecciona un método de pago válido.';
+  end if;
+  if p_items is null or jsonb_typeof(p_items) is distinct from 'array' or jsonb_array_length(p_items) = 0 then
+    raise exception 'Agrega por lo menos un producto al pedido.';
+  end if;
+  if exists (
+    select 1
+    from jsonb_to_recordset(p_items) as item(recipe_id uuid, quantity integer, price_type text)
+    left join public.recipes r on r.id = item.recipe_id
+    where r.id is null
+      or item.quantity is null or item.quantity <= 0
+      or item.price_type not in ('detail', 'wholesale', 'event')
+      or case item.price_type
+        when 'detail' then r.price_detail
+        when 'wholesale' then r.price_wholesale
+        when 'event' then r.price_event
+        else null
+      end is null
+  ) then
+    raise exception 'El pedido contiene un producto o precio inválido. Revisa los precios de la receta.';
+  end if;
+
+  if p_sale_id is null then
+    insert into public.sales (owner_id, customer_name, customer_phone, payment_method)
+    values (v_owner, coalesce(nullif(trim(p_customer_name), ''), 'Cliente general'),
+      nullif(trim(p_customer_phone), ''), p_payment_method)
+    returning id into v_sale_id;
+  else
+    update public.sales
+    set customer_name = coalesce(nullif(trim(p_customer_name), ''), 'Cliente general'),
+        customer_phone = nullif(trim(p_customer_phone), ''),
+        payment_method = p_payment_method,
+        subtotal = 0,
+        total = 0
+    where id = p_sale_id and status = 'draft'
+    returning id into v_sale_id;
+    if v_sale_id is null then
+      raise exception 'No se encontró el pedido en borrador para actualizar.';
+    end if;
+    delete from public.sale_items where sale_id = v_sale_id;
+  end if;
+
+  insert into public.sale_items (
+    sale_id, recipe_id, recipe_name, quantity, price_type, unit_price, line_total
+  )
+  select
+    v_sale_id,
+    r.id,
+    r.name,
+    item.quantity,
+    item.price_type,
+    case item.price_type
+      when 'detail' then r.price_detail
+      when 'wholesale' then r.price_wholesale
+      when 'event' then r.price_event
+    end,
+    round(case item.price_type
+      when 'detail' then r.price_detail
+      when 'wholesale' then r.price_wholesale
+      when 'event' then r.price_event
+    end * item.quantity, 2)
+  from jsonb_to_recordset(p_items) as item(recipe_id uuid, quantity integer, price_type text)
+  join public.recipes r on r.id = item.recipe_id;
+
+  select coalesce(sum(line_total), 0) into v_total
+  from public.sale_items where sale_id = v_sale_id;
+
+  update public.sales set subtotal = v_total, total = v_total where id = v_sale_id;
+  return v_sale_id;
+end;
+$$;
+
+create or replace function public.issue_sales_order(p_sale_id uuid)
+returns public.sales
+language plpgsql
+set search_path = ''
+as $$
+declare
+  v_owner uuid := auth.uid();
+  v_sale public.sales%rowtype;
+  v_item record;
+  v_available numeric;
+  v_invoice_number text;
+begin
+  if v_owner is null then
+    raise exception 'Debes iniciar sesión para emitir comprobantes.';
+  end if;
+
+  select * into v_sale from public.sales where id = p_sale_id for update;
+  if not found or v_sale.status <> 'draft' then
+    raise exception 'No se encontró un pedido en borrador para emitir.';
+  end if;
+
+  if not exists (select 1 from public.sale_items where sale_id = p_sale_id) then
+    raise exception 'El pedido no tiene productos.';
+  end if;
+
+  for v_item in
+    select recipe_id, sum(quantity)::integer as quantity
+    from public.sale_items
+    where sale_id = p_sale_id
+    group by recipe_id
+    order by recipe_id
+  loop
+    perform 1 from public.recipes where id = v_item.recipe_id for update;
+    if not found then
+      raise exception 'No se encontró una receta del pedido.';
+    end if;
+
+    select
+      coalesce(sum(b.quantity), 0)
+      - coalesce((
+        select sum(si.quantity)
+        from public.sales s
+        join public.sale_items si on si.sale_id = s.id
+        where s.status = 'issued' and si.recipe_id = v_item.recipe_id
+      ), 0)
+    into v_available
+    from public.batches b
+    where b.recipe_id = v_item.recipe_id;
+
+    if v_available < v_item.quantity then
+      raise exception 'Existencias insuficientes para "%". Disponibles: %, solicitadas: %.',
+        (select name from public.recipes where id = v_item.recipe_id),
+        v_available,
+        v_item.quantity;
+    end if;
+  end loop;
+
+  v_invoice_number := 'FYM-' || pg_catalog.to_char(current_date, 'YYYYMMDD') || '-'
+    || pg_catalog.lpad(pg_catalog.nextval('public.sales_invoice_number_seq')::text, 6, '0');
+
+  update public.sales
+  set status = 'issued',
+      invoice_number = v_invoice_number,
+      invoice_date = current_date,
+      issued_at = now()
+  where id = p_sale_id
+  returning * into v_sale;
+
+  return v_sale;
+end;
+$$;
+
 revoke all on function public.save_recipe(uuid, text, integer, numeric, uuid, uuid, numeric, numeric, numeric, numeric, jsonb) from public;
 revoke all on function public.produce_batch(uuid, text, integer) from public;
+revoke all on function public.save_sales_order(uuid, text, text, text, jsonb) from public;
+revoke all on function public.issue_sales_order(uuid) from public;
 grant execute on function public.save_recipe(uuid, text, integer, numeric, uuid, uuid, numeric, numeric, numeric, numeric, jsonb) to authenticated;
 grant execute on function public.produce_batch(uuid, text, integer) to authenticated;
+grant execute on function public.save_sales_order(uuid, text, text, text, jsonb) to authenticated;
+grant execute on function public.issue_sales_order(uuid) to authenticated;

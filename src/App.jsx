@@ -7,12 +7,24 @@ const tabs = [
   ['utensils', 'Utensilios', '⌑'],
   ['recipes', 'Calculadora y recetas', '⌗'],
   ['production', 'Producción', '▤'],
+  ['sales', 'Pedidos y facturas', '▧'],
 ];
 
 const money = (value) => `L ${Number(value || 0).toFixed(2)}`;
 const number = (value) => Number(value || 0);
 const makeCode = () => `LOTE-${new Date().toISOString().slice(0, 10).replaceAll('-', '')}-${Math.floor(Math.random() * 900 + 100)}`;
 const ACCESS_CODE = '8863';
+const priceTypes = [
+  ['detail', 'Detalle'],
+  ['wholesale', 'Por mayor'],
+  ['event', 'Eventos'],
+];
+const paymentMethods = [
+  ['cash', 'Efectivo'],
+  ['transfer', 'Transferencia'],
+  ['card', 'Tarjeta'],
+  ['other', 'Otro'],
+];
 
 const fromMaterial = (row) => ({
   ...row,
@@ -56,8 +68,10 @@ function App() {
     utensils: [],
     recipes: [],
     batches: [],
+    sales: [],
   });
   const [modal, setModal] = useState(null);
+  const [saleDraft, setSaleDraft] = useState(null);
   const [recipe, setRecipe] = useState({
     id: '',
     name: '',
@@ -107,18 +121,20 @@ function App() {
       supabase.from('utensils').select('*').order('name'),
       supabase.from('recipes').select('*, recipe_items(*)').order('name'),
       supabase.from('batches').select('*').order('created_at', { ascending: false }),
+      supabase.from('sales').select('*, sale_items(*)').order('created_at', { ascending: false }),
     ]);
     const failed = queries.find(({ error: queryError }) => queryError);
     if (failed) {
       setError(failed.error.message);
     } else {
-      const [materials, indirects, utensils, recipes, batches] = queries.map((result) => result.data);
+      const [materials, indirects, utensils, recipes, batches, sales] = queries.map((result) => result.data);
       setData({
         materials: materials.map(fromMaterial),
         indirects: indirects.map(fromIndirect),
         utensils: utensils.map(fromUtensil),
         recipes: recipes.map(fromRecipe),
         batches,
+        sales,
       });
     }
     setLoading(false);
@@ -160,6 +176,26 @@ function App() {
       event: recipe.prices.event ?? costs.unit * (1 + markup * 0.7 / 100),
     };
   }, [costs.unit, recipe.margin, recipe.prices]);
+
+  const saleDraftTotal = useMemo(() => {
+    if (!saleDraft) return 0;
+    return saleDraft.items.reduce((total, item) => {
+      const product = data.recipes.find((entry) => entry.id === item.recipeId);
+      return total + number(product?.prices?.[item.priceType]) * number(item.quantity);
+    }, 0);
+  }, [data.recipes, saleDraft]);
+
+  function availableFinishedStock(recipeId) {
+    const produced = data.batches
+      .filter((batch) => batch.recipe_id === recipeId)
+      .reduce((sum, batch) => sum + number(batch.quantity), 0);
+    const sold = data.sales
+      .filter((sale) => sale.status === 'issued')
+      .flatMap((sale) => sale.sale_items || [])
+      .filter((item) => item.recipe_id === recipeId)
+      .reduce((sum, item) => sum + number(item.quantity), 0);
+    return produced - sold;
+  }
 
   async function handleAccessCode(event) {
     event.preventDefault();
@@ -327,6 +363,81 @@ function App() {
     setModal(null);
     toast('Lote registrado y existencias actualizadas');
     await loadData();
+  }
+
+  function openSalesOrder(sale = null) {
+    setSaleDraft(sale
+      ? {
+        id: sale.id,
+        customerName: sale.customer_name === 'Cliente general' ? '' : sale.customer_name,
+        customerPhone: sale.customer_phone || '',
+        paymentMethod: sale.payment_method,
+        items: (sale.sale_items || []).map((item) => ({
+          recipeId: item.recipe_id,
+          quantity: String(item.quantity),
+          priceType: item.price_type,
+        })),
+      }
+      : {
+        id: '',
+        customerName: '',
+        customerPhone: '',
+        paymentMethod: 'cash',
+        items: [{ recipeId: '', quantity: '1', priceType: 'detail' }],
+      });
+    setModal({ kind: 'sale' });
+  }
+
+  async function saveSalesOrder(event) {
+    event.preventDefault();
+    const items = saleDraft.items
+      .filter((item) => item.recipeId)
+      .map((item) => ({
+        recipe_id: item.recipeId,
+        quantity: number(item.quantity),
+        price_type: item.priceType,
+      }));
+    if (!items.length || items.some((item) => item.quantity < 1)) {
+      toast('Agrega productos y cantidades válidas al pedido.', 'error');
+      return;
+    }
+
+    const { error: saveError } = await supabase.rpc('save_sales_order', {
+      p_sale_id: saleDraft.id || null,
+      p_customer_name: saleDraft.customerName.trim() || null,
+      p_customer_phone: saleDraft.customerPhone.trim() || null,
+      p_payment_method: saleDraft.paymentMethod,
+      p_items: items,
+    });
+    if (saveError) {
+      toast(saveError.message, 'error');
+      return;
+    }
+    setModal(null);
+    setSaleDraft(null);
+    toast('Pedido guardado en borrador');
+    await loadData();
+  }
+
+  async function issueSalesOrder(sale) {
+    if (!window.confirm('¿Emitir el comprobante? Se validará y descontará el stock de jabones terminados.')) return;
+    const { error: issueError } = await supabase.rpc('issue_sales_order', { p_sale_id: sale.id });
+    if (issueError) {
+      toast(issueError.message, 'error');
+      return;
+    }
+
+    const { data: invoice, error: invoiceError } = await supabase
+      .from('sales')
+      .select('*, sale_items(*)')
+      .eq('id', sale.id)
+      .single();
+    await loadData();
+    if (invoiceError) {
+      toast(`Comprobante emitido, pero no se pudo cargar para imprimir: ${invoiceError.message}`, 'error');
+      return;
+    }
+    setModal({ kind: 'invoice', sale: invoice });
   }
 
   function exportData() {
@@ -618,10 +729,34 @@ function App() {
             </Table>
           </Section>
         )}
+        {tab === 'sales' && (
+          <Section title="Pedidos y comprobantes" subtitle="Guarda pedidos y emite comprobantes al confirmar la venta" action="＋ Nuevo pedido" onAction={() => openSalesOrder()}>
+            <Table headers={['N.º / pedido', 'Fecha', 'Cliente', 'Unidades', 'Total', 'Estado', 'Acciones']}>
+              {data.sales.map((sale) => (
+                <tr key={sale.id}>
+                  <td><code>{sale.invoice_number || `PED-${sale.id.slice(0, 8).toUpperCase()}`}</code></td>
+                  <td>{new Date(`${sale.invoice_date || sale.created_at.slice(0, 10)}T12:00:00`).toLocaleDateString('es-HN')}</td>
+                  <td className="strong">{sale.customer_name}</td>
+                  <td>{(sale.sale_items || []).reduce((sum, item) => sum + number(item.quantity), 0)}</td>
+                  <td className="green">{money(sale.total)}</td>
+                  <td><span className={`pill ${sale.status === 'issued' ? 'good' : 'warning'}`}>{sale.status === 'issued' ? 'Emitido' : 'Borrador'}</span></td>
+                  <td className="sale-actions">
+                    {sale.status === 'draft'
+                      ? <>
+                        <button className="icon-button" aria-label="Editar pedido" title="Editar pedido" onClick={() => openSalesOrder(sale)}>✎</button>
+                        <button className="button primary small" onClick={() => issueSalesOrder(sale)}>Emitir</button>
+                      </>
+                      : <button className="button secondary small" onClick={() => setModal({ kind: 'invoice', sale })}>Ver / imprimir</button>}
+                  </td>
+                </tr>
+              ))}
+            </Table>
+          </Section>
+        )}
         <footer className="footer">Fragancia & Miel <span>·</span> Control de costos e inventario</footer>
       </main>
 
-      {modal && modal.kind !== 'production' && (
+      {modal && !['production', 'sale', 'invoice'].includes(modal.kind) && (
         <Dialog title={`${modal.item ? 'Editar' : 'Registrar'} ${modal.kind === 'materials' ? 'materia prima' : modal.kind === 'indirects' ? 'insumo indirecto' : 'utensilio'}`} onClose={() => setModal(null)}>
           <form className="stack-form" onSubmit={saveEntity}>
             <Field label="Código"><input required value={modal.values.code} onChange={(e) => setModal({ ...modal, values: { ...modal.values, code: e.target.value } })} /></Field>
@@ -648,6 +783,94 @@ function App() {
             </div>}
             <div className="dialog-actions"><button type="button" className="button secondary" onClick={() => setModal(null)}>Cancelar</button><button className="button primary">Guardar</button></div>
           </form>
+        </Dialog>
+      )}
+      {modal?.kind === 'sale' && saleDraft && (
+        <Dialog className="sales-dialog" title={saleDraft.id ? 'Editar pedido' : 'Nuevo pedido'} onClose={() => { setModal(null); setSaleDraft(null); }}>
+          <form className="stack-form" onSubmit={saveSalesOrder}>
+            <div className="form-grid">
+              <Field label="Cliente (opcional)"><input value={saleDraft.customerName} placeholder="Cliente general" onChange={(event) => setSaleDraft({ ...saleDraft, customerName: event.target.value })} /></Field>
+              <Field label="Teléfono (opcional)"><input value={saleDraft.customerPhone} onChange={(event) => setSaleDraft({ ...saleDraft, customerPhone: event.target.value })} /></Field>
+            </div>
+            <Field label="Forma de pago">
+              <select value={saleDraft.paymentMethod} onChange={(event) => setSaleDraft({ ...saleDraft, paymentMethod: event.target.value })}>
+                {paymentMethods.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+            </Field>
+            <div className="sale-lines">
+              <div className="list-heading"><h3>Productos</h3><button type="button" className="text-button" onClick={() => setSaleDraft({ ...saleDraft, items: [...saleDraft.items, { recipeId: '', quantity: '1', priceType: 'detail' }] })}>＋ Agregar producto</button></div>
+              {saleDraft.items.map((item, index) => {
+                const product = data.recipes.find((entry) => entry.id === item.recipeId);
+                const selectedPrice = product?.prices?.[item.priceType];
+                return (
+                  <div className="sale-item-row" key={`${index}-${item.recipeId}`}>
+                    <select aria-label="Producto" value={item.recipeId} required onChange={(event) => setSaleDraft({
+                      ...saleDraft,
+                      items: saleDraft.items.map((row, rowIndex) => rowIndex === index ? { ...row, recipeId: event.target.value } : row),
+                    })}>
+                      <option value="" disabled>Selecciona un jabón</option>
+                      {data.recipes.map((recipeItem) => <option key={recipeItem.id} value={recipeItem.id}>{recipeItem.name}</option>)}
+                    </select>
+                    <select aria-label="Precio" value={item.priceType} onChange={(event) => setSaleDraft({
+                      ...saleDraft,
+                      items: saleDraft.items.map((row, rowIndex) => rowIndex === index ? { ...row, priceType: event.target.value } : row),
+                    })}>
+                      {priceTypes.map(([value, label]) => <option key={value} value={value} disabled={product?.prices?.[value] == null}>{label}</option>)}
+                    </select>
+                    <input aria-label="Cantidad" type="number" min="1" step="1" required value={item.quantity} onChange={(event) => setSaleDraft({
+                      ...saleDraft,
+                      items: saleDraft.items.map((row, rowIndex) => rowIndex === index ? { ...row, quantity: event.target.value } : row),
+                    })} />
+                    <span className="sale-line-price">{product ? `Disp. ${availableFinishedStock(product.id)} · ${selectedPrice == null ? 'Sin precio' : money(selectedPrice)}` : '—'}</span>
+                    <button type="button" className="icon-button danger-text" aria-label="Quitar producto" onClick={() => setSaleDraft({
+                      ...saleDraft,
+                      items: saleDraft.items.filter((_, rowIndex) => rowIndex !== index),
+                    })}>×</button>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="sale-total"><span>Total del pedido</span><strong>{money(saleDraftTotal)}</strong></div>
+            <p className="form-note">El pedido queda en borrador. Al emitir el comprobante se verifica y descuenta el stock de jabones terminados.</p>
+            <div className="dialog-actions">
+              <button type="button" className="button secondary" onClick={() => { setModal(null); setSaleDraft(null); }}>Cancelar</button>
+              <button className="button primary">Guardar pedido</button>
+            </div>
+          </form>
+        </Dialog>
+      )}
+      {modal?.kind === 'invoice' && (
+        <Dialog className="invoice-dialog" title="Comprobante interno" onClose={() => setModal(null)}>
+          <div className="invoice-paper">
+            <header className="invoice-brand">
+              <div><h1>Fragancia &amp; Miel</h1><p>Jabonería artesanal</p></div>
+              <strong>COMPROBANTE INTERNO<br />NO FISCAL</strong>
+            </header>
+            <div className="invoice-meta">
+              <p><span>Número</span><strong>{modal.sale.invoice_number}</strong></p>
+              <p><span>Fecha</span><strong>{new Date(`${modal.sale.invoice_date}T12:00:00`).toLocaleDateString('es-HN')}</strong></p>
+              <p><span>Cliente</span><strong>{modal.sale.customer_name}</strong></p>
+              {modal.sale.customer_phone && <p><span>Teléfono</span><strong>{modal.sale.customer_phone}</strong></p>}
+              <p><span>Pago</span><strong>{paymentMethods.find(([value]) => value === modal.sale.payment_method)?.[1] || 'Otro'}</strong></p>
+            </div>
+            <table className="invoice-table">
+              <thead><tr><th>Producto</th><th>Precio</th><th>Cant.</th><th>Importe</th></tr></thead>
+              <tbody>{(modal.sale.sale_items || []).map((item) => (
+                <tr key={item.id}>
+                  <td>{item.recipe_name}<small>{priceTypes.find(([value]) => value === item.price_type)?.[1]}</small></td>
+                  <td>{money(item.unit_price)}</td>
+                  <td>{item.quantity}</td>
+                  <td>{money(item.line_total)}</td>
+                </tr>
+              ))}</tbody>
+            </table>
+            <div className="invoice-total"><span>Total</span><strong>{money(modal.sale.total)}</strong></div>
+            <p className="invoice-thanks">¡Gracias por tu compra!</p>
+          </div>
+          <div className="dialog-actions no-print">
+            <button type="button" className="button secondary" onClick={() => setModal(null)}>Cerrar</button>
+            <button type="button" className="button primary" onClick={() => window.print()}>Imprimir / reimprimir</button>
+          </div>
         </Dialog>
       )}
       {modal?.kind === 'production' && (
@@ -705,8 +928,8 @@ function Empty({ text }) {
 function Notice({ type, children }) {
   return <div className={`notice ${type}`} role="alert">{children}</div>;
 }
-function Dialog({ title, onClose, children }) {
-  return <div className="dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section className="dialog" role="dialog" aria-modal="true" aria-label={title}><div className="dialog-heading"><h2>{title}</h2><button className="icon-button" aria-label="Cerrar" onClick={onClose}>×</button></div>{children}</section></div>;
+function Dialog({ title, onClose, children, className = '' }) {
+  return <div className="dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section className={`dialog ${className}`} role="dialog" aria-modal="true" aria-label={title}><div className="dialog-heading"><h2>{title}</h2><button className="icon-button" aria-label="Cerrar" onClick={onClose}>×</button></div>{children}</section></div>;
 }
 function Field({ label, children }) {
   return <label>{label}{children}</label>;
