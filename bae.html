@@ -1,0 +1,1328 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Fragancia y Miel - Control de Costos e Inventario</title>
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <!-- Google Fonts Inter -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bs-primary: #15803d;
+            --bs-primary-rgb: 21, 128, 61;
+            --botanic-dark: #064e3b;
+            --botanic-light: #f0fdf4;
+            --botanic-border: #bbf7d0;
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8fafc;
+            color: #1e293b;
+        }
+        .navbar-brand {
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+        .card {
+            border: 1px solid #e2e8f0;
+            box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05);
+            border-radius: 0.75rem;
+        }
+        .nav-pills .nav-link {
+            color: #475569;
+            font-weight: 500;
+            border-radius: 0.5rem;
+            transition: all 0.2s ease;
+        }
+        .nav-pills .nav-link.active {
+            background-color: var(--bs-primary);
+            color: white;
+            box-shadow: 0 4px 6px -1px rgba(21, 128, 61, 0.2);
+        }
+        .nav-pills .nav-link:hover:not(.active) {
+            background-color: #e2e8f0;
+            color: #1e293b;
+        }
+        .table th {
+            font-weight: 600;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            background-color: #f8fafc;
+            color: #475569;
+        }
+        .badge-reorder {
+            background-color: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #fecaca;
+            font-weight: 600;
+        }
+        .badge-ok {
+            background-color: #dcfce7;
+            color: #166534;
+            border: 1px solid #bbf7d0;
+            font-weight: 600;
+        }
+        .stat-card {
+            border-left: 4px solid var(--bs-primary);
+        }
+        /* Toast Notification Container */
+        #toast-container {
+            position: fixed;
+            bottom: 1.5rem;
+            right: 1.5rem;
+            z-index: 1080;
+        }
+    </style>
+</head>
+<body class="bg-light">
+
+    <!-- Header / Navbar -->
+    <nav class="navbar navbar-expand-lg navbar-dark bg-dark shadow-sm" style="background-color: var(--botanic-dark) !important;">
+        <div class="container-fluid px-4">
+            <a class="navbar-brand d-flex align-items-center gap-2" href="#">
+                <i class="fa-solid fa-soap text-success"></i>
+                <span>Fragancia y Miel <span class="badge bg-success text-white fs-6 ms-1">Control Pro</span></span>
+            </a>
+            <div class="d-flex align-items-center gap-3">
+                <span class="text-white-50 small d-none d-md-inline"><i class="fa-solid fa-coins me-1"></i> Moneda: LPS (Lempiras)</span>
+                <button class="btn btn-outline-light btn-sm" onclick="app.exportData()"><i class="fa-solid fa-download me-1"></i> Exportar</button>
+                <button class="btn btn-outline-light btn-sm" onclick="document.getElementById('importFile').click()"><i class="fa-solid fa-upload me-1"></i> Importar</button>
+                <input type="file" id="importFile" class="d-none" onchange="app.importData(event)">
+            </div>
+        </div>
+    </nav>
+
+    <!-- Main Container -->
+    <main class="container-fluid px-4 py-4">
+
+        <!-- Dashboard Summary Row -->
+        <div class="row g-3 mb-4" id="dashboard-metrics">
+            <div class="col-xl-3 col-md-6">
+                <div class="card stat-card p-3 h-100">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <p class="text-muted small mb-1">Materia Prima Registrada</p>
+                            <h4 class="fw-bold mb-0" id="metric-mp-count">0</h4>
+                        </div>
+                        <div class="p-3 rounded-circle bg-success bg-opacity-10 text-success fs-4">
+                            <i class="fa-solid fa-cubes"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-xl-3 col-md-6">
+                <div class="card border-start border-warning border-4 p-3 h-100">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <p class="text-muted small mb-1">Alertas de Stock Bajo</p>
+                            <h4 class="fw-bold mb-0 text-warning" id="metric-alerts-count">0</h4>
+                        </div>
+                        <div class="p-3 rounded-circle bg-warning bg-opacity-10 text-warning fs-4">
+                            <i class="fa-solid fa-triangle-exclamation"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-xl-3 col-md-6">
+                <div class="card border-start border-info border-4 p-3 h-100">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <p class="text-muted small mb-1">Recetas / Fichas Técnicas</p>
+                            <h4 class="fw-bold mb-0" id="metric-recipes-count">0</h4>
+                        </div>
+                        <div class="p-3 rounded-circle bg-info bg-opacity-10 text-info fs-4">
+                            <i class="fa-solid fa-file-invoice-dollar"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="col-xl-3 col-md-6">
+                <div class="card border-start border-primary border-4 p-3 h-100">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <div>
+                            <p class="text-muted small mb-1">Lotes Producidos</p>
+                            <h4 class="fw-bold mb-0" id="metric-batches-count">0</h4>
+                        </div>
+                        <div class="p-3 rounded-circle bg-primary bg-opacity-10 text-primary fs-4">
+                            <i class="fa-solid fa-industry"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Navigation Tabs -->
+        <ul class="nav nav-pills mb-4 gap-2 bg-white p-2 rounded-3 shadow-sm" id="pills-tab" role="tablist">
+            <li class="nav-item" role="presentation">
+                <button class="nav-link active" id="tab-mp-btn" data-bs-toggle="pill" data-bs-target="#tab-mp" type="button" role="tab"><i class="fa-solid fa-boxes-stacked me-2"></i> Materia Prima Directa</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tab-ind-btn" data-bs-toggle="pill" data-bs-target="#tab-ind" type="button" role="tab"><i class="fa-solid fa-flask me-2"></i> Insumos Indirectos</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tab-ut-btn" data-bs-toggle="pill" data-bs-target="#tab-ut" type="button" role="tab"><i class="fa-solid fa-wrench me-2"></i> Utensilios y Depreciación</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tab-calc-btn" data-bs-toggle="pill" data-bs-target="#tab-calc" type="button" role="tab"><i class="fa-solid fa-calculator me-2"></i> Calculadora y Recetas</button>
+            </li>
+            <li class="nav-item" role="presentation">
+                <button class="nav-link" id="tab-prod-btn" data-bs-toggle="pill" data-bs-target="#tab-prod" type="button" role="tab"><i class="fa-solid fa-clipboard-list me-2"></i> Registro de Producción</button>
+            </li>
+        </ul>
+
+        <!-- Tab Contents -->
+        <div class="tab-content" id="pills-tabContent">
+
+            <!-- 1. MATERIA PRIMA DIRECTA -->
+            <div class="tab-pane fade show active" id="tab-mp" role="tabpanel">
+                <div class="card mb-4">
+                    <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0 fw-bold text-success"><i class="fa-solid fa-boxes-stacked me-2"></i> Inventario de Materia Prima Directa</h5>
+                        <button class="btn btn-success btn-sm" onclick="app.openMpModal()"><i class="fa-solid fa-plus me-1"></i> Nueva Materia Prima</button>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle" id="table-mp">
+                                <thead>
+                                    <tr>
+                                        <th>Código</th>
+                                        <th>Nombre del Insumo</th>
+                                        <th>Unidad</th>
+                                        <th>Stock Inicial</th>
+                                        <th>Compras (Entradas)</th>
+                                        <th>Salidas (Usadas)</th>
+                                        <th>Stock Actual</th>
+                                        <th>Mínimo</th>
+                                        <th>Costo Compra (LPS)</th>
+                                        <th>Costo Unitario (LPS)</th>
+                                        <th>Estado</th>
+                                        <th class="text-end">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tbody-mp">
+                                    <!-- Dynamic Rows -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 2. INSUMOS INDIRECTOS -->
+            <div class="tab-pane fade" id="tab-ind" role="tabpanel">
+                <div class="card mb-4">
+                    <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0 fw-bold text-success"><i class="fa-solid fa-flask me-2"></i> Insumos Indirectos (Gastados poco a poco)</h5>
+                        <button class="btn btn-success btn-sm" onclick="app.openIndModal()"><i class="fa-solid fa-plus me-1"></i> Nuevo Insumo Indirecto</button>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle" id="table-ind">
+                                <thead>
+                                    <tr>
+                                        <th>Código</th>
+                                        <th>Nombre / Descripción</th>
+                                        <th>Tipo de Asignación</th>
+                                        <th>Costo Envase / Mes (LPS)</th>
+                                        <th>Rendimiento / Jabones Estimados</th>
+                                        <th>Cuota Fija por Jabón (LPS)</th>
+                                        <th class="text-end">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tbody-ind">
+                                    <!-- Dynamic Rows -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. UTENSILIOS Y DEPRECIACIÓN -->
+            <div class="tab-pane fade" id="tab-ut" role="tabpanel">
+                <div class="card mb-4">
+                    <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0 fw-bold text-success"><i class="fa-solid fa-wrench me-2"></i> Utensilios, Moldes y Depreciación</h5>
+                        <button class="btn btn-success btn-sm" onclick="app.openUtModal()"><i class="fa-solid fa-plus me-1"></i> Nuevo Utensilio</button>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle" id="table-ut">
+                                <thead>
+                                    <tr>
+                                        <th>Código</th>
+                                        <th>Nombre del Utensilio / Molde</th>
+                                        <th>Costo de Adquisición (LPS)</th>
+                                        <th>Vida Útil Estimada (Jabones)</th>
+                                        <th>Depreciación por Jabón (LPS)</th>
+                                        <th class="text-end">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tbody-ut">
+                                    <!-- Dynamic Rows -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 4. CALCULADORA DE COSTOS Y RECETAS -->
+            <div class="tab-pane fade" id="tab-calc" role="tabpanel">
+                <div class="row g-4">
+                    <div class="col-lg-7">
+                        <div class="card h-100">
+                            <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0 fw-bold text-success"><i class="fa-solid fa-calculator me-2"></i> Creador de Ficha / Receta</h5>
+                                <button class="btn btn-outline-success btn-sm" onclick="app.resetRecipeForm()"><i class="fa-solid fa-rotate-left me-1"></i> Limpiar Receta</button>
+                            </div>
+                            <div class="card-body">
+                                <form id="form-recipe" onsubmit="app.saveRecipe(event)">
+                                    <input type="hidden" id="recipe-id">
+                                    <div class="mb-3">
+                                        <label class="form-label fw-semibold">Nombre de la Receta / Variedad de Jabón</label>
+                                        <input type="text" class="form-control" id="recipe-name" placeholder="Ej. Jabón Exfoliante de Café y Canela" required>
+                                    </div>
+                                    <div class="row mb-3">
+                                        <div class="col-md-6">
+                                            <label class="form-label fw-semibold">Tamaño del Lote (Cantidad de Jabones)</label>
+                                            <input type="number" class="form-control" id="recipe-batch-size" value="10" min="1" oninput="app.calculateRecipeCosts()" required>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label fw-semibold">Peso Promedio por Barra (g)</label>
+                                            <input type="number" class="form-control" id="recipe-soap-weight" value="100" min="1" required>
+                                        </div>
+                                    </div>
+
+                                    <h6 class="fw-bold mt-4 mb-2 text-secondary"><i class="fa-solid fa-cubes me-1"></i> Materias Primas Directas del Lote</h6>
+                                    <div id="recipe-mp-container" class="mb-3">
+                                        <!-- Dynamic items added here -->
+                                    </div>
+                                    <button type="button" class="btn btn-outline-secondary btn-sm mb-4" onclick="app.addRecipeMpRow()"><i class="fa-solid fa-plus me-1"></i> Agregar Materia Prima</button>
+
+                                    <h6 class="fw-bold mt-3 mb-2 text-secondary"><i class="fa-solid fa-flask me-1"></i> Insumos Indirectos y Utensilios a Aplicar</h6>
+                                    <div class="row mb-3">
+                                        <div class="col-md-6">
+                                            <label class="form-label small">Insumo Indirecto Asignado</label>
+                                            <select class="form-select form-select-sm" id="recipe-indirect-select" onchange="app.calculateRecipeCosts()">
+                                                <option value="">Seleccione...</option>
+                                            </select>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <label class="form-label small">Utensilio / Molde Asignado</label>
+                                            <select class="form-select form-select-sm" id="recipe-ut-select" onchange="app.calculateRecipeCosts()">
+                                                <option value="">Seleccione...</option>
+                                            </select>
+                                        </div>
+                                    </div>
+
+                                    <button type="submit" class="btn btn-success w-100 py-2 fw-semibold"><i class="fa-solid fa-floppy-disk me-1"></i> Guardar Receta</button>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-lg-5">
+                        <div class="card h-100 bg-light border-success">
+                            <div class="card-header bg-success text-white py-3">
+                                <h5 class="mb-0 fw-bold"><i class="fa-solid fa-receipt me-2"></i> Resumen de Costos y Precios (LPS)</h5>
+                            </div>
+                            <div class="card-body d-flex flex-column justify-content-between">
+                                <div>
+                                    <ul class="list-group list-group-flush mb-4 bg-transparent">
+                                        <li class="list-group-item bg-transparent d-flex justify-content-between py-2">
+                                            <span>Costo Materia Prima (Lote):</span>
+                                            <strong id="res-mp-cost">L 0.00</strong>
+                                        </li>
+                                        <li class="list-group-item bg-transparent d-flex justify-content-between py-2">
+                                            <span>Costo Insumos Indirectos (Lote):</span>
+                                            <strong id="res-ind-cost">L 0.00</strong>
+                                        </li>
+                                        <li class="list-group-item bg-transparent d-flex justify-content-between py-2">
+                                            <span>Depreciación Utensilios (Lote):</span>
+                                            <strong id="res-ut-cost">L 0.00</strong>
+                                        </li>
+                                        <li class="list-group-item bg-transparent d-flex justify-content-between py-3 border-top border-dark">
+                                            <span class="fs-6 fw-bold text-dark">Costo Total del Lote:</span>
+                                            <span class="fs-6 fw-bold text-success" id="res-total-batch">L 0.00</span>
+                                        </li>
+                                        <li class="list-group-item bg-transparent d-flex justify-content-between py-3 bg-white rounded shadow-sm my-2 border">
+                                            <span class="fs-5 fw-bold text-dark">Costo por Barra Individual:</span>
+                                            <span class="fs-5 fw-bold text-success" id="res-unit-cost">L 0.00</span>
+                                        </li>
+                                    </ul>
+
+                                    <h6 class="fw-bold mb-3 text-secondary"><i class="fa-solid fa-chart-line me-1"></i> Simulador de Precios y Márgenes</h6>
+                                    <div class="mb-3">
+                                        <label class="form-label small fw-semibold">Margen de Ganancia Deseado (%)</label>
+                                        <input type="number" class="form-control form-control-sm" id="sim-margin" value="100" min="0" oninput="app.calculateRecipeCosts()">
+                                    </div>
+                                    <div class="row g-2 text-center">
+                                        <div class="col-4">
+                                            <div class="p-2 bg-white rounded border">
+                                                <small class="text-muted d-block">Detalle (1x)</small>
+                                                <span class="fw-bold text-success fs-5" id="sim-price-detail">L 0.00</span>
+                                            </div>
+                                        </div>
+                                        <div class="col-4">
+                                            <div class="p-2 bg-white rounded border">
+                                                <small class="text-muted d-block">Por Mayor</small>
+                                                <span class="fw-bold text-primary fs-5" id="sim-price-wholesale">L 0.00</span>
+                                            </div>
+                                        </div>
+                                        <div class="col-4">
+                                            <div class="p-2 bg-white rounded border">
+                                                <small class="text-muted d-block">Eventos</small>
+                                                <span class="fw-bold text-dark fs-5" id="sim-price-event">L 0.00</span>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="mt-4">
+                                    <h6 class="fw-bold mb-2">Recetas Guardadas</h6>
+                                    <div class="table-responsive" style="max-height: 200px; overflow-y: auto;">
+                                        <table class="table table-sm table-hover bg-white mb-0" id="table-recipes">
+                                            <tbody id="tbody-recipes">
+                                                <!-- Dynamic list -->
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 5. REGISTRO DE PRODUCCIÓN / LOTES -->
+            <div class="tab-pane fade" id="tab-prod" role="tabpanel">
+                <div class="card mb-4">
+                    <div class="card-header bg-white py-3 d-flex justify-content-between align-items-center">
+                        <h5 class="mb-0 fw-bold text-success"><i class="fa-solid fa-clipboard-list me-2"></i> Historial de Lotes Producidos</h5>
+                        <button class="btn btn-success btn-sm" onclick="app.openProdModal()"><i class="fa-solid fa-industry me-1"></i> Registrar Nueva Producción</button>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover align-middle" id="table-prod">
+                                <thead>
+                                    <tr>
+                                        <th>Fecha</th>
+                                        <th>N° Lote / Código</th>
+                                        <th>Receta Producida</th>
+                                        <th>Cantidad de Jabones</th>
+                                        <th>Costo Total Invertido (LPS)</th>
+                                        <th>Costo Unitario Real (LPS)</th>
+                                        <th class="text-end">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tbody-prod">
+                                    <!-- Dynamic rows -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+
+    </main>
+
+    <!-- ================= MODALS ================= -->
+
+    <!-- Modal Materia Prima -->
+    <div class="modal fade" id="modal-mp" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title" id="modal-mp-title">Registrar Materia Prima</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <form id="form-mp" onsubmit="app.saveMp(event)">
+                    <div class="modal-body">
+                        <input type="hidden" id="mp-edit-id">
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Código</label>
+                            <input type="text" class="form-control" id="mp-code" placeholder="Ej. MP-001" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Nombre del Insumo</label>
+                            <input type="text" class="form-control" id="mp-name" placeholder="Ej. Base de Glicerina Cristal" required>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">Unidad de Medida</label>
+                                <select class="form-select" id="mp-unit" required>
+                                    <option value="g">Gramos (g)</option>
+                                    <option value="ml">Mililitros (ml)</option>
+                                    <option value="pza">Piezas (pza)</option>
+                                </select>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">Stock Mínimo (Alerta)</label>
+                                <input type="number" step="any" class="form-control" id="mp-min" placeholder="Ej. 500" required>
+                            </div>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-md-4">
+                                <label class="form-label fw-semibold">Stock Inicial</label>
+                                <input type="number" step="any" class="form-control" id="mp-initial" value="0" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-semibold">Compras (Entradas)</label>
+                                <input type="number" step="any" class="form-control" id="mp-purchased" value="0" required>
+                            </div>
+                            <div class="col-md-4">
+                                <label class="form-label fw-semibold">Costo Total Compra (LPS)</label>
+                                <input type="number" step="any" class="form-control" id="mp-total-cost" placeholder="Ej. 250.00" required>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-success">Guardar Insumo</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Insumo Indirecto -->
+    <div class="modal fade" id="modal-ind" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title" id="modal-ind-title">Registrar Insumo Indirecto</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <form id="form-ind" onsubmit="app.saveInd(event)">
+                    <div class="modal-body">
+                        <input type="hidden" id="ind-edit-id">
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Código</label>
+                            <input type="text" class="form-control" id="ind-code" placeholder="Ej. IND-001" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Nombre / Descripción</label>
+                            <input type="text" class="form-control" id="ind-name" placeholder="Ej. Esencia de Miel" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Tipo de Asignación</label>
+                            <select class="form-select" id="ind-type">
+                                <option value="Envase / Botella">Envase / Botella (Fragancia, Colorante, Alcohol)</option>
+                                <option value="Gasto Mensual Fijo">Gasto Mensual Fijo (Luz, Gas, Limpieza)</option>
+                            </select>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">Costo Total Envase / Mes (LPS)</label>
+                                <input type="number" step="any" class="form-control" id="ind-cost" placeholder="Ej. 120.00" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">Rendimiento Estimado (Jabones)</label>
+                                <input type="number" step="any" class="form-control" id="ind-yield" placeholder="Ej. 30" required>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-success">Guardar Insumo</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Utensilio -->
+    <div class="modal fade" id="modal-ut" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title" id="modal-ut-title">Registrar Utensilio / Molde</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <form id="form-ut" onsubmit="app.saveUt(event)">
+                    <div class="modal-body">
+                        <input type="hidden" id="ut-edit-id">
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Código</label>
+                            <input type="text" class="form-control" id="ut-code" placeholder="Ej. UT-001" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Nombre del Molde / Utensilio</label>
+                            <input type="text" class="form-control" id="ut-name" placeholder="Ej. Molde Silicona 6 Cavidades" required>
+                        </div>
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">Costo de Adquisición (LPS)</label>
+                                <input type="number" step="any" class="form-control" id="ut-cost" placeholder="Ej. 250.00" required>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">Vida Útil (Jabones estimados)</label>
+                                <input type="number" step="any" class="form-control" id="ut-life" placeholder="Ej. 200" required>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-success">Guardar Utensilio</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal Registrar Producción -->
+    <div class="modal fade" id="modal-prod" tabindex="-1">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header bg-success text-white">
+                    <h5 class="modal-title">Registrar Lote de Producción</h5>
+                    <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+                </div>
+                <form id="form-prod" onsubmit="app.saveProduction(event)">
+                    <div class="modal-body">
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Seleccionar Receta</label>
+                            <select class="form-select" id="prod-recipe-select" onchange="app.onProdRecipeSelect()" required>
+                                <option value="">Seleccione receta...</option>
+                            </select>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Código / Número de Lote</label>
+                            <input type="text" class="form-control" id="prod-batch-code" placeholder="Ej. LOTE-2026-001" required>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label fw-semibold">Cantidad Real de Jabones Producidos</label>
+                            <input type="number" class="form-control" id="prod-qty" min="1" required>
+                        </div>
+                        <p class="text-muted small"><i class="fa-solid fa-circle-info me-1"></i> Al registrar este lote, se descontarán automáticamente las cantidades correspondientes de materia prima directa en el inventario.</p>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                        <button type="submit" class="btn btn-success">Confirmar Producción y Descontar</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast-container"></div>
+
+    <!-- Bootstrap 5 JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Application Script -->
+    <script>
+        /**
+         * Soap Inventory & Cost Control Application - Fragancia y Miel
+         * Fully integrated with LocalStorage and LPS currency.
+         */
+        class SoapApp {
+            constructor() {
+                this.db = {
+                    materials: JSON.parse(localStorage.getItem('fm_materials')) || [
+                        { id: 'm1', code: 'MP-001', name: 'Base de Glicerina Cristal', unit: 'g', initial: 5000, purchased: 0, used: 0, min: 1000, totalCost: 900.00 },
+                        { id: 'm2', code: 'MP-002', name: 'Base de Glicerina Blanca', unit: 'g', initial: 2000, purchased: 0, used: 0, min: 500, totalCost: 400.00 },
+                        { id: 'm3', code: 'MP-003', name: 'Esencia de Miel y Avena', unit: 'ml', initial: 250, purchased: 0, used: 0, min: 50, totalCost: 250.00 },
+                        { id: 'm4', code: 'MP-004', name: 'Avena Coloidal Exfoliante', unit: 'g', initial: 1000, purchased: 0, used: 0, min: 200, totalCost: 150.00 },
+                        { id: 'm5', code: 'MP-005', name: 'Bolsa Celofán con Etiqueta', unit: 'pza', initial: 100, purchased: 0, used: 0, min: 20, totalCost: 100.00 }
+                    ],
+                    indirects: JSON.parse(localStorage.getItem('fm_indirects')) || [
+                        { id: 'i1', code: 'IND-001', name: 'Alcohol en Spray 70%', type: 'Envase / Botella', cost: 90.00, yieldVal: 150 },
+                        { id: 'i2', code: 'IND-002', name: 'Colorante Cosmético Líquido', type: 'Envase / Botella', cost: 70.00, yieldVal: 200 },
+                        { id: 'i3', code: 'IND-003', name: 'Gas y Electricidad (Cuota)', type: 'Gasto Mensual Fijo', cost: 300.00, yieldVal: 100 }
+                    ],
+                    utensils: JSON.parse(localStorage.getItem('fm_utensils')) || [
+                        { id: 'u1', code: 'UT-001', name: 'Molde de Silicona 6 Cavidades', cost: 250.00, life: 300 },
+                        { id: 'u2', code: 'UT-002', name: 'Jarra Medidora de Vidrio 1L', cost: 150.00, life: 500 }
+                    ],
+                    recipes: JSON.parse(localStorage.getItem('fm_recipes')) || [
+                        {
+                            id: 'r1',
+                            name: 'Jabón de Glicerina, Miel y Avena',
+                            batchSize: 10,
+                            soapWeight: 100,
+                            items: [
+                                { materialId: 'm1', qty: 900 },
+                                { materialId: 'm3', qty: 15 },
+                                { materialId: 'm4', qty: 50 },
+                                { materialId: 'm5', qty: 10 }
+                            ],
+                            indirectId: 'i1',
+                            utId: 'u1',
+                            margin: 100
+                        }
+                    ],
+                    batches: JSON.parse(localStorage.getItem('fm_batches')) || []
+                };
+
+                this.init();
+            }
+
+            saveToStorage() {
+                localStorage.setItem('fm_materials', JSON.stringify(this.db.materials));
+                localStorage.setItem('fm_indirects', JSON.stringify(this.db.indirects));
+                localStorage.setItem('fm_utensils', JSON.stringify(this.db.utensils));
+                localStorage.setItem('fm_recipes', JSON.stringify(this.db.recipes));
+                localStorage.setItem('fm_batches', JSON.stringify(this.db.batches));
+            }
+
+            init() {
+                this.renderAll();
+                this.initRecipeFormDynamicRow();
+            }
+
+            renderAll() {
+                this.renderMaterials();
+                this.renderIndirects();
+                this.renderUtensils();
+                this.renderRecipesList();
+                this.renderRecipeSelects();
+                this.renderBatches();
+                this.updateDashboardMetrics();
+            }
+
+            showToast(message, type = 'success') {
+                const container = document.getElementById('toast-container');
+                const toastId = 'toast-' + Date.now();
+                const bgClass = type === 'success' ? 'bg-success text-white' : 'bg-danger text-white';
+                const html = `
+                    <div id="${toastId}" class="toast align-items-center ${bgClass} border-0 show shadow" role="alert" aria-live="assertive" aria-atomic="true">
+                        <div class="d-flex">
+                            <div class="toast-body"><i class="fa-solid fa-circle-check me-2"></i>${message}</div>
+                            <button type="button" class="btn-close btn-close-white me-2 m-auto" data-bs-dismiss="toast" onclick="document.getElementById('${toastId}').remove()"></button>
+                        </div>
+                    </div>
+                `;
+                container.insertAdjacentHTML('beforeend', html);
+                setTimeout(() => {
+                    const el = document.getElementById(toastId);
+                    if (el) el.remove();
+                }, 4000);
+            }
+
+            updateDashboardMetrics() {
+                document.getElementById('metric-mp-count').innerText = this.db.materials.length;
+                let alerts = this.db.materials.filter(m => (m.initial + m.purchased - m.used) <= m.min).length;
+                document.getElementById('metric-alerts-count').innerText = alerts;
+                document.getElementById('metric-recipes-count').innerText = this.db.recipes.length;
+                document.getElementById('metric-batches-count').innerText = this.db.batches.length;
+            }
+
+            // ================= 1. MATERIA PRIMA =================
+            renderMaterials() {
+                const tbody = document.getElementById('tbody-mp');
+                tbody.innerHTML = '';
+                this.db.materials.forEach(m => {
+                    const stockActual = m.initial + m.purchased - m.used;
+                    const unitCost = (m.totalCost / (m.initial + m.purchased || 1)).toFixed(4);
+                    const isLow = stockActual <= m.min;
+                    
+                    tbody.innerHTML += `
+                        <tr>
+                            <td><span class="badge bg-light text-dark border">${m.code}</span></td>
+                            <td class="fw-semibold">${m.name}</td>
+                            <td><span class="badge bg-secondary">${m.unit}</span></td>
+                            <td>${m.initial}</td>
+                            <td>${m.purchased}</td>
+                            <td class="text-danger">${m.used.toFixed(2)}</td>
+                            <td class="fw-bold">${stockActual.toFixed(2)}</td>
+                            <td>${m.min}</td>
+                            <td>L ${Number(m.totalCost).toFixed(2)}</td>
+                            <td class="text-success fw-semibold">L ${unitCost}</td>
+                            <td>
+                                <span class="badge ${isLow ? 'badge-reorder' : 'badge-ok'}">
+                                    ${isLow ? '<i class="fa-solid fa-triangle-exclamation me-1"></i> REORDENAR' : '<i class="fa-solid fa-check me-1"></i> ÓPTIMO'}
+                                </span>
+                            </td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-outline-primary me-1" onclick="app.editMp('${m.id}')" title="Editar"><i class="fa-solid fa-pen"></i></button>
+                                <button class="btn btn-sm btn-outline-danger" onclick="app.deleteMp('${m.id}')" title="Eliminar"><i class="fa-solid fa-trash"></i></button>
+                            </td>
+                        </tr>
+                    `;
+                });
+            }
+
+            openMpModal(id = null) {
+                document.getElementById('form-mp').reset();
+                document.getElementById('mp-edit-id').value = '';
+                document.getElementById('modal-mp-title').innerText = 'Registrar Materia Prima';
+                if (id) {
+                    const m = this.db.materials.find(x => x.id === id);
+                    if (m) {
+                        document.getElementById('mp-edit-id').value = m.id;
+                        document.getElementById('mp-code').value = m.code;
+                        document.getElementById('mp-name').value = m.name;
+                        document.getElementById('mp-unit').value = m.unit;
+                        document.getElementById('mp-min').value = m.min;
+                        document.getElementById('mp-initial').value = m.initial;
+                        document.getElementById('mp-purchased').value = m.purchased;
+                        document.getElementById('mp-total-cost').value = m.totalCost;
+                        document.getElementById('modal-mp-title').innerText = 'Editar Materia Prima';
+                    }
+                }
+                new bootstrap.Modal(document.getElementById('modal-mp')).show();
+            }
+
+            saveMp(e) {
+                e.preventDefault();
+                const id = document.getElementById('mp-edit-id').value;
+                const data = {
+                    id: id ? id : 'm_' + Date.now(),
+                    code: document.getElementById('mp-code').value,
+                    name: document.getElementById('mp-name').value,
+                    unit: document.getElementById('mp-unit').value,
+                    min: parseFloat(document.getElementById('mp-min').value),
+                    initial: parseFloat(document.getElementById('mp-initial').value),
+                    purchased: parseFloat(document.getElementById('mp-purchased').value),
+                    totalCost: parseFloat(document.getElementById('mp-total-cost').value),
+                    used: 0
+                };
+
+                if (id) {
+                    const idx = this.db.materials.findIndex(x => x.id === id);
+                    data.used = this.db.materials[idx].used;
+                    this.db.materials[idx] = data;
+                    this.showToast('Materia prima actualizada correctamente');
+                } else {
+                    this.db.materials.push(data);
+                    this.showToast('Materia prima registrada correctamente');
+                }
+
+                this.saveToStorage();
+                bootstrap.Modal.getInstance(document.getElementById('modal-mp')).hide();
+                this.renderAll();
+            }
+
+            editMp(id) { this.openMpModal(id); }
+
+            deleteMp(id) {
+                if (confirm('¿Está seguro de eliminar esta materia prima?')) {
+                    this.db.materials = this.db.materials.filter(x => x.id !== id);
+                    this.saveToStorage();
+                    this.renderAll();
+                    this.showToast('Materia prima eliminada', 'danger');
+                }
+            }
+
+            // ================= 2. INSUMOS INDIRECTOS =================
+            renderIndirects() {
+                const tbody = document.getElementById('tbody-ind');
+                tbody.innerHTML = '';
+                this.db.indirects.forEach(i => {
+                    const quota = (i.cost / (i.yieldVal || 1)).toFixed(4);
+                    tbody.innerHTML += `
+                        <tr>
+                            <td><span class="badge bg-light text-dark border">${i.code}</span></td>
+                            <td class="fw-semibold">${i.name}</td>
+                            <td><span class="badge bg-info text-dark">${i.type}</span></td>
+                            <td>L ${Number(i.cost).toFixed(2)}</td>
+                            <td>${i.yieldVal} jabones</td>
+                            <td class="text-success fw-bold">L ${quota}</td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-outline-primary me-1" onclick="app.editInd('${i.id}')"><i class="fa-solid fa-pen"></i></button>
+                                <button class="btn btn-sm btn-outline-danger" onclick="app.deleteInd('${i.id}')"><i class="fa-solid fa-trash"></i></button>
+                            </td>
+                        </tr>
+                    `;
+                });
+            }
+
+            openIndModal(id = null) {
+                document.getElementById('form-ind').reset();
+                document.getElementById('ind-edit-id').value = '';
+                document.getElementById('modal-ind-title').innerText = 'Registrar Insumo Indirecto';
+                if (id) {
+                    const i = this.db.indirects.find(x => x.id === id);
+                    if (i) {
+                        document.getElementById('ind-edit-id').value = i.id;
+                        document.getElementById('ind-code').value = i.code;
+                        document.getElementById('ind-name').value = i.name;
+                        document.getElementById('ind-type').value = i.type;
+                        document.getElementById('ind-cost').value = i.cost;
+                        document.getElementById('ind-yield').value = i.yieldVal;
+                        document.getElementById('modal-ind-title').innerText = 'Editar Insumo Indirecto';
+                    }
+                }
+                new bootstrap.Modal(document.getElementById('modal-ind')).show();
+            }
+
+            saveInd(e) {
+                e.preventDefault();
+                const id = document.getElementById('ind-edit-id').value;
+                const data = {
+                    id: id ? id : 'ind_' + Date.now(),
+                    code: document.getElementById('ind-code').value,
+                    name: document.getElementById('ind-name').value,
+                    type: document.getElementById('ind-type').value,
+                    cost: parseFloat(document.getElementById('ind-cost').value),
+                    yieldVal: parseFloat(document.getElementById('ind-yield').value)
+                };
+
+                if (id) {
+                    const idx = this.db.indirects.findIndex(x => x.id === id);
+                    this.db.indirects[idx] = data;
+                    this.showToast('Insumo indirecto actualizado');
+                } else {
+                    this.db.indirects.push(data);
+                    this.showToast('Insumo indirecto registrado');
+                }
+
+                this.saveToStorage();
+                bootstrap.Modal.getInstance(document.getElementById('modal-ind')).hide();
+                this.renderAll();
+            }
+
+            editInd(id) { this.openIndModal(id); }
+
+            deleteInd(id) {
+                if (confirm('¿Eliminar insumo indirecto?')) {
+                    this.db.indirects = this.db.indirects.filter(x => x.id !== id);
+                    this.saveToStorage();
+                    this.renderAll();
+                    this.showToast('Insumo eliminado', 'danger');
+                }
+            }
+
+            // ================= 3. UTENSILIOS Y DEPRECIACIÓN =================
+            renderUtensils() {
+                const tbody = document.getElementById('tbody-ut');
+                tbody.innerHTML = '';
+                this.db.utensils.forEach(u => {
+                    const dep = (u.cost / (u.life || 1)).toFixed(4);
+                    tbody.innerHTML += `
+                        <tr>
+                            <td><span class="badge bg-light text-dark border">${u.code}</span></td>
+                            <td class="fw-semibold">${u.name}</td>
+                            <td>L ${Number(u.cost).toFixed(2)}</td>
+                            <td>${u.life} jabones</td>
+                            <td class="text-success fw-bold">L ${dep}</td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-outline-primary me-1" onclick="app.editUt('${u.id}')"><i class="fa-solid fa-pen"></i></button>
+                                <button class="btn btn-sm btn-outline-danger" onclick="app.deleteUt('${u.id}')"><i class="fa-solid fa-trash"></i></button>
+                            </td>
+                        </tr>
+                    `;
+                });
+            }
+
+            openUtModal(id = null) {
+                document.getElementById('form-ut').reset();
+                document.getElementById('ut-edit-id').value = '';
+                document.getElementById('modal-ut-title').innerText = 'Registrar Utensilio / Molde';
+                if (id) {
+                    const u = this.db.utensils.find(x => x.id === id);
+                    if (u) {
+                        document.getElementById('ut-edit-id').value = u.id;
+                        document.getElementById('ut-code').value = u.code;
+                        document.getElementById('ut-name').value = u.name;
+                        document.getElementById('ut-cost').value = u.cost;
+                        document.getElementById('ut-life').value = u.life;
+                        document.getElementById('modal-ut-title').innerText = 'Editar Utensilio';
+                    }
+                }
+                new bootstrap.Modal(document.getElementById('modal-ut')).show();
+            }
+
+            saveUt(e) {
+                e.preventDefault();
+                const id = document.getElementById('ut-edit-id').value;
+                const data = {
+                    id: id ? id : 'ut_' + Date.now(),
+                    code: document.getElementById('ut-code').value,
+                    name: document.getElementById('ut-name').value,
+                    cost: parseFloat(document.getElementById('ut-cost').value),
+                    life: parseFloat(document.getElementById('ut-life').value)
+                };
+
+                if (id) {
+                    const idx = this.db.utensils.findIndex(x => x.id === id);
+                    this.db.utensils[idx] = data;
+                    this.showToast('Utensilio actualizado');
+                } else {
+                    this.db.utensils.push(data);
+                    this.showToast('Utensilio registrado');
+                }
+
+                this.saveToStorage();
+                bootstrap.Modal.getInstance(document.getElementById('modal-ut')).hide();
+                this.renderAll();
+            }
+
+            editUt(id) { this.openUtModal(id); }
+
+            deleteUt(id) {
+                if (confirm('¿Eliminar utensilio?')) {
+                    this.db.utensils = this.db.utensils.filter(x => x.id !== id);
+                    this.saveToStorage();
+                    this.renderAll();
+                    this.showToast('Utensilio eliminado', 'danger');
+                }
+            }
+
+            // ================= 4. CALCULADORA Y RECETAS =================
+            renderRecipeSelects() {
+                const indSelect = document.getElementById('recipe-indirect-select');
+                const utSelect = document.getElementById('recipe-ut-select');
+                
+                let indHtml = '<option value="">Seleccione insumo indirecto...</option>';
+                this.db.indirects.forEach(i => {
+                    indHtml += `<option value="${i.id}">${i.name} (Cuota: L ${(i.cost/i.yieldVal).toFixed(2)})</option>`;
+                });
+                indSelect.innerHTML = indHtml;
+
+                let utHtml = '<option value="">Seleccione utensilio...</option>';
+                this.db.utensils.forEach(u => {
+                    utHtml += `<option value="${u.id}">${u.name} (Deprec: L ${(u.cost/u.life).toFixed(2)})</option>`;
+                });
+                utSelect.innerHTML = utHtml;
+            }
+
+            initRecipeFormDynamicRow() {
+                const container = document.getElementById('recipe-mp-container');
+                if (container.children.length === 0) {
+                    this.addRecipeMpRow();
+                }
+            }
+
+            addRecipeMpRow(materialId = '', qty = 0) {
+                const container = document.getElementById('recipe-mp-container');
+                const rowId = 'rec_row_' + Date.now() + Math.random().toString(36).substr(2, 5);
+                
+                let options = '<option value="">Seleccione materia prima...</option>';
+                this.db.materials.forEach(m => {
+                    const selected = m.id === materialId ? 'selected' : '';
+                    options += `<option value="${m.id}" ${selected}>${m.name} (${m.unit})</option>`;
+                });
+
+                const html = `
+                    <div class="row g-2 mb-2 align-items-center recipe-row" id="${rowId}">
+                        <div class="col-7">
+                            <select class="form-select form-select-sm recipe-mp-select" onchange="app.calculateRecipeCosts()">
+                                ${options}
+                            </select>
+                        </div>
+                        <div class="col-4">
+                            <input type="number" step="any" class="form-control form-control-sm recipe-mp-qty" placeholder="Cantidad" value="${qty}" oninput="app.calculateRecipeCosts()" required>
+                        </div>
+                        <div class="col-1">
+                            <button type="button" class="btn btn-outline-danger btn-sm w-100" onclick="document.getElementById('${rowId}').remove(); app.calculateRecipeCosts();"><i class="fa-solid fa-trash"></i></button>
+                        </div>
+                    </div>
+                `;
+                container.insertAdjacentHTML('beforeend', html);
+            }
+
+            calculateRecipeCosts() {
+                const batchSize = parseFloat(document.getElementById('recipe-batch-size').value) || 1;
+                const rows = document.querySelectorAll('.recipe-row');
+                
+                let totalMpCost = 0;
+                rows.forEach(r => {
+                    const matId = r.querySelector('.recipe-mp-select').value;
+                    const qty = parseFloat(r.querySelector('.recipe-mp-qty').value) || 0;
+                    if (matId) {
+                        const mat = this.db.materials.find(x => x.id === matId);
+                        if (mat) {
+                            const totalStockQty = mat.initial + mat.purchased;
+                            const unitCost = totalStockQty > 0 ? (mat.totalCost / totalStockQty) : 0;
+                            totalMpCost += unitCost * qty;
+                        }
+                    }
+                });
+
+                let totalIndCost = 0;
+                const indId = document.getElementById('recipe-indirect-select').value;
+                if (indId) {
+                    const ind = this.db.indirects.find(x => x.id === indId);
+                    if (ind && ind.yieldVal > 0) {
+                        totalIndCost = (ind.cost / ind.yieldVal) * batchSize;
+                    }
+                }
+
+                let totalUtCost = 0;
+                const utId = document.getElementById('recipe-ut-select').value;
+                if (utId) {
+                    const ut = this.db.utensils.find(x => x.id === utId);
+                    if (ut && ut.life > 0) {
+                        totalUtCost = (ut.cost / ut.life) * batchSize;
+                    }
+                }
+
+                const totalBatchCost = totalMpCost + totalIndCost + totalUtCost;
+                const unitCost = batchSize > 0 ? (totalBatchCost / batchSize) : 0;
+
+                document.getElementById('res-mp-cost').innerText = 'L ' + totalMpCost.toFixed(2);
+                document.getElementById('res-ind-cost').innerText = 'L ' + totalIndCost.toFixed(2);
+                document.getElementById('res-ut-cost').innerText = 'L ' + totalUtCost.toFixed(2);
+                document.getElementById('res-total-batch').innerText = 'L ' + totalBatchCost.toFixed(2);
+                document.getElementById('res-unit-cost').innerText = 'L ' + unitCost.toFixed(2);
+
+                const margin = parseFloat(document.getElementById('sim-margin').value) || 0;
+                const priceDetail = unitCost * (1 + margin / 100);
+                const priceWholesale = unitCost * (1 + (margin * 0.8) / 100);
+                const priceEvent = unitCost * (1 + (margin * 0.7) / 100);
+
+                document.getElementById('sim-price-detail').innerText = 'L ' + priceDetail.toFixed(2);
+                document.getElementById('sim-price-wholesale').innerText = 'L ' + priceWholesale.toFixed(2);
+                document.getElementById('sim-price-event').innerText = 'L ' + priceEvent.toFixed(2);
+            }
+
+            saveRecipe(e) {
+                e.preventDefault();
+                const id = document.getElementById('recipe-id').value;
+                const name = document.getElementById('recipe-name').value;
+                const batchSize = parseFloat(document.getElementById('recipe-batch-size').value);
+                const soapWeight = parseFloat(document.getElementById('recipe-soap-weight').value);
+                const indirectId = document.getElementById('recipe-indirect-select').value;
+                const utId = document.getElementById('recipe-ut-select').value;
+                const margin = parseFloat(document.getElementById('sim-margin').value);
+
+                const items = [];
+                document.querySelectorAll('.recipe-row').forEach(r => {
+                    const materialId = r.querySelector('.recipe-mp-select').value;
+                    const qty = parseFloat(r.querySelector('.recipe-mp-qty').value);
+                    if (materialId && qty > 0) {
+                        items.push({ materialId, qty });
+                    }
+                });
+
+                if (items.length === 0) {
+                    alert('Debe agregar al menos un ingrediente de materia prima a la receta.');
+                    return;
+                }
+
+                const recipeData = {
+                    id: id ? id : 'rec_' + Date.now(),
+                    name, batchSize, soapWeight, items, indirectId, utId, margin
+                };
+
+                if (id) {
+                    const idx = this.db.recipes.findIndex(x => x.id === id);
+                    this.db.recipes[idx] = recipeData;
+                    this.showToast('Receta actualizada correctamente');
+                } else {
+                    this.db.recipes.push(recipeData);
+                    this.showToast('Receta guardada con éxito');
+                }
+
+                this.saveToStorage();
+                this.resetRecipeForm();
+                this.renderAll();
+            }
+
+            resetRecipeForm() {
+                document.getElementById('form-recipe').reset();
+                document.getElementById('recipe-id').value = '';
+                document.getElementById('recipe-mp-container').innerHTML = '';
+                this.addRecipeMpRow();
+                this.calculateRecipeCosts();
+            }
+
+            renderRecipesList() {
+                const tbody = document.getElementById('tbody-recipes');
+                tbody.innerHTML = '';
+                this.db.recipes.forEach(r => {
+                    tbody.innerHTML += `
+                        <tr>
+                            <td>
+                                <div class="fw-semibold text-dark">${r.name}</div>
+                                <small class="text-muted">Lote: ${r.batchSize} u. | ${r.soapWeight}g c/u</small>
+                            </td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-outline-success me-1" onclick="app.loadRecipeToForm('${r.id}')" title="Cargar Receta"><i class="fa-solid fa-arrow-up-right-from-square"></i></button>
+                                <button class="btn btn-sm btn-outline-danger" onclick="app.deleteRecipe('${r.id}')" title="Eliminar"><i class="fa-solid fa-trash"></i></button>
+                            </td>
+                        </tr>
+                    `;
+                });
+            }
+
+            loadRecipeToForm(id) {
+                const r = this.db.recipes.find(x => x.id === id);
+                if (!r) return;
+                document.getElementById('recipe-id').value = r.id;
+                document.getElementById('recipe-name').value = r.name;
+                document.getElementById('recipe-batch-size').value = r.batchSize;
+                document.getElementById('recipe-soap-weight').value = r.soapWeight;
+                document.getElementById('recipe-indirect-select').value = r.indirectId || '';
+                document.getElementById('recipe-ut-select').value = r.utId || '';
+                document.getElementById('sim-margin').value = r.margin || 100;
+
+                const container = document.getElementById('recipe-mp-container');
+                container.innerHTML = '';
+                r.items.forEach(item => {
+                    this.addRecipeMpRow(item.materialId, item.qty);
+                });
+
+                this.calculateRecipeCosts();
+                this.showToast('Receta cargada en el creador');
+            }
+
+            deleteRecipe(id) {
+                if (confirm('¿Eliminar esta receta?')) {
+                    this.db.recipes = this.db.recipes.filter(x => x.id !== id);
+                    this.saveToStorage();
+                    this.renderAll();
+                    this.showToast('Receta eliminada', 'danger');
+                }
+            }
+
+            // ================= 5. REGISTRO DE PRODUCCIÓN / LOTES =================
+            renderBatches() {
+                const tbody = document.getElementById('tbody-prod');
+                tbody.innerHTML = '';
+                this.db.batches.forEach(b => {
+                    tbody.innerHTML += `
+                        <tr>
+                            <td>${b.date}</td>
+                            <td><span class="badge bg-dark">${b.code}</span></td>
+                            <td class="fw-semibold">${b.recipeName}</td>
+                            <td>${b.qty} jabones</td>
+                            <td>L ${b.totalCost.toFixed(2)}</td>
+                            <td class="text-success fw-bold">L ${b.unitCost.toFixed(2)}</td>
+                            <td class="text-end">
+                                <button class="btn btn-sm btn-outline-danger" onclick="app.deleteBatch('${b.id}')"><i class="fa-solid fa-trash"></i></button>
+                            </td>
+                        </tr>
+                    `;
+                });
+            }
+
+            openProdModal() {
+                const select = document.getElementById('prod-recipe-select');
+                let html = '<option value="">Seleccione receta...</option>';
+                this.db.recipes.forEach(r => {
+                    html += `<option value="${r.id}">${r.name} (Est. ${r.batchSize} u.)</option>`;
+                });
+                select.innerHTML = html;
+                document.getElementById('form-prod').reset();
+                document.getElementById('prod-batch-code').value = 'LOTE-' + new Date().toISOString().slice(0,10).replace(/-/g,'') + '-' + Math.floor(Math.random()*900 + 100);
+                new bootstrap.Modal(document.getElementById('modal-prod')).show();
+            }
+
+            onProdRecipeSelect() {
+                const recipeId = document.getElementById('prod-recipe-select').value;
+                const r = this.db.recipes.find(x => x.id === recipeId);
+                if (r) {
+                    document.getElementById('prod-qty').value = r.batchSize;
+                }
+            }
+
+            saveProduction(e) {
+                e.preventDefault();
+                const recipeId = document.getElementById('prod-recipe-select').value;
+                const batchCode = document.getElementById('prod-batch-code').value;
+                const actualQty = parseFloat(document.getElementById('prod-qty').value);
+
+                const recipe = this.db.recipes.find(x => x.id === recipeId);
+                if (!recipe) return;
+
+                const scale = actualQty / recipe.batchSize;
+
+                let totalMpCost = 0;
+                recipe.items.forEach(item => {
+                    const mat = this.db.materials.find(m => m.id === item.materialId);
+                    if (mat) {
+                        const totalStock = mat.initial + mat.purchased;
+                        const unitCost = totalStock > 0 ? (mat.totalCost / totalStock) : 0;
+                        const consumedQty = item.qty * scale;
+                        totalMpCost += unitCost * consumedQty;
+
+                        mat.used += consumedQty;
+                    }
+                });
+
+                let totalIndCost = 0;
+                if (recipe.indirectId) {
+                    const ind = this.db.indirects.find(i => i.id === recipe.indirectId);
+                    if (ind && ind.yieldVal > 0) totalIndCost = (ind.cost / ind.yieldVal) * actualQty;
+                }
+
+                let totalUtCost = 0;
+                if (recipe.utId) {
+                    const ut = this.db.utensils.find(u => u.id === recipe.utId);
+                    if (ut && ut.life > 0) totalUtCost = (ut.cost / ut.life) * actualQty;
+                }
+
+                const totalCost = totalMpCost + totalIndCost + totalUtCost;
+                const unitCost = actualQty > 0 ? totalCost / actualQty : 0;
+
+                const batchRecord = {
+                    id: 'batch_' + Date.now(),
+                    date: new Date().toLocaleDateString(),
+                    code: batchCode,
+                    recipeName: recipe.name,
+                    qty: actualQty,
+                    totalCost,
+                    unitCost
+                };
+
+                this.db.batches.unshift(batchRecord);
+                this.saveToStorage();
+
+                bootstrap.Modal.getInstance(document.getElementById('modal-prod')).hide();
+                this.renderAll();
+                this.showToast('Lote registrado y materia prima descontada con éxito');
+            }
+
+            deleteBatch(id) {
+                if (confirm('¿Eliminar este registro de lote?')) {
+                    this.db.batches = this.db.batches.filter(x => x.id !== id);
+                    this.saveToStorage();
+                    this.renderAll();
+                    this.showToast('Registro de lote eliminado', 'danger');
+                }
+            }
+
+            // ================= EXPORT / IMPORT =================
+            exportData() {
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(this.db, null, 2));
+                const dlAnchor = document.createElement('a');
+                dlAnchor.setAttribute("href", dataStr);
+                dlAnchor.setAttribute("download", "backup_fragancia_y_miel_" + new Date().toISOString().slice(0,10) + ".json");
+                document.body.appendChild(dlAnchor);
+                dlAnchor.click();
+                dlAnchor.remove();
+                this.showToast('Datos exportados correctamente');
+            }
+
+            importData(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    try {
+                        const imported = JSON.parse(e.target.result);
+                        if (imported && imported.materials && imported.recipes) {
+                            this.db = imported;
+                            this.saveToStorage();
+                            this.renderAll();
+                            this.showToast('Datos importados con éxito');
+                        } else {
+                            alert('El archivo no tiene el formato válido.');
+                        }
+                    } catch (err) {
+                        alert('Error al leer el archivo JSON.');
+                    }
+                };
+                reader.readAsText(file);
+            }
+        }
+
+        let app;
+        window.onload = () => {
+            app = new SoapApp();
+        };
+    </script>
+</body>
+</html>
