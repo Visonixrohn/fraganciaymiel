@@ -506,7 +506,7 @@ function App() {
       purchaseDate: today,
       paymentStatus: 'paid',
       paymentMethod: 'cash',
-      items: [{ materialId: '', quantity: '', unitCost: '' }],
+      items: [{ itemType: 'materials', itemId: '', quantity: '', unitCost: '' }],
     });
     setModal({ kind: 'purchase' });
   }
@@ -514,9 +514,12 @@ function App() {
   async function savePurchase(event) {
     event.preventDefault();
     const items = purchaseDraft.items
-      .filter((item) => item.materialId)
+      .filter((item) => item.itemId)
       .map((item) => ({
-        material_id: item.materialId,
+        item_type: item.itemType,
+        material_id: item.itemType === 'materials' ? item.itemId : null,
+        indirect_id: item.itemType === 'indirects' ? item.itemId : null,
+        utensil_id: item.itemType === 'utensils' ? item.itemId : null,
         quantity: number(item.quantity),
         unit_cost: number(item.unitCost),
       }));
@@ -792,13 +795,20 @@ function App() {
           .single();
         if (purchaseError) throw purchaseError;
         const items = (purchase.purchase_items || []).map((item) => {
-          const materialId = idMaps.materials.get(item.material_id);
-          if (!materialId) throw new Error(`No se encontró la materia prima "${item.material_name}" de la compra.`);
+          const itemType = item.item_type || 'materials';
+          const ids = idMaps[itemType];
+          const sourceId = item.material_id || item.indirect_id || item.utensil_id;
+          const itemId = ids?.get(sourceId);
+          if (!itemId) throw new Error(`No se encontró "${item.item_name || item.material_name}" de la compra.`);
           return {
             id: item.id,
             purchase_id: savedPurchase.id,
-            material_id: materialId,
-            material_name: item.material_name,
+            item_type: itemType,
+            material_id: itemType === 'materials' ? itemId : null,
+            indirect_id: itemType === 'indirects' ? itemId : null,
+            utensil_id: itemType === 'utensils' ? itemId : null,
+            item_name: item.item_name || item.material_name,
+            material_name: itemType === 'materials' ? item.item_name || item.material_name : null,
             quantity: number(item.quantity),
             unit_cost: number(item.unit_cost),
             line_total: number(item.line_total),
@@ -1103,7 +1113,7 @@ function App() {
           </Section>
         )}
         {tab === 'purchases' && (
-          <Section title="Compras de materia prima" subtitle="Cada compra registrada aumenta la cantidad y el costo del inventario" action="＋ Registrar compra" onAction={openPurchaseForm}>
+          <Section title="Compras e insumos" subtitle="Registra compras de materia prima, insumos indirectos y utensilios" action="＋ Registrar compra" onAction={openPurchaseForm}>
             <Table headers={['N.º compra', 'Fecha', 'Proveedor', 'Insumos', 'Total', 'Pago', 'Acciones']}>
               {data.purchases.map((purchase) => (
                 <tr key={purchase.id}>
@@ -1305,28 +1315,43 @@ function App() {
               <Field label="Método de pago"><select value={purchaseDraft.paymentMethod} onChange={(event) => setPurchaseDraft({ ...purchaseDraft, paymentMethod: event.target.value })}>{paymentMethods.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
             </div>
             <div className="sale-lines">
-              <div className="list-heading"><h3>Materias primas</h3><button type="button" className="text-button" onClick={() => setPurchaseDraft({ ...purchaseDraft, items: [...purchaseDraft.items, { materialId: '', quantity: '', unitCost: '' }] })}>＋ Agregar insumo</button></div>
+              <div className="list-heading"><h3>Artículos comprados</h3><button type="button" className="text-button" onClick={() => setPurchaseDraft({ ...purchaseDraft, items: [...purchaseDraft.items, { itemType: 'materials', itemId: '', quantity: '', unitCost: '' }] })}>＋ Agregar artículo</button></div>
               {purchaseDraft.items.map((item, index) => {
-                const material = data.materials.find((entry) => entry.id === item.materialId);
+                const catalog = {
+                  materials: data.materials,
+                  indirects: data.indirects,
+                  utensils: data.utensils,
+                }[item.itemType];
+                const selectedItem = catalog.find((entry) => entry.id === item.itemId);
+                const typeLabels = { materials: 'Materia prima', indirects: 'Insumo indirecto', utensils: 'Utensilio' };
+                const unitLabel = item.itemType === 'materials' ? selectedItem?.unit || 'unidades'
+                  : item.itemType === 'indirects' ? 'unidades de rendimiento'
+                    : 'usos de vida útil';
                 return (
-                  <div className="purchase-item-row" key={`${index}-${item.materialId}`}>
-                    <select aria-label="Materia prima" value={item.materialId} required onChange={(event) => setPurchaseDraft({
+                  <div className="purchase-item-row" key={`${index}-${item.itemId}`}>
+                    <select aria-label="Tipo de artículo" value={item.itemType} onChange={(event) => setPurchaseDraft({
                       ...purchaseDraft,
-                      items: purchaseDraft.items.map((row, rowIndex) => rowIndex === index ? { ...row, materialId: event.target.value } : row),
+                      items: purchaseDraft.items.map((row, rowIndex) => rowIndex === index ? { ...row, itemType: event.target.value, itemId: '' } : row),
                     })}>
-                      <option value="" disabled>Selecciona materia prima</option>
-                      {data.materials.map((entry) => <option key={entry.id} value={entry.id}>{entry.name} ({entry.unit})</option>)}
+                      {Object.entries(typeLabels).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
                     </select>
-                    <input aria-label="Cantidad comprada" placeholder="Cantidad" type="number" min="0.001" step="0.001" required value={item.quantity} onChange={(event) => setPurchaseDraft({
+                    <select aria-label="Artículo comprado" value={item.itemId} required onChange={(event) => setPurchaseDraft({
+                      ...purchaseDraft,
+                      items: purchaseDraft.items.map((row, rowIndex) => rowIndex === index ? { ...row, itemId: event.target.value } : row),
+                    })}>
+                      <option value="" disabled>Selecciona</option>
+                      {catalog.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
+                    </select>
+                    <input aria-label="Cantidad o rendimiento comprado" placeholder={item.itemType === 'utensils' ? 'Usos' : 'Cantidad'} type="number" min="0.001" step="0.001" required value={item.quantity} onChange={(event) => setPurchaseDraft({
                       ...purchaseDraft,
                       items: purchaseDraft.items.map((row, rowIndex) => rowIndex === index ? { ...row, quantity: event.target.value } : row),
                     })} />
-                    <input aria-label="Costo unitario" type="number" min="0" step="0.000001" required value={item.unitCost} placeholder="LPS / unidad" onChange={(event) => setPurchaseDraft({
+                    <input aria-label="Costo unitario" type="number" min="0" step="0.000001" required value={item.unitCost} placeholder={`LPS / ${item.itemType === 'utensils' ? 'uso' : 'unidad'}`} onChange={(event) => setPurchaseDraft({
                       ...purchaseDraft,
                       items: purchaseDraft.items.map((row, rowIndex) => rowIndex === index ? { ...row, unitCost: event.target.value } : row),
                     })} />
-                    <span className="sale-line-price">{material ? `${material.unit} · ${money(number(item.quantity) * number(item.unitCost))}` : '—'}</span>
-                    <button type="button" className="icon-button danger-text" aria-label="Quitar materia prima" onClick={() => setPurchaseDraft({
+                    <span className="sale-line-price">{selectedItem ? `${unitLabel} · ${money(number(item.quantity) * number(item.unitCost))}` : '—'}</span>
+                    <button type="button" className="icon-button danger-text" aria-label="Quitar artículo" onClick={() => setPurchaseDraft({
                       ...purchaseDraft,
                       items: purchaseDraft.items.filter((_, rowIndex) => rowIndex !== index),
                     })}>×</button>
@@ -1338,7 +1363,7 @@ function App() {
               <span>Total de compra</span>
               <strong>{money(purchaseDraft.items.reduce((sum, item) => sum + number(item.quantity) * number(item.unitCost), 0))}</strong>
             </div>
-            <p className="form-note">Al registrar la compra, el costo unitario se acumula al costo promedio de la materia prima y aumenta su stock.</p>
+            <p className="form-note">La compra suma stock y costo a materias primas; en insumos indirectos acumula costo y rendimiento, y en utensilios acumula costo y vida útil (usos).</p>
             <div className="dialog-actions">
               <button type="button" className="button secondary" onClick={() => { setModal(null); setPurchaseDraft(null); }}>Cancelar</button>
               <button className="button primary">Registrar compra</button>
@@ -1354,11 +1379,12 @@ function App() {
             <p><span>Pago</span><strong>{modal.purchase.payment_status === 'paid' ? 'Pagada' : 'Pendiente'}</strong></p>
             <p><span>Método</span><strong>{paymentMethods.find(([value]) => value === modal.purchase.payment_method)?.[1] || 'Otro'}</strong></p>
           </div>
-          <Table headers={['Materia prima', 'Cantidad', 'Costo unitario', 'Total']}>
+          <Table headers={['Artículo', 'Tipo', 'Cantidad / rendimiento', 'Costo unitario', 'Total']}>
             {(modal.purchase.purchase_items || []).map((item) => (
               <tr key={item.id}>
-                <td>{item.material_name}</td><td>{item.quantity}</td>
-                <td>{unitMoney(item.unit_cost)}</td><td>{money(item.line_total)}</td>
+                <td>{item.item_name || item.material_name}</td>
+                <td>{{ materials: 'Materia prima', indirects: 'Insumo indirecto', utensils: 'Utensilio' }[item.item_type || 'materials']}</td>
+                <td>{item.quantity}</td><td>{unitMoney(item.unit_cost)}</td><td>{money(item.line_total)}</td>
               </tr>
             ))}
           </Table>

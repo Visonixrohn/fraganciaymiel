@@ -164,13 +164,51 @@ create table if not exists public.purchases (
 create table if not exists public.purchase_items (
   id uuid primary key default gen_random_uuid(),
   purchase_id uuid not null references public.purchases(id) on delete cascade,
-  material_id uuid not null references public.materials(id) on delete restrict,
-  material_name text not null,
+  item_type text not null default 'materials' check (item_type in ('materials', 'indirects', 'utensils')),
+  material_id uuid references public.materials(id) on delete restrict,
+  indirect_id uuid references public.indirects(id) on delete restrict,
+  utensil_id uuid references public.utensils(id) on delete restrict,
+  item_name text not null,
+  material_name text,
   quantity numeric(14, 3) not null check (quantity > 0),
   unit_cost numeric(14, 6) not null check (unit_cost >= 0),
   line_total numeric(14, 2) not null check (line_total >= 0),
+  check (
+    (item_type = 'materials' and material_id is not null and indirect_id is null and utensil_id is null)
+    or (item_type = 'indirects' and material_id is null and indirect_id is not null and utensil_id is null)
+    or (item_type = 'utensils' and material_id is null and indirect_id is null and utensil_id is not null)
+  ),
   created_at timestamptz not null default now()
 );
+
+alter table public.purchase_items alter column material_id drop not null;
+alter table public.purchase_items alter column material_name drop not null;
+alter table public.purchase_items add column if not exists item_type text not null default 'materials' check (item_type in ('materials', 'indirects', 'utensils'));
+alter table public.purchase_items add column if not exists indirect_id uuid references public.indirects(id) on delete restrict;
+alter table public.purchase_items add column if not exists utensil_id uuid references public.utensils(id) on delete restrict;
+alter table public.purchase_items add column if not exists item_name text;
+
+update public.purchase_items
+set item_name = coalesce(material_name, 'Artículo')
+where item_name is null;
+
+alter table public.purchase_items alter column item_name set not null;
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'purchase_items_product_check'
+      and conrelid = 'public.purchase_items'::regclass
+  ) then
+    alter table public.purchase_items add constraint purchase_items_product_check check (
+      (item_type = 'materials' and material_id is not null and indirect_id is null and utensil_id is null)
+      or (item_type = 'indirects' and material_id is null and indirect_id is not null and utensil_id is null)
+      or (item_type = 'utensils' and material_id is null and indirect_id is null and utensil_id is not null)
+    );
+  end if;
+end;
+$$;
 
 create table if not exists public.expenses (
   id uuid primary key default gen_random_uuid(),
@@ -656,16 +694,24 @@ begin
     raise exception 'Selecciona un método de pago válido.';
   end if;
   if p_items is null or jsonb_typeof(p_items) is distinct from 'array' or jsonb_array_length(p_items) = 0 then
-    raise exception 'Agrega por lo menos una materia prima a la compra.';
+    raise exception 'Agrega por lo menos un artículo a la compra.';
   end if;
   if exists (
     select 1
-    from jsonb_to_recordset(p_items) as item(material_id uuid, quantity numeric, unit_cost numeric)
+    from jsonb_to_recordset(p_items) as item(item_type text, material_id uuid, indirect_id uuid, utensil_id uuid, quantity numeric, unit_cost numeric)
     left join public.materials m on m.id = item.material_id
-    where m.id is null or item.quantity is null or item.quantity <= 0
+    left join public.indirects i on i.id = item.indirect_id
+    left join public.utensils u on u.id = item.utensil_id
+    where item.quantity is null or item.quantity <= 0
       or item.unit_cost is null or item.unit_cost < 0
+      or case item.item_type
+        when 'materials' then m.id is null or item.indirect_id is not null or item.utensil_id is not null
+        when 'indirects' then i.id is null or item.material_id is not null or item.utensil_id is not null
+        when 'utensils' then u.id is null or item.material_id is not null or item.indirect_id is not null
+        else true
+      end
   ) then
-    raise exception 'La compra contiene una materia prima o un costo inválido.';
+    raise exception 'La compra contiene un artículo, cantidad o costo inválido.';
   end if;
 
   v_number := 'CMP-' || pg_catalog.to_char(p_purchase_date, 'YYYYMMDD') || '-'
@@ -682,30 +728,63 @@ begin
   returning id into v_purchase_id;
 
   insert into public.purchase_items (
-    purchase_id, material_id, material_name, quantity, unit_cost, line_total
+    purchase_id, item_type, material_id, indirect_id, utensil_id, item_name, material_name,
+    quantity, unit_cost, line_total
   )
   select
     v_purchase_id,
-    m.id,
-    m.name,
+    item.item_type,
+    case when item.item_type = 'materials' then m.id end,
+    case when item.item_type = 'indirects' then i.id end,
+    case when item.item_type = 'utensils' then u.id end,
+    case item.item_type when 'materials' then m.name when 'indirects' then i.name else u.name end,
+    case when item.item_type = 'materials' then m.name end,
     item.quantity,
     item.unit_cost,
     round(item.quantity * item.unit_cost, 2)
-  from jsonb_to_recordset(p_items) as item(material_id uuid, quantity numeric, unit_cost numeric)
-  join public.materials m on m.id = item.material_id;
+  from jsonb_to_recordset(p_items) as item(item_type text, material_id uuid, indirect_id uuid, utensil_id uuid, quantity numeric, unit_cost numeric)
+  left join public.materials m on m.id = item.material_id
+  left join public.indirects i on i.id = item.indirect_id
+  left join public.utensils u on u.id = item.utensil_id;
 
   update public.materials m
   set purchased = m.purchased + item_totals.quantity,
       total_cost = m.total_cost + item_totals.total_cost
   from (
-    select material_id,
+    select item.material_id,
       sum(quantity) as quantity,
       sum(round(quantity * unit_cost, 2)) as total_cost
-    from jsonb_to_recordset(p_items) as item(material_id uuid, quantity numeric, unit_cost numeric)
-    group by material_id
+    from jsonb_to_recordset(p_items) as item(item_type text, material_id uuid, indirect_id uuid, utensil_id uuid, quantity numeric, unit_cost numeric)
+    where item.item_type = 'materials'
+    group by item.material_id
   ) item_totals
   where m.id = item_totals.material_id;
 
+  update public.indirects i
+  set cost = i.cost + item_totals.total_cost,
+      yield_value = i.yield_value + item_totals.quantity
+  from (
+    select item.indirect_id,
+      sum(item.quantity) as quantity,
+      sum(round(item.quantity * item.unit_cost, 2)) as total_cost
+    from jsonb_to_recordset(p_items) as item(item_type text, material_id uuid, indirect_id uuid, utensil_id uuid, quantity numeric, unit_cost numeric)
+    where item.item_type = 'indirects'
+    group by item.indirect_id
+  ) item_totals
+  where i.id = item_totals.indirect_id;
+
+  update public.utensils u
+  set cost = u.cost + item_totals.total_cost,
+      useful_life = u.useful_life + item_totals.quantity
+  from (
+    select item.utensil_id,
+      sum(item.quantity) as quantity,
+      sum(round(item.quantity * item.unit_cost, 2)) as total_cost
+    from jsonb_to_recordset(p_items) as item(item_type text, material_id uuid, indirect_id uuid, utensil_id uuid, quantity numeric, unit_cost numeric)
+    where item.item_type = 'utensils'
+    group by item.utensil_id
+  ) item_totals
+  where u.id = item_totals.utensil_id;
   select coalesce(sum(line_total), 0) into v_total
   from public.purchase_items where purchase_id = v_purchase_id;
   update public.purchases set total = v_total where id = v_purchase_id returning * into v_purchase;
