@@ -98,43 +98,34 @@ alter table public.recipe_items enable row level security;
 alter table public.batches enable row level security;
 
 drop policy if exists "Owners manage their materials" on public.materials;
-create policy "Owners manage their materials" on public.materials
-  for all to authenticated using (owner_id = (select auth.uid())) with check (owner_id = (select auth.uid()));
+drop policy if exists "Authenticated users manage shared materials" on public.materials;
+create policy "Authenticated users manage shared materials" on public.materials
+  for all to authenticated using (true) with check (true);
 
 drop policy if exists "Owners manage their indirects" on public.indirects;
-create policy "Owners manage their indirects" on public.indirects
-  for all to authenticated using (owner_id = (select auth.uid())) with check (owner_id = (select auth.uid()));
+drop policy if exists "Authenticated users manage shared indirects" on public.indirects;
+create policy "Authenticated users manage shared indirects" on public.indirects
+  for all to authenticated using (true) with check (true);
 
 drop policy if exists "Owners manage their utensils" on public.utensils;
-create policy "Owners manage their utensils" on public.utensils
-  for all to authenticated using (owner_id = (select auth.uid())) with check (owner_id = (select auth.uid()));
+drop policy if exists "Authenticated users manage shared utensils" on public.utensils;
+create policy "Authenticated users manage shared utensils" on public.utensils
+  for all to authenticated using (true) with check (true);
 
 drop policy if exists "Owners manage their recipes" on public.recipes;
-create policy "Owners manage their recipes" on public.recipes
-  for all to authenticated
-  using (owner_id = (select auth.uid()))
-  with check (
-    owner_id = (select auth.uid())
-    and (indirect_id is null or exists (
-      select 1 from public.indirects i where i.id = indirect_id and i.owner_id = (select auth.uid())
-    ))
-    and (utensil_id is null or exists (
-      select 1 from public.utensils u where u.id = utensil_id and u.owner_id = (select auth.uid())
-    ))
-  );
+drop policy if exists "Authenticated users manage shared recipes" on public.recipes;
+create policy "Authenticated users manage shared recipes" on public.recipes
+  for all to authenticated using (true) with check (true);
 
 drop policy if exists "Owners manage their recipe items" on public.recipe_items;
-create policy "Owners manage their recipe items" on public.recipe_items
-  for all to authenticated
-  using (exists (select 1 from public.recipes r where r.id = recipe_id and r.owner_id = (select auth.uid())))
-  with check (
-    exists (select 1 from public.recipes r where r.id = recipe_id and r.owner_id = (select auth.uid()))
-    and exists (select 1 from public.materials m where m.id = material_id and m.owner_id = (select auth.uid()))
-  );
+drop policy if exists "Authenticated users manage shared recipe items" on public.recipe_items;
+create policy "Authenticated users manage shared recipe items" on public.recipe_items
+  for all to authenticated using (true) with check (true);
 
 drop policy if exists "Owners manage their batches" on public.batches;
-create policy "Owners manage their batches" on public.batches
-  for all to authenticated using (owner_id = (select auth.uid())) with check (owner_id = (select auth.uid()));
+drop policy if exists "Authenticated users manage shared batches" on public.batches;
+create policy "Authenticated users manage shared batches" on public.batches
+  for all to authenticated using (true) with check (true);
 
 grant select, insert, update, delete on public.materials, public.indirects, public.utensils, public.recipes, public.recipe_items, public.batches to authenticated;
 
@@ -175,20 +166,20 @@ begin
   if exists (
     select 1
     from jsonb_to_recordset(p_items) as item(material_id uuid, quantity numeric)
-    left join public.materials m on m.id = item.material_id and m.owner_id = v_owner
+    left join public.materials m on m.id = item.material_id
     where m.id is null or item.quantity is null or item.quantity <= 0
   ) then
-    raise exception 'La receta contiene una materia prima inválida o de otra cuenta.';
+    raise exception 'La receta contiene una materia prima inexistente o una cantidad inválida.';
   end if;
   if p_indirect_id is not null and not exists (
-    select 1 from public.indirects where id = p_indirect_id and owner_id = v_owner
+    select 1 from public.indirects where id = p_indirect_id
   ) then
-    raise exception 'El insumo indirecto no pertenece a esta cuenta.';
+    raise exception 'No se encontró el insumo indirecto seleccionado.';
   end if;
   if p_utensil_id is not null and not exists (
-    select 1 from public.utensils where id = p_utensil_id and owner_id = v_owner
+    select 1 from public.utensils where id = p_utensil_id
   ) then
-    raise exception 'El utensilio no pertenece a esta cuenta.';
+    raise exception 'No se encontró el utensilio seleccionado.';
   end if;
 
   if p_recipe_id is null then
@@ -206,7 +197,7 @@ begin
     set name = trim(p_name), batch_size = p_batch_size, soap_weight = p_soap_weight,
         indirect_id = p_indirect_id, utensil_id = p_utensil_id, margin = p_margin,
         price_detail = p_price_detail, price_wholesale = p_price_wholesale, price_event = p_price_event
-    where id = p_recipe_id and owner_id = v_owner
+    where id = p_recipe_id
     returning id into v_recipe_id;
     if v_recipe_id is null then
       raise exception 'No se encontró la receta para actualizar.';
@@ -248,7 +239,7 @@ begin
   end if;
 
   select * into v_recipe from public.recipes
-  where id = p_recipe_id and owner_id = v_owner;
+  where id = p_recipe_id;
   if not found then
     raise exception 'No se encontró la receta seleccionada.';
   end if;
@@ -256,7 +247,7 @@ begin
   for v_item in
     select ri.material_id, ri.quantity, m.initial_stock, m.purchased, m.used, m.total_cost
     from public.recipe_items ri
-    join public.materials m on m.id = ri.material_id and m.owner_id = v_owner
+    join public.materials m on m.id = ri.material_id
     where ri.recipe_id = v_recipe.id
     order by ri.material_id
     for update of m
@@ -273,12 +264,12 @@ begin
 
   if v_recipe.indirect_id is not null then
     select i.cost / i.yield_value * p_quantity into v_indirect_cost
-    from public.indirects i where i.id = v_recipe.indirect_id and i.owner_id = v_owner;
+    from public.indirects i where i.id = v_recipe.indirect_id;
     v_indirect_cost := coalesce(v_indirect_cost, 0);
   end if;
   if v_recipe.utensil_id is not null then
     select u.cost / u.useful_life * p_quantity into v_utensil_cost
-    from public.utensils u where u.id = v_recipe.utensil_id and u.owner_id = v_owner;
+    from public.utensils u where u.id = v_recipe.utensil_id;
     v_utensil_cost := coalesce(v_utensil_cost, 0);
   end if;
 

@@ -84,11 +84,13 @@ function App() {
     supabase.auth.getSession().then(({ data: result, error: sessionError }) => {
       if (sessionError) setError(sessionError.message);
       setSession(result.session);
+      setUnlocked(Boolean(result.session));
       setAuthLoading(false);
     });
 
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, nextSession) => {
       setSession(nextSession);
+      if (event === 'INITIAL_SESSION') setUnlocked(Boolean(nextSession));
       if (!nextSession) setUnlocked(false);
       setError('');
     });
@@ -183,7 +185,12 @@ function App() {
     toast('Acceso concedido');
   }
 
-  function lockApp() {
+  async function lockApp() {
+    const { error: signOutError } = await supabase.auth.signOut();
+    if (signOutError) {
+      toast(signOutError.message, 'error');
+      return;
+    }
     setUnlocked(false);
   }
 
