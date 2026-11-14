@@ -22,8 +22,11 @@ El `.env` incluido en este espacio ya tiene la URL y la clave publicable proporc
 - Inventario de materias primas con alertas, existencias y costo unitario.
 - Control de insumos indirectos y depreciación de utensilios.
 - Creación de recetas, simulación de costos y precios por margen.
+- Precios editables al detalle, por mayor y para eventos; calcula ganancia por barra y margen bruto (`(precio - costo) / precio`).
 - Registro transaccional de producción: verifica existencias y descuenta materias primas.
 - Exportación de los datos visibles a JSON.
 - Acceso a la interfaz mediante un código y sesión anónima de Supabase; RLS mantiene aislados los datos de cada sesión anónima.
 
 **Importante:** `8863` se valida en React y puede encontrarse inspeccionando los archivos del frontend; es una pantalla de acceso, no una autenticación segura. Cada navegador crea su propia sesión anónima y sus propios datos; no se comparten automáticamente entre dispositivos. Para proteger el acceso con el código en servidor o compartir los datos de forma privada entre dispositivos, configura una función de autenticación segura. Nunca pongas una clave secreta o `service_role` en React.
+
+Si ya habías ejecutado una versión anterior de `supabase/schema.sql`, vuelve a ejecutar el archivo actualizado para agregar los precios de venta a las recetas y actualizar la función `save_recipe`.

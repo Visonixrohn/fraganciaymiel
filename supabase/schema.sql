@@ -50,9 +50,16 @@ create table if not exists public.recipes (
   indirect_id uuid references public.indirects(id) on delete set null,
   utensil_id uuid references public.utensils(id) on delete set null,
   margin numeric(8, 2) not null default 100 check (margin >= 0),
+  price_detail numeric(14, 2) check (price_detail is null or price_detail >= 0),
+  price_wholesale numeric(14, 2) check (price_wholesale is null or price_wholesale >= 0),
+  price_event numeric(14, 2) check (price_event is null or price_event >= 0),
   created_at timestamptz not null default now(),
   unique (owner_id, name)
 );
+
+alter table public.recipes add column if not exists price_detail numeric(14, 2) check (price_detail is null or price_detail >= 0);
+alter table public.recipes add column if not exists price_wholesale numeric(14, 2) check (price_wholesale is null or price_wholesale >= 0);
+alter table public.recipes add column if not exists price_event numeric(14, 2) check (price_event is null or price_event >= 0);
 
 create table if not exists public.recipe_items (
   id uuid primary key default gen_random_uuid(),
@@ -131,6 +138,8 @@ create policy "Owners manage their batches" on public.batches
 
 grant select, insert, update, delete on public.materials, public.indirects, public.utensils, public.recipes, public.recipe_items, public.batches to authenticated;
 
+drop function if exists public.save_recipe(uuid, text, integer, numeric, uuid, uuid, numeric, jsonb);
+
 create or replace function public.save_recipe(
   p_recipe_id uuid,
   p_name text,
@@ -139,6 +148,9 @@ create or replace function public.save_recipe(
   p_indirect_id uuid,
   p_utensil_id uuid,
   p_margin numeric,
+  p_price_detail numeric,
+  p_price_wholesale numeric,
+  p_price_event numeric,
   p_items jsonb
 )
 returns uuid
@@ -154,6 +166,9 @@ begin
   end if;
   if nullif(trim(p_name), '') is null or p_batch_size is null or p_batch_size <= 0
      or p_soap_weight is null or p_soap_weight <= 0 or p_margin is null or p_margin < 0
+     or (p_price_detail is not null and p_price_detail < 0)
+     or (p_price_wholesale is not null and p_price_wholesale < 0)
+     or (p_price_event is not null and p_price_event < 0)
      or p_items is null or jsonb_typeof(p_items) is distinct from 'array' or jsonb_array_length(p_items) = 0 then
     raise exception 'La receta debe tener nombre, cantidades válidas y al menos un ingrediente.';
   end if;
@@ -177,13 +192,20 @@ begin
   end if;
 
   if p_recipe_id is null then
-    insert into public.recipes (owner_id, name, batch_size, soap_weight, indirect_id, utensil_id, margin)
-    values (v_owner, trim(p_name), p_batch_size, p_soap_weight, p_indirect_id, p_utensil_id, p_margin)
+    insert into public.recipes (
+      owner_id, name, batch_size, soap_weight, indirect_id, utensil_id, margin,
+      price_detail, price_wholesale, price_event
+    )
+    values (
+      v_owner, trim(p_name), p_batch_size, p_soap_weight, p_indirect_id, p_utensil_id, p_margin,
+      p_price_detail, p_price_wholesale, p_price_event
+    )
     returning id into v_recipe_id;
   else
     update public.recipes
     set name = trim(p_name), batch_size = p_batch_size, soap_weight = p_soap_weight,
-        indirect_id = p_indirect_id, utensil_id = p_utensil_id, margin = p_margin
+        indirect_id = p_indirect_id, utensil_id = p_utensil_id, margin = p_margin,
+        price_detail = p_price_detail, price_wholesale = p_price_wholesale, price_event = p_price_event
     where id = p_recipe_id and owner_id = v_owner
     returning id into v_recipe_id;
     if v_recipe_id is null then
@@ -268,7 +290,7 @@ begin
 end;
 $$;
 
-revoke all on function public.save_recipe(uuid, text, integer, numeric, uuid, uuid, numeric, jsonb) from public;
+revoke all on function public.save_recipe(uuid, text, integer, numeric, uuid, uuid, numeric, numeric, numeric, numeric, jsonb) from public;
 revoke all on function public.produce_batch(uuid, text, integer) from public;
-grant execute on function public.save_recipe(uuid, text, integer, numeric, uuid, uuid, numeric, jsonb) to authenticated;
+grant execute on function public.save_recipe(uuid, text, integer, numeric, uuid, uuid, numeric, numeric, numeric, numeric, jsonb) to authenticated;
 grant execute on function public.produce_batch(uuid, text, integer) to authenticated;

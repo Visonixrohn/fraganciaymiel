@@ -31,6 +31,11 @@ const fromRecipe = (row) => ({
   indirectId: row.indirect_id,
   utId: row.utensil_id,
   margin: number(row.margin),
+  prices: {
+    detail: row.price_detail == null ? null : number(row.price_detail),
+    wholesale: row.price_wholesale == null ? null : number(row.price_wholesale),
+    event: row.price_event == null ? null : number(row.price_event),
+  },
   items: (row.recipe_items || []).map((item) => ({
     materialId: item.material_id,
     qty: number(item.quantity),
@@ -61,6 +66,7 @@ function App() {
     indirectId: '',
     utId: '',
     margin: 100,
+    prices: { detail: null, wholesale: null, event: null },
     items: [{ materialId: '', qty: '' }],
   });
   const toast = useCallback((message, type = 'success') => {
@@ -141,18 +147,17 @@ function App() {
     const utensilCost = utensil && utensil.life > 0 ? (utensil.cost / utensil.life) * batchSize : 0;
     const total = materials + indirectCost + utensilCost;
     const unit = total / batchSize;
-    const margin = number(recipe.margin);
-    return {
-      materials,
-      indirect: indirectCost,
-      utensil: utensilCost,
-      total,
-      unit,
-      detail: unit * (1 + margin / 100),
-      wholesale: unit * (1 + margin * 0.8 / 100),
-      event: unit * (1 + margin * 0.7 / 100),
-    };
+    return { materials, indirect: indirectCost, utensil: utensilCost, total, unit };
   }, [data, recipe]);
+
+  const salePrices = useMemo(() => {
+    const markup = number(recipe.margin);
+    return {
+      detail: recipe.prices.detail ?? costs.unit * (1 + markup / 100),
+      wholesale: recipe.prices.wholesale ?? costs.unit * (1 + markup * 0.8 / 100),
+      event: recipe.prices.event ?? costs.unit * (1 + markup * 0.7 / 100),
+    };
+  }, [costs.unit, recipe.margin, recipe.prices]);
 
   async function handleAccessCode(event) {
     event.preventDefault();
@@ -254,7 +259,8 @@ function App() {
       soapWeight: item.soapWeight,
       indirectId: item.indirectId || '',
       utId: item.utId || '',
-      margin: item.margin || 100,
+      margin: item.margin ?? 100,
+      prices: item.prices,
       items: item.items.length ? item.items.map((row) => ({ ...row })) : [{ materialId: '', qty: '' }],
     });
     setTab('recipes');
@@ -262,6 +268,10 @@ function App() {
 
   async function saveRecipe(event) {
     event.preventDefault();
+    if (Object.values(salePrices).some((price) => price === '' || price == null || !Number.isFinite(Number(price)))) {
+      toast('Completa los tres precios de venta antes de guardar la receta.', 'error');
+      return;
+    }
     const items = recipe.items
       .filter((item) => item.materialId && number(item.qty) > 0)
       .map((item) => ({ material_id: item.materialId, quantity: number(item.qty) }));
@@ -277,6 +287,9 @@ function App() {
       p_indirect_id: recipe.indirectId || null,
       p_utensil_id: recipe.utId || null,
       p_margin: number(recipe.margin),
+      p_price_detail: number(salePrices.detail),
+      p_price_wholesale: number(salePrices.wholesale),
+      p_price_event: number(salePrices.event),
       p_items: items,
     });
     if (saveError) {
@@ -285,6 +298,7 @@ function App() {
     }
     setRecipe({
       id: '', name: '', batchSize: 10, soapWeight: 100, indirectId: '', utId: '', margin: 100,
+      prices: { detail: null, wholesale: null, event: null },
       items: [{ materialId: '', qty: '' }],
     });
     toast('Receta guardada');
@@ -389,6 +403,9 @@ function App() {
           p_indirect_id: idMaps.indirects.get(row.indirect_id || row.indirectId) || null,
           p_utensil_id: idMaps.utensils.get(row.utensil_id || row.utId) || null,
           p_margin: number(row.margin ?? 100),
+          p_price_detail: row.price_detail ?? row.prices?.detail ?? null,
+          p_price_wholesale: row.price_wholesale ?? row.prices?.wholesale ?? null,
+          p_price_event: row.price_event ?? row.prices?.event ?? null,
           p_items: ingredients,
         });
         if (importError) throw importError;
@@ -550,7 +567,7 @@ function App() {
                   <label>Utensilio / molde<select value={recipe.utId} onChange={(event) => setRecipe({ ...recipe, utId: event.target.value })}><option value="">Ninguno</option>{data.utensils.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
                 </div>
                 <button className="button primary wide">{recipe.id ? 'Guardar cambios' : 'Guardar receta'}</button>
-                {recipe.id && <button type="button" className="button secondary wide" onClick={() => setRecipe({ id: '', name: '', batchSize: 10, soapWeight: 100, indirectId: '', utId: '', margin: 100, items: [{ materialId: '', qty: '' }] })}>Cancelar edición</button>}
+                {recipe.id && <button type="button" className="button secondary wide" onClick={() => setRecipe({ id: '', name: '', batchSize: 10, soapWeight: 100, indirectId: '', utId: '', margin: 100, prices: { detail: null, wholesale: null, event: null }, items: [{ materialId: '', qty: '' }] })}>Cancelar edición</button>}
               </form>
             </Section>
             <div className="recipe-side">
@@ -563,9 +580,11 @@ function App() {
                   <CostLine label="Costo total del lote" value={costs.total} strong />
                 </div>
                 <div className="unit-cost"><span>Costo por barra</span><strong>{money(costs.unit)}</strong></div>
-                <label className="margin-input">Margen de ganancia (%)<input type="number" min="0" value={recipe.margin} onChange={(event) => setRecipe({ ...recipe, margin: event.target.value })} /></label>
+                <p className="margin-explainer">Ingresa el precio de venta por canal. El margen se calcula como ganancia ÷ precio de venta.</p>
                 <div className="prices">
-                  <Price label="Detalle" value={costs.detail} /><Price label="Por mayor" value={costs.wholesale} /><Price label="Eventos" value={costs.event} />
+                  <PriceEditor label="Detalle" value={salePrices.detail} cost={costs.unit} onChange={(value) => setRecipe({ ...recipe, prices: { ...recipe.prices, detail: value } })} />
+                  <PriceEditor label="Por mayor" value={salePrices.wholesale} cost={costs.unit} onChange={(value) => setRecipe({ ...recipe, prices: { ...recipe.prices, wholesale: value } })} />
+                  <PriceEditor label="Eventos" value={salePrices.event} cost={costs.unit} onChange={(value) => setRecipe({ ...recipe, prices: { ...recipe.prices, event: value } })} />
                 </div>
               </section>
               <Section title="Recetas guardadas" subtitle={`${data.recipes.length} fichas técnicas`}>
@@ -660,8 +679,18 @@ function Actions({ onEdit, onDelete }) {
 function CostLine({ label, value, strong = false }) {
   return <div className={strong ? 'cost-line cost-total' : 'cost-line'}><span>{label}</span><strong>{money(value)}</strong></div>;
 }
-function Price({ label, value }) {
-  return <div className="price-card"><small>{label}</small><strong>{money(value)}</strong></div>;
+function PriceEditor({ label, value, cost, onChange }) {
+  const profit = number(value) - cost;
+  const hasPrice = value !== '' && value != null;
+  const margin = hasPrice && number(value) > 0 ? (profit / number(value)) * 100 : null;
+  return (
+    <label className="price-card">
+      <small>{label}</small>
+      <span className="price-input-wrap"><span>L</span><input aria-label={`Precio de venta ${label.toLowerCase()}`} type="number" min="0" step="0.01" value={value} onChange={(event) => onChange(event.target.value)} /></span>
+      <strong>{margin === null ? '—' : `${margin.toFixed(1)}% margen`}</strong>
+      <small className={hasPrice && profit < 0 ? 'loss' : ''}>Ganancia: {hasPrice ? money(profit) : '—'}</small>
+    </label>
+  );
 }
 function Empty({ text }) {
   return <div className="empty-state"><span>✿</span>{text}</div>;
