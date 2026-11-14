@@ -29,9 +29,11 @@ En **Settings → Pages → Build and deployment**, selecciona **GitHub Actions*
 - Precios editables al detalle, por mayor y para eventos; calcula ganancia por barra y margen bruto (`(precio - costo) / precio`).
 - Registro transaccional de producción: verifica existencias y descuenta materias primas.
 - Pedidos en borrador y comprobantes internos numerados; al emitirlos valida las existencias de jabones terminados (producción menos ventas), registra la venta y permite imprimir o reimprimir el comprobante.
+- Registro de compras por materia prima, proveedor, costo unitario y forma de pago; las compras actualizan atómicamente el stock y el costo del inventario.
+- Control de cobros, pagos y gastos, con estado de resultados por período y balance general de gestión.
 - Exportación de los datos visibles a JSON.
 - Acceso a la interfaz mediante un código y sesión anónima de Supabase; las sesiones anónimas comparten el inventario.
 
 **Importante:** `8863` se valida en React y puede encontrarse inspeccionando los archivos del frontend; es una pantalla de acceso, no una autenticación segura. Todas las sesiones anónimas comparten el mismo inventario y pueden consultar, crear, editar o eliminar sus registros. Por tanto, cualquier persona que pueda abrir la aplicación puede acceder a esos datos; para restringir el acceso, configura autenticación real en Supabase y políticas RLS por usuario. Nunca pongas una clave secreta o `service_role` en React.
 
-Los comprobantes de venta son internos y no tienen validez fiscal ante la SAR. Si ya habías ejecutado una versión anterior de `supabase/schema.sql`, vuelve a ejecutar el archivo actualizado para agregar el módulo de pedidos y ventas, sus tablas y funciones.
+Los comprobantes de venta y los reportes financieros son internos/de gestión; no tienen validez fiscal ni representan estados auditados. Configura los saldos iniciales en **Finanzas** para reflejar caja, cuentas por cobrar/pagar y capital a la fecha de apertura. El balance muestra inventario, efectivo, cuentas por cobrar, cuentas por pagar y patrimonio; no contempla préstamos, impuestos ni activos fijos como cuentas separadas. Si ya habías ejecutado una versión anterior de `supabase/schema.sql`, vuelve a ejecutar el archivo actualizado para agregar compras, pagos, gastos y reportes.

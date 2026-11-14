@@ -84,6 +84,7 @@ create table if not exists public.batches (
 );
 
 create sequence if not exists public.sales_invoice_number_seq;
+create sequence if not exists public.purchases_number_seq;
 
 create table if not exists public.sales (
   id uuid primary key default gen_random_uuid(),
@@ -94,6 +95,8 @@ create table if not exists public.sales (
   customer_name text not null default 'Cliente general',
   customer_phone text,
   payment_method text not null default 'cash' check (payment_method in ('cash', 'transfer', 'card', 'other')),
+  payment_status text not null default 'paid' check (payment_status in ('paid', 'pending')),
+  paid_at timestamptz,
   subtotal numeric(14, 2) not null default 0 check (subtotal >= 0),
   total numeric(14, 2) not null default 0 check (total >= 0),
   created_at timestamptz not null default now(),
@@ -113,8 +116,86 @@ create table if not exists public.sale_items (
   price_type text not null check (price_type in ('detail', 'wholesale', 'event')),
   unit_price numeric(14, 2) not null check (unit_price >= 0),
   line_total numeric(14, 2) not null check (line_total >= 0),
+  unit_cost numeric(14, 4) not null default 0 check (unit_cost >= 0),
+  cost_total numeric(14, 2) not null default 0 check (cost_total >= 0),
+  cost_recorded boolean not null default false,
   created_at timestamptz not null default now()
 );
+
+alter table public.sales add column if not exists payment_status text not null default 'paid' check (payment_status in ('paid', 'pending'));
+alter table public.sales add column if not exists paid_at timestamptz;
+alter table public.sale_items add column if not exists unit_cost numeric(14, 4) not null default 0 check (unit_cost >= 0);
+alter table public.sale_items add column if not exists cost_total numeric(14, 2) not null default 0 check (cost_total >= 0);
+alter table public.sale_items add column if not exists cost_recorded boolean not null default false;
+
+update public.sales
+set paid_at = coalesce(issued_at, created_at)
+where status = 'issued' and payment_status = 'paid' and paid_at is null;
+
+with average_cost as (
+  select recipe_id, sum(total_cost) / nullif(sum(quantity), 0) as unit_cost
+  from public.batches
+  where recipe_id is not null
+  group by recipe_id
+)
+update public.sale_items si
+set unit_cost = round(ac.unit_cost, 4),
+    cost_total = round(ac.unit_cost * si.quantity, 2),
+    cost_recorded = true
+from public.sales s, average_cost ac
+where s.id = si.sale_id
+  and s.status = 'issued'
+  and si.recipe_id = ac.recipe_id
+  and not si.cost_recorded;
+
+create table if not exists public.purchases (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  purchase_number text not null unique,
+  supplier_name text not null default 'Proveedor general',
+  purchase_date date not null default current_date,
+  payment_status text not null default 'paid' check (payment_status in ('paid', 'pending')),
+  payment_method text not null default 'cash' check (payment_method in ('cash', 'transfer', 'card', 'other')),
+  total numeric(14, 2) not null default 0 check (total >= 0),
+  paid_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.purchase_items (
+  id uuid primary key default gen_random_uuid(),
+  purchase_id uuid not null references public.purchases(id) on delete cascade,
+  material_id uuid not null references public.materials(id) on delete restrict,
+  material_name text not null,
+  quantity numeric(14, 3) not null check (quantity > 0),
+  unit_cost numeric(14, 6) not null check (unit_cost >= 0),
+  line_total numeric(14, 2) not null check (line_total >= 0),
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.expenses (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  description text not null,
+  category text not null,
+  amount numeric(14, 2) not null check (amount > 0),
+  expense_date date not null default current_date,
+  payment_status text not null default 'paid' check (payment_status in ('paid', 'pending')),
+  payment_method text not null default 'cash' check (payment_method in ('cash', 'transfer', 'card', 'other')),
+  paid_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.finance_settings (
+  id integer primary key default 1 check (id = 1),
+  opening_date date not null default current_date,
+  opening_cash numeric(14, 2) not null default 0 check (opening_cash >= 0),
+  opening_receivables numeric(14, 2) not null default 0 check (opening_receivables >= 0),
+  opening_payables numeric(14, 2) not null default 0 check (opening_payables >= 0),
+  opening_equity numeric(14, 2) not null default 0,
+  updated_at timestamptz not null default now()
+);
+
+insert into public.finance_settings (id) values (1) on conflict (id) do nothing;
 
 create index if not exists materials_owner_idx on public.materials(owner_id);
 create index if not exists indirects_owner_idx on public.indirects(owner_id);
@@ -125,6 +206,9 @@ create index if not exists recipe_items_recipe_idx on public.recipe_items(recipe
 create index if not exists sales_created_at_idx on public.sales(created_at desc);
 create index if not exists sale_items_sale_idx on public.sale_items(sale_id);
 create index if not exists sale_items_recipe_idx on public.sale_items(recipe_id);
+create index if not exists purchases_date_idx on public.purchases(purchase_date desc);
+create index if not exists purchase_items_purchase_idx on public.purchase_items(purchase_id);
+create index if not exists expenses_date_idx on public.expenses(expense_date desc);
 
 alter table public.materials enable row level security;
 alter table public.indirects enable row level security;
@@ -134,6 +218,10 @@ alter table public.recipe_items enable row level security;
 alter table public.batches enable row level security;
 alter table public.sales enable row level security;
 alter table public.sale_items enable row level security;
+alter table public.purchases enable row level security;
+alter table public.purchase_items enable row level security;
+alter table public.expenses enable row level security;
+alter table public.finance_settings enable row level security;
 
 drop policy if exists "Owners manage their materials" on public.materials;
 drop policy if exists "Authenticated users manage shared materials" on public.materials;
@@ -173,8 +261,24 @@ drop policy if exists "Authenticated users manage shared sale items" on public.s
 create policy "Authenticated users manage shared sale items" on public.sale_items
   for all to authenticated using (true) with check (true);
 
-grant select, insert, update, delete on public.materials, public.indirects, public.utensils, public.recipes, public.recipe_items, public.batches, public.sales, public.sale_items to authenticated;
-grant usage, select on sequence public.sales_invoice_number_seq to authenticated;
+drop policy if exists "Authenticated users manage shared purchases" on public.purchases;
+create policy "Authenticated users manage shared purchases" on public.purchases
+  for all to authenticated using (true) with check (true);
+
+drop policy if exists "Authenticated users manage shared purchase items" on public.purchase_items;
+create policy "Authenticated users manage shared purchase items" on public.purchase_items
+  for all to authenticated using (true) with check (true);
+
+drop policy if exists "Authenticated users manage shared expenses" on public.expenses;
+create policy "Authenticated users manage shared expenses" on public.expenses
+  for all to authenticated using (true) with check (true);
+
+drop policy if exists "Authenticated users manage finance settings" on public.finance_settings;
+create policy "Authenticated users manage finance settings" on public.finance_settings
+  for all to authenticated using (true) with check (true);
+
+grant select, insert, update, delete on public.materials, public.indirects, public.utensils, public.recipes, public.recipe_items, public.batches, public.sales, public.sale_items, public.purchases, public.purchase_items, public.expenses, public.finance_settings to authenticated;
+grant usage, select on sequence public.sales_invoice_number_seq, public.purchases_number_seq to authenticated;
 
 drop function if exists public.save_recipe(uuid, text, integer, numeric, uuid, uuid, numeric, jsonb);
 
@@ -329,11 +433,14 @@ begin
 end;
 $$;
 
+drop function if exists public.save_sales_order(uuid, text, text, text, jsonb);
+
 create or replace function public.save_sales_order(
   p_sale_id uuid,
   p_customer_name text,
   p_customer_phone text,
   p_payment_method text,
+  p_payment_status text,
   p_items jsonb
 )
 returns uuid
@@ -350,6 +457,9 @@ begin
   end if;
   if p_payment_method is null or p_payment_method not in ('cash', 'transfer', 'card', 'other') then
     raise exception 'Selecciona un método de pago válido.';
+  end if;
+  if p_payment_status is null or p_payment_status not in ('paid', 'pending') then
+    raise exception 'Selecciona un estado de pago válido.';
   end if;
   if p_items is null or jsonb_typeof(p_items) is distinct from 'array' or jsonb_array_length(p_items) = 0 then
     raise exception 'Agrega por lo menos un producto al pedido.';
@@ -372,15 +482,16 @@ begin
   end if;
 
   if p_sale_id is null then
-    insert into public.sales (owner_id, customer_name, customer_phone, payment_method)
+    insert into public.sales (owner_id, customer_name, customer_phone, payment_method, payment_status)
     values (v_owner, coalesce(nullif(trim(p_customer_name), ''), 'Cliente general'),
-      nullif(trim(p_customer_phone), ''), p_payment_method)
+      nullif(trim(p_customer_phone), ''), p_payment_method, p_payment_status)
     returning id into v_sale_id;
   else
     update public.sales
     set customer_name = coalesce(nullif(trim(p_customer_name), ''), 'Cliente general'),
         customer_phone = nullif(trim(p_customer_phone), ''),
         payment_method = p_payment_method,
+        payment_status = p_payment_status,
         subtotal = 0,
         total = 0
     where id = p_sale_id and status = 'draft'
@@ -431,6 +542,8 @@ declare
   v_sale public.sales%rowtype;
   v_item record;
   v_available numeric;
+  v_available_value numeric;
+  v_average_cost numeric;
   v_invoice_number text;
 begin
   if v_owner is null then
@@ -459,8 +572,7 @@ begin
     end if;
 
     select
-      coalesce(sum(b.quantity), 0)
-      - coalesce((
+      coalesce(sum(b.quantity), 0) - coalesce((
         select sum(si.quantity)
         from public.sales s
         join public.sale_items si on si.sale_id = s.id
@@ -476,6 +588,25 @@ begin
         v_available,
         v_item.quantity;
     end if;
+
+    select
+      coalesce(sum(b.total_cost), 0) - coalesce((
+        select sum(si.cost_total)
+        from public.sales s
+        join public.sale_items si on si.sale_id = s.id
+        where s.status = 'issued' and si.recipe_id = v_item.recipe_id
+      ), 0)
+    into v_available_value
+    from public.batches b
+    where b.recipe_id = v_item.recipe_id;
+
+    v_average_cost := case when v_available > 0 then greatest(v_available_value, 0) / v_available else 0 end;
+
+    update public.sale_items
+    set unit_cost = round(v_average_cost, 4),
+        cost_total = round(v_average_cost * quantity, 2),
+        cost_recorded = true
+    where sale_id = p_sale_id and recipe_id = v_item.recipe_id;
   end loop;
 
   v_invoice_number := 'FYM-' || pg_catalog.to_char(current_date, 'YYYYMMDD') || '-'
@@ -485,7 +616,8 @@ begin
   set status = 'issued',
       invoice_number = v_invoice_number,
       invoice_date = current_date,
-      issued_at = now()
+      issued_at = now(),
+      paid_at = case when payment_status = 'paid' then now() else null end
   where id = p_sale_id
   returning * into v_sale;
 
@@ -493,11 +625,215 @@ begin
 end;
 $$;
 
+create or replace function public.record_purchase(
+  p_supplier_name text,
+  p_purchase_date date,
+  p_payment_status text,
+  p_payment_method text,
+  p_items jsonb
+)
+returns public.purchases
+language plpgsql
+set search_path = ''
+as $$
+declare
+  v_owner uuid := auth.uid();
+  v_purchase public.purchases%rowtype;
+  v_purchase_id uuid;
+  v_total numeric(14, 2);
+  v_number text;
+begin
+  if v_owner is null then
+    raise exception 'Debes iniciar sesión para registrar compras.';
+  end if;
+  if p_purchase_date is null then
+    raise exception 'La fecha de compra es obligatoria.';
+  end if;
+  if p_payment_status is null or p_payment_status not in ('paid', 'pending') then
+    raise exception 'Selecciona un estado de pago válido.';
+  end if;
+  if p_payment_method is null or p_payment_method not in ('cash', 'transfer', 'card', 'other') then
+    raise exception 'Selecciona un método de pago válido.';
+  end if;
+  if p_items is null or jsonb_typeof(p_items) is distinct from 'array' or jsonb_array_length(p_items) = 0 then
+    raise exception 'Agrega por lo menos una materia prima a la compra.';
+  end if;
+  if exists (
+    select 1
+    from jsonb_to_recordset(p_items) as item(material_id uuid, quantity numeric, unit_cost numeric)
+    left join public.materials m on m.id = item.material_id
+    where m.id is null or item.quantity is null or item.quantity <= 0
+      or item.unit_cost is null or item.unit_cost < 0
+  ) then
+    raise exception 'La compra contiene una materia prima o un costo inválido.';
+  end if;
+
+  v_number := 'CMP-' || pg_catalog.to_char(p_purchase_date, 'YYYYMMDD') || '-'
+    || pg_catalog.lpad(pg_catalog.nextval('public.purchases_number_seq')::text, 6, '0');
+
+  insert into public.purchases (
+    owner_id, purchase_number, supplier_name, purchase_date, payment_status, payment_method, paid_at
+  )
+  values (
+    v_owner, v_number, coalesce(nullif(trim(p_supplier_name), ''), 'Proveedor general'),
+    p_purchase_date, p_payment_status, p_payment_method,
+    case when p_payment_status = 'paid' then now() else null end
+  )
+  returning id into v_purchase_id;
+
+  insert into public.purchase_items (
+    purchase_id, material_id, material_name, quantity, unit_cost, line_total
+  )
+  select
+    v_purchase_id,
+    m.id,
+    m.name,
+    item.quantity,
+    item.unit_cost,
+    round(item.quantity * item.unit_cost, 2)
+  from jsonb_to_recordset(p_items) as item(material_id uuid, quantity numeric, unit_cost numeric)
+  join public.materials m on m.id = item.material_id;
+
+  update public.materials m
+  set purchased = m.purchased + item_totals.quantity,
+      total_cost = m.total_cost + item_totals.total_cost
+  from (
+    select material_id,
+      sum(quantity) as quantity,
+      sum(round(quantity * unit_cost, 2)) as total_cost
+    from jsonb_to_recordset(p_items) as item(material_id uuid, quantity numeric, unit_cost numeric)
+    group by material_id
+  ) item_totals
+  where m.id = item_totals.material_id;
+
+  select coalesce(sum(line_total), 0) into v_total
+  from public.purchase_items where purchase_id = v_purchase_id;
+  update public.purchases set total = v_total where id = v_purchase_id returning * into v_purchase;
+  return v_purchase;
+end;
+$$;
+
+create or replace function public.mark_purchase_paid(p_purchase_id uuid, p_payment_method text)
+returns void
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'Debes iniciar sesión para registrar pagos.';
+  end if;
+  if p_payment_method is null or p_payment_method not in ('cash', 'transfer', 'card', 'other') then
+    raise exception 'Selecciona un método de pago válido.';
+  end if;
+  update public.purchases
+  set payment_status = 'paid', payment_method = p_payment_method, paid_at = now()
+  where id = p_purchase_id and payment_status = 'pending';
+  if not found then
+    raise exception 'No se encontró una compra pendiente de pago.';
+  end if;
+end;
+$$;
+
+create or replace function public.mark_sale_paid(p_sale_id uuid, p_payment_method text)
+returns void
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'Debes iniciar sesión para registrar pagos.';
+  end if;
+  if p_payment_method is null or p_payment_method not in ('cash', 'transfer', 'card', 'other') then
+    raise exception 'Selecciona un método de pago válido.';
+  end if;
+  update public.sales
+  set payment_status = 'paid', payment_method = p_payment_method, paid_at = now()
+  where id = p_sale_id and status = 'issued' and payment_status = 'pending';
+  if not found then
+    raise exception 'No se encontró una venta pendiente de pago.';
+  end if;
+end;
+$$;
+
+create or replace function public.record_expense(
+  p_description text,
+  p_category text,
+  p_amount numeric,
+  p_expense_date date,
+  p_payment_status text,
+  p_payment_method text
+)
+returns public.expenses
+language plpgsql
+set search_path = ''
+as $$
+declare
+  v_owner uuid := auth.uid();
+  v_expense public.expenses%rowtype;
+begin
+  if v_owner is null then
+    raise exception 'Debes iniciar sesión para registrar gastos.';
+  end if;
+  if nullif(trim(p_description), '') is null or nullif(trim(p_category), '') is null
+     or p_amount is null or p_amount <= 0 or p_expense_date is null then
+    raise exception 'Completa la descripción, categoría, fecha e importe del gasto.';
+  end if;
+  if p_payment_status is null or p_payment_status not in ('paid', 'pending') then
+    raise exception 'Selecciona un estado de pago válido.';
+  end if;
+  if p_payment_method is null or p_payment_method not in ('cash', 'transfer', 'card', 'other') then
+    raise exception 'Selecciona un método de pago válido.';
+  end if;
+
+  insert into public.expenses (
+    owner_id, description, category, amount, expense_date, payment_status, payment_method, paid_at
+  )
+  values (
+    v_owner, trim(p_description), trim(p_category), p_amount, p_expense_date,
+    p_payment_status, p_payment_method,
+    case when p_payment_status = 'paid' then now() else null end
+  )
+  returning * into v_expense;
+  return v_expense;
+end;
+$$;
+
+create or replace function public.mark_expense_paid(p_expense_id uuid, p_payment_method text)
+returns void
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'Debes iniciar sesión para registrar pagos.';
+  end if;
+  if p_payment_method is null or p_payment_method not in ('cash', 'transfer', 'card', 'other') then
+    raise exception 'Selecciona un método de pago válido.';
+  end if;
+  update public.expenses
+  set payment_status = 'paid', payment_method = p_payment_method, paid_at = now()
+  where id = p_expense_id and payment_status = 'pending';
+  if not found then
+    raise exception 'No se encontró un gasto pendiente de pago.';
+  end if;
+end;
+$$;
+
 revoke all on function public.save_recipe(uuid, text, integer, numeric, uuid, uuid, numeric, numeric, numeric, numeric, jsonb) from public;
 revoke all on function public.produce_batch(uuid, text, integer) from public;
-revoke all on function public.save_sales_order(uuid, text, text, text, jsonb) from public;
+revoke all on function public.save_sales_order(uuid, text, text, text, text, jsonb) from public;
 revoke all on function public.issue_sales_order(uuid) from public;
+revoke all on function public.record_purchase(text, date, text, text, jsonb) from public;
+revoke all on function public.mark_purchase_paid(uuid, text) from public;
+revoke all on function public.mark_sale_paid(uuid, text) from public;
+revoke all on function public.record_expense(text, text, numeric, date, text, text) from public;
+revoke all on function public.mark_expense_paid(uuid, text) from public;
 grant execute on function public.save_recipe(uuid, text, integer, numeric, uuid, uuid, numeric, numeric, numeric, numeric, jsonb) to authenticated;
 grant execute on function public.produce_batch(uuid, text, integer) to authenticated;
-grant execute on function public.save_sales_order(uuid, text, text, text, jsonb) to authenticated;
+grant execute on function public.save_sales_order(uuid, text, text, text, text, jsonb) to authenticated;
 grant execute on function public.issue_sales_order(uuid) to authenticated;
+grant execute on function public.record_purchase(text, date, text, text, jsonb) to authenticated;
+grant execute on function public.mark_purchase_paid(uuid, text) to authenticated;
+grant execute on function public.mark_sale_paid(uuid, text) to authenticated;
+grant execute on function public.record_expense(text, text, numeric, date, text, text) to authenticated;
+grant execute on function public.mark_expense_paid(uuid, text) to authenticated;

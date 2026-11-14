@@ -8,10 +8,14 @@ const tabs = [
   ['recipes', 'Calculadora y recetas', '⌗'],
   ['production', 'Producción', '▤'],
   ['sales', 'Pedidos y facturas', '▧'],
+  ['purchases', 'Compras', '＋'],
+  ['finance', 'Finanzas', '＄'],
 ];
 
 const money = (value) => `L ${Number(value || 0).toFixed(2)}`;
+const unitMoney = (value) => `L ${new Intl.NumberFormat('es-HN', { minimumFractionDigits: 2, maximumFractionDigits: 6 }).format(Number(value || 0))}`;
 const number = (value) => Number(value || 0);
+const today = new Date().toISOString().slice(0, 10);
 const makeCode = () => `LOTE-${new Date().toISOString().slice(0, 10).replaceAll('-', '')}-${Math.floor(Math.random() * 900 + 100)}`;
 const ACCESS_CODE = '8863';
 const priceTypes = [
@@ -69,9 +73,32 @@ function App() {
     recipes: [],
     batches: [],
     sales: [],
+    purchases: [],
+    expenses: [],
+    financeSettings: null,
   });
   const [modal, setModal] = useState(null);
   const [saleDraft, setSaleDraft] = useState(null);
+  const [purchaseDraft, setPurchaseDraft] = useState(null);
+  const [expenseForm, setExpenseForm] = useState({
+    description: '',
+    category: '',
+    amount: '',
+    expenseDate: today,
+    paymentStatus: 'paid',
+    paymentMethod: 'cash',
+  });
+  const [openingForm, setOpeningForm] = useState({
+    opening_date: today,
+    opening_cash: '0',
+    opening_receivables: '0',
+    opening_payables: '0',
+    opening_equity: '0',
+  });
+  const [reportPeriod, setReportPeriod] = useState({
+    from: `${today.slice(0, 7)}-01`,
+    to: today,
+  });
   const [recipe, setRecipe] = useState({
     id: '',
     name: '',
@@ -122,12 +149,15 @@ function App() {
       supabase.from('recipes').select('*, recipe_items(*)').order('name'),
       supabase.from('batches').select('*').order('created_at', { ascending: false }),
       supabase.from('sales').select('*, sale_items(*)').order('created_at', { ascending: false }),
+      supabase.from('purchases').select('*, purchase_items(*)').order('purchase_date', { ascending: false }),
+      supabase.from('expenses').select('*').order('expense_date', { ascending: false }),
+      supabase.from('finance_settings').select('*').eq('id', 1).maybeSingle(),
     ]);
     const failed = queries.find(({ error: queryError }) => queryError);
     if (failed) {
       setError(failed.error.message);
     } else {
-      const [materials, indirects, utensils, recipes, batches, sales] = queries.map((result) => result.data);
+      const [materials, indirects, utensils, recipes, batches, sales, purchases, expenses, financeSettings] = queries.map((result) => result.data);
       setData({
         materials: materials.map(fromMaterial),
         indirects: indirects.map(fromIndirect),
@@ -135,7 +165,19 @@ function App() {
         recipes: recipes.map(fromRecipe),
         batches,
         sales,
+        purchases,
+        expenses,
+        financeSettings,
       });
+      if (financeSettings) {
+        setOpeningForm({
+          opening_date: financeSettings.opening_date,
+          opening_cash: String(financeSettings.opening_cash),
+          opening_receivables: String(financeSettings.opening_receivables),
+          opening_payables: String(financeSettings.opening_payables),
+          opening_equity: String(financeSettings.opening_equity),
+        });
+      }
     }
     setLoading(false);
   }, [session]);
@@ -184,6 +226,74 @@ function App() {
       return total + number(product?.prices?.[item.priceType]) * number(item.quantity);
     }, 0);
   }, [data.recipes, saleDraft]);
+
+  const reports = useMemo(() => {
+    const withinPeriod = (date) => Boolean(date && date >= reportPeriod.from && date <= reportPeriod.to);
+    const periodSales = data.sales.filter((sale) => sale.status === 'issued' && withinPeriod(sale.invoice_date));
+    const periodRevenue = periodSales.reduce((sum, sale) => sum + number(sale.total), 0);
+    const periodCost = periodSales.reduce((sum, sale) => sum
+      + (sale.sale_items || []).reduce((itemSum, item) => itemSum + number(item.cost_total), 0), 0);
+    const periodExpenses = data.expenses
+      .filter((expense) => withinPeriod(expense.expense_date))
+      .reduce((sum, expense) => sum + number(expense.amount), 0);
+    const openingDate = data.financeSettings?.opening_date || today;
+    const afterOpening = (date) => Boolean(date && date >= openingDate);
+    const rawInventory = data.materials.reduce((sum, material) => {
+      const acquired = material.initial + material.purchased;
+      const remaining = Math.max(0, acquired - material.used);
+      return sum + (acquired > 0 ? material.totalCost / acquired : 0) * remaining;
+    }, 0);
+    const totalProductionCost = data.batches.reduce((sum, batch) => sum + number(batch.total_cost), 0);
+    const totalCostOfSales = data.sales
+      .filter((sale) => sale.status === 'issued')
+      .reduce((sum, sale) => sum + (sale.sale_items || [])
+        .reduce((itemSum, item) => itemSum + number(item.cost_total), 0), 0);
+    const finishedInventory = Math.max(0, totalProductionCost - totalCostOfSales);
+    const settings = data.financeSettings || {};
+    const cash = number(settings.opening_cash)
+      + data.sales.filter((sale) => sale.status === 'issued' && sale.payment_status === 'paid'
+        && afterOpening(sale.invoice_date) && afterOpening(sale.paid_at?.slice(0, 10)))
+        .reduce((sum, sale) => sum + number(sale.total), 0)
+      - data.purchases.filter((purchase) => purchase.payment_status === 'paid'
+        && afterOpening(purchase.purchase_date) && afterOpening(purchase.paid_at?.slice(0, 10)))
+        .reduce((sum, purchase) => sum + number(purchase.total), 0)
+      - data.expenses.filter((expense) => expense.payment_status === 'paid'
+        && afterOpening(expense.expense_date) && afterOpening(expense.paid_at?.slice(0, 10)))
+        .reduce((sum, expense) => sum + number(expense.amount), 0);
+    const receivables = number(settings.opening_receivables)
+      + data.sales.filter((sale) => sale.status === 'issued' && sale.payment_status === 'pending'
+        && afterOpening(sale.invoice_date))
+        .reduce((sum, sale) => sum + number(sale.total), 0);
+    const payables = number(settings.opening_payables)
+      + data.purchases.filter((purchase) => purchase.payment_status === 'pending' && afterOpening(purchase.purchase_date))
+        .reduce((sum, purchase) => sum + number(purchase.total), 0)
+      + data.expenses.filter((expense) => expense.payment_status === 'pending' && afterOpening(expense.expense_date))
+        .reduce((sum, expense) => sum + number(expense.amount), 0);
+    const retainedEarnings = data.sales
+      .filter((sale) => sale.status === 'issued' && afterOpening(sale.invoice_date))
+      .reduce((sum, sale) => sum + number(sale.total)
+        - (sale.sale_items || []).reduce((itemSum, item) => itemSum + number(item.cost_total), 0), 0)
+      - data.expenses.filter((expense) => afterOpening(expense.expense_date))
+        .reduce((sum, expense) => sum + number(expense.amount), 0);
+    const assets = cash + receivables + rawInventory + finishedInventory;
+    const equity = number(settings.opening_equity) + retainedEarnings;
+    return {
+      revenue: periodRevenue,
+      cost: periodCost,
+      grossProfit: periodRevenue - periodCost,
+      expenses: periodExpenses,
+      netIncome: periodRevenue - periodCost - periodExpenses,
+      cash,
+      receivables,
+      rawInventory,
+      finishedInventory,
+      assets,
+      payables,
+      equity,
+      liabilitiesAndEquity: payables + equity,
+      difference: assets - payables - equity,
+    };
+  }, [data, reportPeriod]);
 
   function availableFinishedStock(recipeId) {
     const produced = data.batches
@@ -372,6 +482,7 @@ function App() {
         customerName: sale.customer_name === 'Cliente general' ? '' : sale.customer_name,
         customerPhone: sale.customer_phone || '',
         paymentMethod: sale.payment_method,
+        paymentStatus: sale.payment_status,
         items: (sale.sale_items || []).map((item) => ({
           recipeId: item.recipe_id,
           quantity: String(item.quantity),
@@ -383,9 +494,115 @@ function App() {
         customerName: '',
         customerPhone: '',
         paymentMethod: 'cash',
+        paymentStatus: 'paid',
         items: [{ recipeId: '', quantity: '1', priceType: 'detail' }],
       });
     setModal({ kind: 'sale' });
+  }
+
+  function openPurchaseForm() {
+    setPurchaseDraft({
+      supplierName: '',
+      purchaseDate: today,
+      paymentStatus: 'paid',
+      paymentMethod: 'cash',
+      items: [{ materialId: '', quantity: '', unitCost: '' }],
+    });
+    setModal({ kind: 'purchase' });
+  }
+
+  async function savePurchase(event) {
+    event.preventDefault();
+    const items = purchaseDraft.items
+      .filter((item) => item.materialId)
+      .map((item) => ({
+        material_id: item.materialId,
+        quantity: number(item.quantity),
+        unit_cost: number(item.unitCost),
+      }));
+    if (!items.length || items.some((item) => item.quantity <= 0 || item.unit_cost < 0)) {
+      toast('Agrega materias primas, cantidades y costos válidos.', 'error');
+      return;
+    }
+
+    const { error: purchaseError } = await supabase.rpc('record_purchase', {
+      p_supplier_name: purchaseDraft.supplierName.trim() || null,
+      p_purchase_date: purchaseDraft.purchaseDate,
+      p_payment_status: purchaseDraft.paymentStatus,
+      p_payment_method: purchaseDraft.paymentMethod,
+      p_items: items,
+    });
+    if (purchaseError) {
+      toast(purchaseError.message, 'error');
+      return;
+    }
+    setModal(null);
+    setPurchaseDraft(null);
+    toast('Compra registrada y stock actualizado');
+    await loadData();
+  }
+
+  async function markAsPaid(kind, row) {
+    const rpc = {
+      sales: ['mark_sale_paid', 'p_sale_id'],
+      purchases: ['mark_purchase_paid', 'p_purchase_id'],
+      expenses: ['mark_expense_paid', 'p_expense_id'],
+    }[kind];
+    const { error: paymentError } = await supabase.rpc(rpc[0], {
+      [rpc[1]]: row.id,
+      p_payment_method: row.payment_method,
+    });
+    if (paymentError) {
+      toast(paymentError.message, 'error');
+      return;
+    }
+    toast('Pago registrado');
+    await loadData();
+  }
+
+  async function saveExpense(event) {
+    event.preventDefault();
+    const { error: expenseError } = await supabase.rpc('record_expense', {
+      p_description: expenseForm.description.trim(),
+      p_category: expenseForm.category.trim(),
+      p_amount: number(expenseForm.amount),
+      p_expense_date: expenseForm.expenseDate,
+      p_payment_status: expenseForm.paymentStatus,
+      p_payment_method: expenseForm.paymentMethod,
+    });
+    if (expenseError) {
+      toast(expenseError.message, 'error');
+      return;
+    }
+    setExpenseForm({
+      description: '',
+      category: '',
+      amount: '',
+      expenseDate: today,
+      paymentStatus: 'paid',
+      paymentMethod: 'cash',
+    });
+    toast('Gasto registrado');
+    await loadData();
+  }
+
+  async function saveOpeningBalances(event) {
+    event.preventDefault();
+    const { error: settingsError } = await supabase.from('finance_settings').upsert({
+      id: 1,
+      opening_date: openingForm.opening_date,
+      opening_cash: number(openingForm.opening_cash),
+      opening_receivables: number(openingForm.opening_receivables),
+      opening_payables: number(openingForm.opening_payables),
+      opening_equity: number(openingForm.opening_equity),
+      updated_at: new Date().toISOString(),
+    }, { onConflict: 'id' });
+    if (settingsError) {
+      toast(settingsError.message, 'error');
+      return;
+    }
+    toast('Saldos iniciales guardados');
+    await loadData();
   }
 
   async function saveSalesOrder(event) {
@@ -407,6 +624,7 @@ function App() {
       p_customer_name: saleDraft.customerName.trim() || null,
       p_customer_phone: saleDraft.customerPhone.trim() || null,
       p_payment_method: saleDraft.paymentMethod,
+      p_payment_status: saleDraft.paymentStatus,
       p_items: items,
     });
     if (saveError) {
@@ -455,7 +673,9 @@ function App() {
     try {
       const backup = JSON.parse(await file.text());
       const categories = ['materials', 'indirects', 'utensils', 'recipes', 'batches'];
-      if (!backup || categories.some((category) => !Array.isArray(backup[category]))) {
+      const optionalCategories = ['sales', 'purchases', 'expenses'];
+      if (!backup || categories.some((category) => !Array.isArray(backup[category]))
+        || optionalCategories.some((category) => backup[category] !== undefined && !Array.isArray(backup[category]))) {
         throw new Error('El archivo no contiene un respaldo válido de Fragancia y Miel.');
       }
 
@@ -551,6 +771,130 @@ function App() {
           .from('batches')
           .upsert(batches, { onConflict: 'owner_id,code' });
         if (importError) throw importError;
+      }
+
+      for (const purchase of backup.purchases || []) {
+        const { data: savedPurchase, error: purchaseError } = await supabase
+          .from('purchases')
+          .upsert({
+            id: purchase.id,
+            owner_id: session.user.id,
+            purchase_number: purchase.purchase_number,
+            supplier_name: purchase.supplier_name,
+            purchase_date: purchase.purchase_date,
+            payment_status: purchase.payment_status,
+            payment_method: purchase.payment_method,
+            total: number(purchase.total),
+            paid_at: purchase.paid_at,
+            created_at: purchase.created_at,
+          }, { onConflict: 'id' })
+          .select('id')
+          .single();
+        if (purchaseError) throw purchaseError;
+        const items = (purchase.purchase_items || []).map((item) => {
+          const materialId = idMaps.materials.get(item.material_id);
+          if (!materialId) throw new Error(`No se encontró la materia prima "${item.material_name}" de la compra.`);
+          return {
+            id: item.id,
+            purchase_id: savedPurchase.id,
+            material_id: materialId,
+            material_name: item.material_name,
+            quantity: number(item.quantity),
+            unit_cost: number(item.unit_cost),
+            line_total: number(item.line_total),
+            created_at: item.created_at,
+          };
+        });
+        const { error: deleteItemsError } = await supabase.from('purchase_items').delete().eq('purchase_id', savedPurchase.id);
+        if (deleteItemsError) throw deleteItemsError;
+        if (items.length) {
+          const { error: itemError } = await supabase.from('purchase_items').insert(items);
+          if (itemError) throw itemError;
+        }
+      }
+
+      for (const sale of backup.sales || []) {
+        const status = sale.status === 'issued' ? 'issued' : 'draft';
+        if (status === 'issued' && (!sale.invoice_number || !sale.invoice_date)) {
+          throw new Error('Una venta emitida del respaldo no tiene número o fecha de comprobante.');
+        }
+        const { data: savedSale, error: saleError } = await supabase
+          .from('sales')
+          .upsert({
+            id: sale.id,
+            owner_id: session.user.id,
+            status,
+            invoice_number: status === 'issued' ? sale.invoice_number : null,
+            invoice_date: status === 'issued' ? sale.invoice_date : null,
+            customer_name: sale.customer_name || 'Cliente general',
+            customer_phone: sale.customer_phone || null,
+            payment_method: sale.payment_method || 'cash',
+            payment_status: sale.payment_status || 'paid',
+            paid_at: sale.paid_at || (status === 'issued' && sale.payment_status !== 'pending' ? sale.issued_at : null),
+            subtotal: number(sale.subtotal),
+            total: number(sale.total),
+            created_at: sale.created_at,
+            issued_at: status === 'issued' ? sale.issued_at || `${sale.invoice_date}T12:00:00Z` : null,
+          }, { onConflict: 'id' })
+          .select('id')
+          .single();
+        if (saleError) throw saleError;
+        const items = (sale.sale_items || []).map((item) => {
+          const recipeId = idMaps.recipes.get(item.recipe_id)
+            || recipeNames.get(item.recipe_name)
+            || data.recipes.find((recipeItem) => recipeItem.id === item.recipe_id)?.id;
+          if (!recipeId) throw new Error(`No se encontró la receta "${item.recipe_name}" de la venta.`);
+          const production = batches.filter((batch) => batch.recipe_id === recipeId);
+          const producedQuantity = production.reduce((sum, batch) => sum + number(batch.quantity), 0);
+          const estimatedUnitCost = producedQuantity
+            ? production.reduce((sum, batch) => sum + number(batch.total_cost), 0) / producedQuantity
+            : 0;
+          const unitCost = item.unit_cost == null ? estimatedUnitCost : number(item.unit_cost);
+          return {
+            id: item.id,
+            sale_id: savedSale.id,
+            recipe_id: recipeId,
+            recipe_name: item.recipe_name,
+            quantity: number(item.quantity),
+            price_type: item.price_type,
+            unit_price: number(item.unit_price),
+            line_total: number(item.line_total),
+            unit_cost: unitCost,
+            cost_total: item.cost_total == null ? Math.round(unitCost * number(item.quantity) * 100) / 100 : number(item.cost_total),
+            cost_recorded: item.cost_recorded == null ? status === 'issued' && producedQuantity > 0 : Boolean(item.cost_recorded),
+            created_at: item.created_at,
+          };
+        });
+        const { error: deleteItemsError } = await supabase.from('sale_items').delete().eq('sale_id', savedSale.id);
+        if (deleteItemsError) throw deleteItemsError;
+        if (items.length) {
+          const { error: itemError } = await supabase.from('sale_items').insert(items);
+          if (itemError) throw itemError;
+        }
+      }
+
+      for (const expense of backup.expenses || []) {
+        const { error: expenseError } = await supabase.from('expenses').upsert({
+          id: expense.id,
+          owner_id: session.user.id,
+          description: expense.description,
+          category: expense.category,
+          amount: number(expense.amount),
+          expense_date: expense.expense_date,
+          payment_status: expense.payment_status,
+          payment_method: expense.payment_method,
+          paid_at: expense.paid_at,
+          created_at: expense.created_at,
+        }, { onConflict: 'id' });
+        if (expenseError) throw expenseError;
+      }
+
+      if (backup.financeSettings) {
+        const { error: settingsError } = await supabase.from('finance_settings').upsert({
+          ...backup.financeSettings,
+          id: 1,
+        }, { onConflict: 'id' });
+        if (settingsError) throw settingsError;
       }
       toast('Respaldo importado correctamente');
     } catch (importError) {
@@ -739,24 +1083,128 @@ function App() {
                   <td className="strong">{sale.customer_name}</td>
                   <td>{(sale.sale_items || []).reduce((sum, item) => sum + number(item.quantity), 0)}</td>
                   <td className="green">{money(sale.total)}</td>
-                  <td><span className={`pill ${sale.status === 'issued' ? 'good' : 'warning'}`}>{sale.status === 'issued' ? 'Emitido' : 'Borrador'}</span></td>
+                  <td><span className={`pill ${sale.status === 'issued' && sale.payment_status === 'paid' ? 'good' : 'warning'}`}>
+                    {sale.status === 'draft' ? 'Borrador' : sale.payment_status === 'paid' ? 'Emitido · pagado' : 'Emitido · por cobrar'}
+                  </span></td>
                   <td className="sale-actions">
                     {sale.status === 'draft'
                       ? <>
                         <button className="icon-button" aria-label="Editar pedido" title="Editar pedido" onClick={() => openSalesOrder(sale)}>✎</button>
                         <button className="button primary small" onClick={() => issueSalesOrder(sale)}>Emitir</button>
                       </>
-                      : <button className="button secondary small" onClick={() => setModal({ kind: 'invoice', sale })}>Ver / imprimir</button>}
+                      : <>
+                        <button className="button secondary small" onClick={() => setModal({ kind: 'invoice', sale })}>Ver / imprimir</button>
+                        {sale.payment_status === 'pending' && <button className="button primary small" onClick={() => markAsPaid('sales', sale)}>Marcar pagada</button>}
+                      </>}
                   </td>
                 </tr>
               ))}
             </Table>
           </Section>
         )}
+        {tab === 'purchases' && (
+          <Section title="Compras de materia prima" subtitle="Cada compra registrada aumenta la cantidad y el costo del inventario" action="＋ Registrar compra" onAction={openPurchaseForm}>
+            <Table headers={['N.º compra', 'Fecha', 'Proveedor', 'Insumos', 'Total', 'Pago', 'Acciones']}>
+              {data.purchases.map((purchase) => (
+                <tr key={purchase.id}>
+                  <td><code>{purchase.purchase_number}</code></td>
+                  <td>{new Date(`${purchase.purchase_date}T12:00:00`).toLocaleDateString('es-HN')}</td>
+                  <td className="strong">{purchase.supplier_name}</td>
+                  <td>{(purchase.purchase_items || []).length}</td>
+                  <td className="green">{money(purchase.total)}</td>
+                  <td><span className={`pill ${purchase.payment_status === 'paid' ? 'good' : 'warning'}`}>{purchase.payment_status === 'paid' ? 'Pagada' : 'Pendiente'}</span></td>
+                  <td className="sale-actions">
+                    <button className="button secondary small" onClick={() => setModal({ kind: 'purchaseDetail', purchase })}>Ver</button>
+                    {purchase.payment_status === 'pending' && <button className="button primary small" onClick={() => markAsPaid('purchases', purchase)}>Marcar pagada</button>}
+                  </td>
+                </tr>
+              ))}
+            </Table>
+          </Section>
+        )}
+        {tab === 'finance' && (
+          <div className="finance-layout">
+            <div className="report-period">
+              <label>Desde<input type="date" value={reportPeriod.from} onChange={(event) => setReportPeriod({ ...reportPeriod, from: event.target.value })} /></label>
+              <label>Hasta<input type="date" value={reportPeriod.to} onChange={(event) => setReportPeriod({ ...reportPeriod, to: event.target.value })} /></label>
+            </div>
+            <Section title="Estado de resultados" subtitle="Ventas emitidas, costo de productos vendidos y gastos del período seleccionado">
+              <div className="statement-lines">
+                <div><span>Ingresos por ventas</span><strong>{money(reports.revenue)}</strong></div>
+                <div><span>Costo de productos vendidos</span><strong>− {money(reports.cost)}</strong></div>
+                <div className="statement-subtotal"><span>Utilidad bruta</span><strong>{money(reports.grossProfit)}</strong></div>
+                <div><span>Gastos operativos</span><strong>− {money(reports.expenses)}</strong></div>
+                <div className="statement-total"><span>Utilidad neta</span><strong>{money(reports.netIncome)}</strong></div>
+              </div>
+            </Section>
+            <Section title="Balance general de gestión" subtitle={`Saldos actuales · base de apertura: ${data.financeSettings?.opening_date || today}`}>
+              {!data.financeSettings && <Notice type="error">No se encontraron saldos iniciales. Vuelve a cargar el esquema de Supabase.</Notice>}
+              <div className="balance-grid">
+                <div>
+                  <h3>Activos</h3>
+                  <div className="statement-lines compact">
+                    <div><span>Efectivo y bancos</span><strong>{money(reports.cash)}</strong></div>
+                    <div><span>Cuentas por cobrar</span><strong>{money(reports.receivables)}</strong></div>
+                    <div><span>Inventario de materias primas</span><strong>{money(reports.rawInventory)}</strong></div>
+                    <div><span>Inventario de jabones terminados</span><strong>{money(reports.finishedInventory)}</strong></div>
+                    <div className="statement-total"><span>Total activos</span><strong>{money(reports.assets)}</strong></div>
+                  </div>
+                </div>
+                <div>
+                  <h3>Pasivos y patrimonio</h3>
+                  <div className="statement-lines compact">
+                    <div><span>Cuentas por pagar</span><strong>{money(reports.payables)}</strong></div>
+                    <div><span>Capital de apertura y utilidades acumuladas</span><strong>{money(reports.equity)}</strong></div>
+                    <div className="statement-total"><span>Total pasivos y patrimonio</span><strong>{money(reports.liabilitiesAndEquity)}</strong></div>
+                    <div className={Math.abs(reports.difference) <= 0.02 ? 'balance-check balanced' : 'balance-check'}>
+                      <span>Diferencia por conciliar</span><strong>{money(reports.difference)}</strong>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <p className="form-note">Registra saldos iniciales como existían en la fecha de apertura. El patrimonio inicial debe incluir el valor de los activos menos las deudas de esa fecha; la diferencia indica movimientos aún no registrados.</p>
+            </Section>
+            <Section title="Saldos iniciales" subtitle="Configura caja, cuentas por cobrar/pagar y capital a la fecha de inicio">
+              <form className="opening-form" onSubmit={saveOpeningBalances}>
+                <label>Fecha de apertura<input type="date" required value={openingForm.opening_date} onChange={(event) => setOpeningForm({ ...openingForm, opening_date: event.target.value })} /></label>
+                <label>Efectivo y bancos (LPS)<input type="number" min="0" step="0.01" required value={openingForm.opening_cash} onChange={(event) => setOpeningForm({ ...openingForm, opening_cash: event.target.value })} /></label>
+                <label>Cuentas por cobrar (LPS)<input type="number" min="0" step="0.01" required value={openingForm.opening_receivables} onChange={(event) => setOpeningForm({ ...openingForm, opening_receivables: event.target.value })} /></label>
+                <label>Cuentas por pagar (LPS)<input type="number" min="0" step="0.01" required value={openingForm.opening_payables} onChange={(event) => setOpeningForm({ ...openingForm, opening_payables: event.target.value })} /></label>
+                <label>Capital / patrimonio inicial (LPS)<input type="number" step="0.01" required value={openingForm.opening_equity} onChange={(event) => setOpeningForm({ ...openingForm, opening_equity: event.target.value })} /></label>
+                <button className="button primary">Guardar saldos</button>
+                <p className="form-note">Incluye en los saldos iniciales el efectivo, las cuentas pendientes y el valor de las existencias a la fecha de apertura.</p>
+              </form>
+            </Section>
+            <Section title="Registrar gasto" subtitle="Los gastos reducen la utilidad; los pendientes se suman a cuentas por pagar">
+              <form className="expense-form" onSubmit={saveExpense}>
+                <label>Descripción<input required value={expenseForm.description} onChange={(event) => setExpenseForm({ ...expenseForm, description: event.target.value })} placeholder="Ej. Transporte" /></label>
+                <label>Categoría<input required value={expenseForm.category} onChange={(event) => setExpenseForm({ ...expenseForm, category: event.target.value })} placeholder="Ej. Operación" /></label>
+                <label>Importe (LPS)<input type="number" min="0.01" step="0.01" required value={expenseForm.amount} onChange={(event) => setExpenseForm({ ...expenseForm, amount: event.target.value })} /></label>
+                <label>Fecha<input type="date" required value={expenseForm.expenseDate} onChange={(event) => setExpenseForm({ ...expenseForm, expenseDate: event.target.value })} /></label>
+                <label>Estado de pago<select value={expenseForm.paymentStatus} onChange={(event) => setExpenseForm({ ...expenseForm, paymentStatus: event.target.value })}><option value="paid">Pagado</option><option value="pending">Pendiente</option></select></label>
+                <label>Método<select value={expenseForm.paymentMethod} onChange={(event) => setExpenseForm({ ...expenseForm, paymentMethod: event.target.value })}>{paymentMethods.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+                <button className="button primary">Guardar gasto</button>
+              </form>
+            </Section>
+            <Section title="Gastos registrados" subtitle={`${data.expenses.length} gastos`}>
+              <Table headers={['Fecha', 'Descripción', 'Categoría', 'Importe', 'Pago', '']}>
+                {data.expenses.map((expense) => (
+                  <tr key={expense.id}>
+                    <td>{new Date(`${expense.expense_date}T12:00:00`).toLocaleDateString('es-HN')}</td>
+                    <td className="strong">{expense.description}</td><td>{expense.category}</td>
+                    <td className="green">{money(expense.amount)}</td>
+                    <td><span className={`pill ${expense.payment_status === 'paid' ? 'good' : 'warning'}`}>{expense.payment_status === 'paid' ? 'Pagado' : 'Pendiente'}</span></td>
+                    <td className="sale-actions">{expense.payment_status === 'pending' && <button className="button primary small" onClick={() => markAsPaid('expenses', expense)}>Marcar pagado</button>}</td>
+                  </tr>
+                ))}
+              </Table>
+            </Section>
+          </div>
+        )}
         <footer className="footer">Fragancia & Miel <span>·</span> Control de costos e inventario</footer>
       </main>
 
-      {modal && !['production', 'sale', 'invoice'].includes(modal.kind) && (
+      {modal && !['production', 'sale', 'purchase', 'purchaseDetail', 'invoice'].includes(modal.kind) && (
         <Dialog title={`${modal.item ? 'Editar' : 'Registrar'} ${modal.kind === 'materials' ? 'materia prima' : modal.kind === 'indirects' ? 'insumo indirecto' : 'utensilio'}`} onClose={() => setModal(null)}>
           <form className="stack-form" onSubmit={saveEntity}>
             <Field label="Código"><input required value={modal.values.code} onChange={(e) => setModal({ ...modal, values: { ...modal.values, code: e.target.value } })} /></Field>
@@ -797,6 +1245,12 @@ function App() {
                 {paymentMethods.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
               </select>
             </Field>
+            <Field label="Estado de pago">
+              <select value={saleDraft.paymentStatus} onChange={(event) => setSaleDraft({ ...saleDraft, paymentStatus: event.target.value })}>
+                <option value="paid">Pagado al emitir</option>
+                <option value="pending">Pendiente de cobro</option>
+              </select>
+            </Field>
             <div className="sale-lines">
               <div className="list-heading"><h3>Productos</h3><button type="button" className="text-button" onClick={() => setSaleDraft({ ...saleDraft, items: [...saleDraft.items, { recipeId: '', quantity: '1', priceType: 'detail' }] })}>＋ Agregar producto</button></div>
               {saleDraft.items.map((item, index) => {
@@ -817,7 +1271,7 @@ function App() {
                     })}>
                       {priceTypes.map(([value, label]) => <option key={value} value={value} disabled={product?.prices?.[value] == null}>{label}</option>)}
                     </select>
-                    <input aria-label="Cantidad" type="number" min="1" step="1" required value={item.quantity} onChange={(event) => setSaleDraft({
+                    <input aria-label="Cantidad" placeholder="Cant." type="number" min="1" step="1" required value={item.quantity} onChange={(event) => setSaleDraft({
                       ...saleDraft,
                       items: saleDraft.items.map((row, rowIndex) => rowIndex === index ? { ...row, quantity: event.target.value } : row),
                     })} />
@@ -839,6 +1293,78 @@ function App() {
           </form>
         </Dialog>
       )}
+      {modal?.kind === 'purchase' && purchaseDraft && (
+        <Dialog className="sales-dialog" title="Registrar compra" onClose={() => { setModal(null); setPurchaseDraft(null); }}>
+          <form className="stack-form" onSubmit={savePurchase}>
+            <div className="form-grid">
+              <Field label="Proveedor (opcional)"><input value={purchaseDraft.supplierName} placeholder="Proveedor general" onChange={(event) => setPurchaseDraft({ ...purchaseDraft, supplierName: event.target.value })} /></Field>
+              <Field label="Fecha de compra"><input type="date" required value={purchaseDraft.purchaseDate} onChange={(event) => setPurchaseDraft({ ...purchaseDraft, purchaseDate: event.target.value })} /></Field>
+            </div>
+            <div className="form-grid">
+              <Field label="Estado de pago"><select value={purchaseDraft.paymentStatus} onChange={(event) => setPurchaseDraft({ ...purchaseDraft, paymentStatus: event.target.value })}><option value="paid">Pagada</option><option value="pending">Pendiente</option></select></Field>
+              <Field label="Método de pago"><select value={purchaseDraft.paymentMethod} onChange={(event) => setPurchaseDraft({ ...purchaseDraft, paymentMethod: event.target.value })}>{paymentMethods.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
+            </div>
+            <div className="sale-lines">
+              <div className="list-heading"><h3>Materias primas</h3><button type="button" className="text-button" onClick={() => setPurchaseDraft({ ...purchaseDraft, items: [...purchaseDraft.items, { materialId: '', quantity: '', unitCost: '' }] })}>＋ Agregar insumo</button></div>
+              {purchaseDraft.items.map((item, index) => {
+                const material = data.materials.find((entry) => entry.id === item.materialId);
+                return (
+                  <div className="purchase-item-row" key={`${index}-${item.materialId}`}>
+                    <select aria-label="Materia prima" value={item.materialId} required onChange={(event) => setPurchaseDraft({
+                      ...purchaseDraft,
+                      items: purchaseDraft.items.map((row, rowIndex) => rowIndex === index ? { ...row, materialId: event.target.value } : row),
+                    })}>
+                      <option value="" disabled>Selecciona materia prima</option>
+                      {data.materials.map((entry) => <option key={entry.id} value={entry.id}>{entry.name} ({entry.unit})</option>)}
+                    </select>
+                    <input aria-label="Cantidad comprada" placeholder="Cantidad" type="number" min="0.001" step="0.001" required value={item.quantity} onChange={(event) => setPurchaseDraft({
+                      ...purchaseDraft,
+                      items: purchaseDraft.items.map((row, rowIndex) => rowIndex === index ? { ...row, quantity: event.target.value } : row),
+                    })} />
+                    <input aria-label="Costo unitario" type="number" min="0" step="0.000001" required value={item.unitCost} placeholder="LPS / unidad" onChange={(event) => setPurchaseDraft({
+                      ...purchaseDraft,
+                      items: purchaseDraft.items.map((row, rowIndex) => rowIndex === index ? { ...row, unitCost: event.target.value } : row),
+                    })} />
+                    <span className="sale-line-price">{material ? `${material.unit} · ${money(number(item.quantity) * number(item.unitCost))}` : '—'}</span>
+                    <button type="button" className="icon-button danger-text" aria-label="Quitar materia prima" onClick={() => setPurchaseDraft({
+                      ...purchaseDraft,
+                      items: purchaseDraft.items.filter((_, rowIndex) => rowIndex !== index),
+                    })}>×</button>
+                  </div>
+                );
+              })}
+            </div>
+            <div className="sale-total">
+              <span>Total de compra</span>
+              <strong>{money(purchaseDraft.items.reduce((sum, item) => sum + number(item.quantity) * number(item.unitCost), 0))}</strong>
+            </div>
+            <p className="form-note">Al registrar la compra, el costo unitario se acumula al costo promedio de la materia prima y aumenta su stock.</p>
+            <div className="dialog-actions">
+              <button type="button" className="button secondary" onClick={() => { setModal(null); setPurchaseDraft(null); }}>Cancelar</button>
+              <button className="button primary">Registrar compra</button>
+            </div>
+          </form>
+        </Dialog>
+      )}
+      {modal?.kind === 'purchaseDetail' && (
+        <Dialog title={`Compra ${modal.purchase.purchase_number}`} onClose={() => setModal(null)}>
+          <div className="invoice-meta">
+            <p><span>Proveedor</span><strong>{modal.purchase.supplier_name}</strong></p>
+            <p><span>Fecha</span><strong>{new Date(`${modal.purchase.purchase_date}T12:00:00`).toLocaleDateString('es-HN')}</strong></p>
+            <p><span>Pago</span><strong>{modal.purchase.payment_status === 'paid' ? 'Pagada' : 'Pendiente'}</strong></p>
+            <p><span>Método</span><strong>{paymentMethods.find(([value]) => value === modal.purchase.payment_method)?.[1] || 'Otro'}</strong></p>
+          </div>
+          <Table headers={['Materia prima', 'Cantidad', 'Costo unitario', 'Total']}>
+            {(modal.purchase.purchase_items || []).map((item) => (
+              <tr key={item.id}>
+                <td>{item.material_name}</td><td>{item.quantity}</td>
+                <td>{unitMoney(item.unit_cost)}</td><td>{money(item.line_total)}</td>
+              </tr>
+            ))}
+          </Table>
+          <div className="sale-total purchase-detail-total"><span>Total de compra</span><strong>{money(modal.purchase.total)}</strong></div>
+        </Dialog>
+      )}
       {modal?.kind === 'invoice' && (
         <Dialog className="invoice-dialog" title="Comprobante interno" onClose={() => setModal(null)}>
           <div className="invoice-paper">
@@ -852,6 +1378,7 @@ function App() {
               <p><span>Cliente</span><strong>{modal.sale.customer_name}</strong></p>
               {modal.sale.customer_phone && <p><span>Teléfono</span><strong>{modal.sale.customer_phone}</strong></p>}
               <p><span>Pago</span><strong>{paymentMethods.find(([value]) => value === modal.sale.payment_method)?.[1] || 'Otro'}</strong></p>
+              <p><span>Estado</span><strong>{modal.sale.payment_status === 'paid' ? 'Pagado' : 'Pendiente de cobro'}</strong></p>
             </div>
             <table className="invoice-table">
               <thead><tr><th>Producto</th><th>Precio</th><th>Cant.</th><th>Importe</th></tr></thead>

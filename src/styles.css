@@ -133,10 +133,13 @@ input:focus, select:focus { border-color: #7eac8a; box-shadow: 0 0 0 3px #27754d
 .form-note { margin: 0; color: #738078; font-size: 10px; line-height: 1.6; }
 .sale-lines { display: grid; gap: 11px; }
 .sale-item-row { display: grid; grid-template-columns: minmax(150px, 1fr) 120px 82px minmax(105px, auto) 30px; gap: 8px; align-items: center; }
+.purchase-item-row { display: grid; grid-template-columns: minmax(150px, 1fr) 90px 125px minmax(100px, auto) 30px; gap: 8px; align-items: center; }
 .sale-item-row select, .sale-item-row input { height: 36px; font-size: 10px; }
+.purchase-item-row select, .purchase-item-row input { height: 36px; font-size: 10px; }
 .sale-line-price { color: #738078; font-size: 10px; text-align: right; }
 .sale-total, .invoice-total { display: flex; align-items: center; justify-content: space-between; padding: 12px 14px; border-radius: 7px; background: #f4f9f4; color: #344a39; font-size: 12px; font-weight: 700; }
 .sale-total strong, .invoice-total strong { color: var(--green); font-size: 19px; }
+.purchase-detail-total { margin: 14px 0 0; }
 .invoice-paper { padding: 24px; border: 1px solid var(--line); border-radius: 8px; background: white; color: #344238; }
 .invoice-brand { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px; padding-bottom: 17px; border-bottom: 2px solid var(--green); }
 .invoice-brand h1 { margin: 0; color: var(--green-dark); font: 700 24px "Playfair Display", serif; }
@@ -152,6 +155,26 @@ input:focus, select:focus { border-color: #7eac8a; box-shadow: 0 0 0 3px #27754d
 .invoice-table td:first-child small { display: block; margin-top: 3px; color: var(--muted); font-size: 9px; }
 .invoice-total { margin-top: 16px; }
 .invoice-thanks { margin: 20px 0 0; color: var(--green); font: 700 14px "Playfair Display", serif; text-align: center; }
+.finance-layout { display: grid; gap: 16px; }
+.report-period { display: flex; justify-content: flex-end; gap: 12px; }
+.report-period label, .opening-form label, .expense-form label { display: grid; gap: 6px; color: #536157; font-size: 11px; font-weight: 600; }
+.report-period label { width: min(190px, 50%); }
+.statement-lines { display: grid; gap: 0; padding: 16px 21px; }
+.statement-lines > div { display: flex; justify-content: space-between; gap: 16px; padding: 10px 0; border-bottom: 1px solid #eef0ed; color: #59665d; font-size: 11px; }
+.statement-lines > div strong { color: #344238; white-space: nowrap; }
+.statement-lines .statement-subtotal { color: #2e4335; font-weight: 700; }
+.statement-lines .statement-total { margin-top: 4px; border-top: 1px solid #dfe7df; border-bottom: 0; color: #263d30; font-size: 12px; font-weight: 700; }
+.statement-lines .statement-total strong { color: var(--green); font-size: 15px; }
+.balance-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; padding: 14px 21px 0; }
+.balance-grid h3 { margin: 0; color: #35473a; font: 700 14px "Playfair Display", serif; }
+.statement-lines.compact { padding: 5px 0 12px; }
+.statement-lines.compact > div { font-size: 10px; }
+.balance-check { display: flex; justify-content: space-between; padding: 10px 0; color: #9c493a; font-size: 10px; font-weight: 700; }
+.balance-check.balanced { color: var(--green); }
+.balance-grid + .form-note { padding: 0 21px 17px; }
+.opening-form, .expense-form { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; padding: 18px 21px; align-items: end; }
+.expense-form { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.opening-form .button, .expense-form .button { justify-self: start; }
 .auth-page, .center-screen, .loading-screen { display: grid; min-height: 100vh; place-items: center; padding: 22px; background: radial-gradient(ellipse at 50% 0%, #e8f2e7, #f8f8f4 62%); }
 .auth-card { width: min(100%, 410px); padding: 37px; border: 1px solid #e5e9e3; border-radius: 13px; background: white; box-shadow: 0 12px 45px #2943310c; text-align: center; }
 .auth-card .brand-mark { display: grid; width: 51px; height: 51px; place-items: center; margin: 0 auto 15px; border-radius: 50%; background: #edf5ef; color: var(--green); font-size: 25px; }
@@ -194,8 +217,14 @@ input:focus, select:focus { border-color: #7eac8a; box-shadow: 0 0 0 3px #27754d
   .auth-card { padding: 29px 22px; }
   .sale-item-row { grid-template-columns: minmax(0, 1fr) 92px 65px 28px; gap: 6px; }
   .sale-line-price { grid-column: 1 / 4; grid-row: 2; text-align: left; }
+  .purchase-item-row { grid-template-columns: minmax(0, 1fr) 75px 90px 28px; gap: 6px; }
+  .purchase-item-row .sale-line-price { grid-column: 1 / 4; grid-row: 2; text-align: left; }
   .invoice-paper { padding: 16px; }
   .invoice-brand h1 { font-size: 20px; }
+  .report-period { justify-content: stretch; }
+  .report-period label { flex: 1; width: auto; }
+  .balance-grid { grid-template-columns: 1fr; padding: 12px 15px 0; }
+  .opening-form, .expense-form { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 15px; }
 }
 
 @page { size: A4; margin: 12mm; }
