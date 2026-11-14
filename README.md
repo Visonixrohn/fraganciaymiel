@@ -17,6 +17,10 @@ Aplicación React para administrar materias primas, insumos indirectos, utensili
 
 El `.env` incluido en este espacio ya tiene la URL y la clave publicable proporcionadas. No agregues claves `service_role` al frontend ni publiques el archivo `.env`.
 
+## Despliegue en GitHub Pages
+
+En **Settings → Pages → Build and deployment**, selecciona **GitHub Actions** como fuente. El flujo de GitHub Actions compila la aplicación y publica el contenido de `dist` al hacer push a `main`. En **Settings → Secrets and variables → Actions**, configura la variable `NEXT_PUBLIC_SUPABASE_URL` y el secreto `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`. La clave publicable se incorpora al frontend y no debe confundirse con una clave `service_role`.
+
 ## Funciones
 
 - Inventario de materias primas con alertas, existencias y costo unitario.
