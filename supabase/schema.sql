@@ -35,9 +35,60 @@ create table if not exists public.indirects (
   type text not null default 'Envase / Botella',
   cost numeric(14, 2) not null default 0 check (cost >= 0),
   yield_value numeric(14, 3) not null check (yield_value > 0),
+  measure_unit text not null default 'pza' check (measure_unit in ('g', 'ml', 'pza')),
+  stock numeric(14, 3) not null default 0 check (stock >= 0),
+  minimum_stock numeric(14, 3) not null default 0 check (minimum_stock >= 0),
+  consumption_per_soap numeric(14, 3) not null default 1 check (consumption_per_soap > 0),
+  unit_cost numeric(14, 6) not null default 0 check (unit_cost >= 0),
   created_at timestamptz not null default now(),
   unique (owner_id, code)
 );
+
+alter table public.indirects add column if not exists measure_unit text default 'pza';
+alter table public.indirects add column if not exists stock numeric(14, 3);
+alter table public.indirects add column if not exists minimum_stock numeric(14, 3) default 0;
+alter table public.indirects add column if not exists consumption_per_soap numeric(14, 3) default 1;
+alter table public.indirects add column if not exists unit_cost numeric(14, 6);
+
+update public.indirects
+set measure_unit = coalesce(measure_unit, 'pza'),
+    stock = coalesce(stock, yield_value),
+    minimum_stock = coalesce(minimum_stock, 0),
+    consumption_per_soap = coalesce(consumption_per_soap, 1),
+    unit_cost = coalesce(unit_cost, cost / nullif(yield_value, 0))
+where measure_unit is null or stock is null or minimum_stock is null
+   or consumption_per_soap is null or unit_cost is null;
+
+alter table public.indirects alter column measure_unit set default 'pza';
+alter table public.indirects alter column measure_unit set not null;
+alter table public.indirects alter column stock set default 0;
+alter table public.indirects alter column stock set not null;
+alter table public.indirects alter column minimum_stock set default 0;
+alter table public.indirects alter column minimum_stock set not null;
+alter table public.indirects alter column consumption_per_soap set default 1;
+alter table public.indirects alter column consumption_per_soap set not null;
+alter table public.indirects alter column unit_cost set default 0;
+alter table public.indirects alter column unit_cost set not null;
+
+do $$
+begin
+  if not exists (select 1 from pg_constraint where conname = 'indirects_measure_unit_check' and conrelid = 'public.indirects'::regclass) then
+    alter table public.indirects add constraint indirects_measure_unit_check check (measure_unit in ('g', 'ml', 'pza'));
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'indirects_stock_check' and conrelid = 'public.indirects'::regclass) then
+    alter table public.indirects add constraint indirects_stock_check check (stock >= 0);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'indirects_minimum_stock_check' and conrelid = 'public.indirects'::regclass) then
+    alter table public.indirects add constraint indirects_minimum_stock_check check (minimum_stock >= 0);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'indirects_consumption_per_soap_check' and conrelid = 'public.indirects'::regclass) then
+    alter table public.indirects add constraint indirects_consumption_per_soap_check check (consumption_per_soap > 0);
+  end if;
+  if not exists (select 1 from pg_constraint where conname = 'indirects_unit_cost_check' and conrelid = 'public.indirects'::regclass) then
+    alter table public.indirects add constraint indirects_unit_cost_check check (unit_cost >= 0);
+  end if;
+end;
+$$;
 
 create table if not exists public.utensils (
   id uuid primary key default gen_random_uuid(),
@@ -114,8 +165,38 @@ create table if not exists public.batches (
   unique (owner_id, code)
 );
 
+create table if not exists public.web_settings (
+  id integer primary key default 1 check (id = 1),
+  business_name text not null default 'Fragancia & Miel',
+  tagline text not null default 'Jabones artesanales hechos con cuidado',
+  logo_path text,
+  phone text,
+  whatsapp_phone text,
+  email text,
+  address text,
+  about_text text,
+  updated_at timestamptz not null default now()
+);
+
+insert into public.web_settings (id) values (1) on conflict (id) do nothing;
+
+create table if not exists public.web_products (
+  id uuid primary key default gen_random_uuid(),
+  name text not null,
+  batch_id uuid not null references public.batches(id) on delete restrict,
+  image_path text,
+  benefits text[] not null default '{}',
+  composition text[] not null default '{}',
+  usage_instructions text not null default '',
+  active boolean not null default true,
+  sort_order integer not null default 0,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 create sequence if not exists public.sales_invoice_number_seq;
 create sequence if not exists public.purchases_number_seq;
+create sequence if not exists public.web_order_number_seq;
 
 create table if not exists public.sales (
   id uuid primary key default gen_random_uuid(),
@@ -158,6 +239,34 @@ alter table public.sales add column if not exists paid_at timestamptz;
 alter table public.sale_items add column if not exists unit_cost numeric(14, 4) not null default 0 check (unit_cost >= 0);
 alter table public.sale_items add column if not exists cost_total numeric(14, 2) not null default 0 check (cost_total >= 0);
 alter table public.sale_items add column if not exists cost_recorded boolean not null default false;
+
+create table if not exists public.web_orders (
+  id uuid primary key default gen_random_uuid(),
+  order_number text not null unique,
+  customer_name text not null,
+  customer_phone text not null,
+  customer_email text,
+  delivery_address text,
+  notes text,
+  status text not null default 'pending' check (status in ('pending', 'confirmed', 'cancelled', 'completed')),
+  total numeric(14, 2) not null default 0 check (total >= 0),
+  sale_id uuid references public.sales(id) on delete set null,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+create table if not exists public.web_order_items (
+  id uuid primary key default gen_random_uuid(),
+  web_order_id uuid not null references public.web_orders(id) on delete cascade,
+  web_product_id uuid not null references public.web_products(id) on delete restrict,
+  batch_id uuid not null references public.batches(id) on delete restrict,
+  recipe_id uuid not null references public.recipes(id) on delete restrict,
+  product_name text not null,
+  quantity integer not null check (quantity > 0),
+  unit_price numeric(14, 2) not null check (unit_price >= 0),
+  line_total numeric(14, 2) not null check (line_total >= 0),
+  created_at timestamptz not null default now()
+);
 
 update public.sales
 set paid_at = coalesce(issued_at, created_at)
@@ -202,6 +311,7 @@ create table if not exists public.purchase_items (
   item_name text not null,
   material_name text,
   quantity numeric(14, 3) not null check (quantity > 0),
+  unit_label text not null,
   unit_cost numeric(14, 6) not null check (unit_cost >= 0),
   line_total numeric(14, 2) not null check (line_total >= 0),
   check (
@@ -218,12 +328,28 @@ alter table public.purchase_items add column if not exists item_type text not nu
 alter table public.purchase_items add column if not exists indirect_id uuid references public.indirects(id) on delete restrict;
 alter table public.purchase_items add column if not exists utensil_id uuid references public.utensils(id) on delete restrict;
 alter table public.purchase_items add column if not exists item_name text;
+alter table public.purchase_items add column if not exists unit_label text;
 
 update public.purchase_items
 set item_name = coalesce(material_name, 'Artículo')
 where item_name is null;
 
+update public.purchase_items pi
+set unit_label = coalesce(m.unit, 'unidad')
+from public.materials m
+where pi.unit_label is null and pi.item_type = 'materials' and m.id = pi.material_id;
+
+update public.purchase_items pi
+set unit_label = coalesce(i.measure_unit, 'unidad')
+from public.indirects i
+where pi.unit_label is null and pi.item_type = 'indirects' and i.id = pi.indirect_id;
+
+update public.purchase_items
+set unit_label = 'uso'
+where unit_label is null and item_type = 'utensils';
+
 alter table public.purchase_items alter column item_name set not null;
+alter table public.purchase_items alter column unit_label set not null;
 
 do $$
 begin
@@ -280,6 +406,12 @@ create index if not exists sale_items_recipe_idx on public.sale_items(recipe_id)
 create index if not exists purchases_date_idx on public.purchases(purchase_date desc);
 create index if not exists purchase_items_purchase_idx on public.purchase_items(purchase_id);
 create index if not exists expenses_date_idx on public.expenses(expense_date desc);
+create index if not exists web_products_batch_idx on public.web_products(batch_id);
+create index if not exists web_products_active_sort_idx on public.web_products(active, sort_order, name);
+create index if not exists web_orders_created_at_idx on public.web_orders(created_at desc);
+create index if not exists web_orders_status_created_idx on public.web_orders(status, created_at desc);
+create index if not exists web_order_items_order_idx on public.web_order_items(web_order_id);
+create index if not exists web_order_items_batch_idx on public.web_order_items(batch_id);
 
 alter table public.materials enable row level security;
 alter table public.indirects enable row level security;
@@ -295,6 +427,10 @@ alter table public.purchases enable row level security;
 alter table public.purchase_items enable row level security;
 alter table public.expenses enable row level security;
 alter table public.finance_settings enable row level security;
+alter table public.web_settings enable row level security;
+alter table public.web_products enable row level security;
+alter table public.web_orders enable row level security;
+alter table public.web_order_items enable row level security;
 
 drop policy if exists "Owners manage their materials" on public.materials;
 drop policy if exists "Authenticated users manage shared materials" on public.materials;
@@ -358,8 +494,39 @@ drop policy if exists "Authenticated users manage finance settings" on public.fi
 create policy "Authenticated users manage finance settings" on public.finance_settings
   for all to authenticated using (true) with check (true);
 
-grant select, insert, update, delete on public.materials, public.indirects, public.utensils, public.recipes, public.recipe_items, public.recipe_indirects, public.recipe_utensils, public.batches, public.sales, public.sale_items, public.purchases, public.purchase_items, public.expenses, public.finance_settings to authenticated;
-grant usage, select on sequence public.sales_invoice_number_seq, public.purchases_number_seq to authenticated;
+drop policy if exists "Authenticated users manage web settings" on public.web_settings;
+create policy "Authenticated users manage web settings" on public.web_settings
+  for all to authenticated using (true) with check (true);
+
+drop policy if exists "Authenticated users manage web products" on public.web_products;
+create policy "Authenticated users manage web products" on public.web_products
+  for all to authenticated using (true) with check (true);
+
+drop policy if exists "Authenticated users view web orders" on public.web_orders;
+create policy "Authenticated users view web orders" on public.web_orders
+  for select to authenticated using (true);
+
+drop policy if exists "Authenticated users view web order items" on public.web_order_items;
+create policy "Authenticated users view web order items" on public.web_order_items
+  for select to authenticated using (true);
+
+grant select, insert, update, delete on public.materials, public.indirects, public.utensils, public.recipes, public.recipe_items, public.recipe_indirects, public.recipe_utensils, public.batches, public.sales, public.sale_items, public.purchases, public.purchase_items, public.expenses, public.finance_settings, public.web_settings, public.web_products to authenticated;
+grant select on public.web_orders, public.web_order_items to authenticated;
+grant usage, select on sequence public.sales_invoice_number_seq, public.purchases_number_seq, public.web_order_number_seq to authenticated;
+
+insert into storage.buckets (id, name, public)
+values ('jabon', 'jabon', true)
+on conflict (id) do update set public = true;
+
+drop policy if exists "Public can view web product images" on storage.objects;
+create policy "Public can view web product images" on storage.objects
+  for select to public using (bucket_id = 'jabon');
+
+drop policy if exists "Authenticated users manage web images" on storage.objects;
+create policy "Authenticated users manage web images" on storage.objects
+  for all to authenticated
+  using (bucket_id = 'jabon')
+  with check (bucket_id = 'jabon');
 
 drop function if exists public.save_recipe(uuid, text, integer, numeric, uuid, uuid, numeric, jsonb);
 drop function if exists public.save_recipe(uuid, text, integer, numeric, uuid, uuid, numeric, numeric, numeric, numeric, jsonb);
@@ -515,11 +682,23 @@ begin
     update public.materials set used = used + v_required where id = v_item.material_id;
   end loop;
 
-  select coalesce(sum(i.cost / i.yield_value * p_quantity), 0)
-  into v_indirect_cost
-  from public.recipe_indirects ri
-  join public.indirects i on i.id = ri.indirect_id
-  where ri.recipe_id = v_recipe.id;
+  for v_item in
+    select ri.indirect_id, i.name, i.stock, i.consumption_per_soap, i.unit_cost
+    from public.recipe_indirects ri
+    join public.indirects i on i.id = ri.indirect_id
+    where ri.recipe_id = v_recipe.id
+    order by ri.indirect_id
+    for update of i
+  loop
+    v_required := v_item.consumption_per_soap * p_quantity::numeric;
+    if v_item.stock < v_required then
+      raise exception 'Existencias insuficientes del insumo indirecto "%".', v_item.name;
+    end if;
+    v_indirect_cost := v_indirect_cost + v_item.unit_cost * v_required;
+    update public.indirects
+    set stock = stock - v_required
+    where id = v_item.indirect_id;
+  end loop;
 
   select coalesce(sum(u.cost / u.useful_life * p_quantity), 0)
   into v_utensil_cost
@@ -644,6 +823,7 @@ declare
   v_sale public.sales%rowtype;
   v_item record;
   v_available numeric;
+  v_reserved numeric;
   v_available_value numeric;
   v_average_cost numeric;
   v_invoice_number text;
@@ -684,6 +864,14 @@ begin
     from public.batches b
     where b.recipe_id = v_item.recipe_id;
 
+    select coalesce(sum(woi.quantity), 0)
+    into v_reserved
+    from public.web_order_items woi
+    join public.web_orders wo on wo.id = woi.web_order_id
+    where woi.recipe_id = v_item.recipe_id
+      and wo.status in ('pending', 'confirmed');
+
+    v_available := v_available - v_reserved;
     if v_available < v_item.quantity then
       raise exception 'Existencias insuficientes para "%". Disponibles: %, solicitadas: %.',
         (select name from public.recipes where id = v_item.recipe_id),
@@ -702,7 +890,11 @@ begin
     from public.batches b
     where b.recipe_id = v_item.recipe_id;
 
-    v_average_cost := case when v_available > 0 then greatest(v_available_value, 0) / v_available else 0 end;
+    v_average_cost := case
+      when v_available + v_reserved > 0
+        then greatest(v_available_value, 0) / (v_available + v_reserved)
+      else 0
+    end;
 
     update public.sale_items
     set unit_cost = round(v_average_cost, 4),
@@ -793,7 +985,7 @@ begin
 
   insert into public.purchase_items (
     purchase_id, item_type, material_id, indirect_id, utensil_id, item_name, material_name,
-    quantity, unit_cost, line_total
+    quantity, unit_label, unit_cost, line_total
   )
   select
     v_purchase_id,
@@ -804,6 +996,7 @@ begin
     case item.item_type when 'materials' then m.name when 'indirects' then i.name else u.name end,
     case when item.item_type = 'materials' then m.name end,
     item.quantity,
+    case item.item_type when 'materials' then m.unit when 'indirects' then i.measure_unit else 'uso' end,
     item.unit_cost,
     round(item.quantity * item.unit_cost, 2)
   from jsonb_to_recordset(p_items) as item(item_type text, material_id uuid, indirect_id uuid, utensil_id uuid, quantity numeric, unit_cost numeric)
@@ -835,7 +1028,12 @@ begin
 
   update public.indirects i
   set cost = i.cost + item_totals.total_cost,
-      yield_value = i.yield_value + item_totals.quantity
+      stock = i.stock + item_totals.quantity,
+      unit_cost = case
+        when i.stock + item_totals.quantity > 0
+          then round((i.unit_cost * i.stock + item_totals.total_cost) / (i.stock + item_totals.quantity), 6)
+        else i.unit_cost
+      end
   from (
     select item.indirect_id,
       sum(item.quantity) as quantity,
@@ -970,6 +1168,335 @@ begin
   end if;
 end;
 $$;
+
+create or replace function public.web_available_batch_stock(p_batch_id uuid)
+returns numeric
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select greatest(
+    b.quantity
+      - coalesce(current_reservation.quantity, 0)
+      - least(
+        greatest(b.quantity - coalesce(current_reservation.quantity, 0), 0),
+        greatest(coalesce(recipe_sales.quantity, 0) - coalesce(previous_free_stock.quantity, 0), 0)
+      ),
+    0
+  )
+  from public.batches b
+  left join lateral (
+    select coalesce(sum(woi.quantity), 0) as quantity
+    from public.web_order_items woi
+    join public.web_orders wo on wo.id = woi.web_order_id
+    where woi.batch_id = b.id and wo.status in ('pending', 'confirmed')
+  ) current_reservation on true
+  left join lateral (
+    select coalesce(sum(si.quantity), 0) as quantity
+    from public.sales s
+    join public.sale_items si on si.sale_id = s.id
+    where s.status = 'issued' and si.recipe_id = b.recipe_id
+  ) recipe_sales on true
+  left join lateral (
+    select coalesce(sum(greatest(previous_batch.quantity - coalesce(previous_reservation.quantity, 0), 0)), 0) as quantity
+    from public.batches previous_batch
+    left join lateral (
+      select coalesce(sum(woi.quantity), 0) as quantity
+      from public.web_order_items woi
+      join public.web_orders wo on wo.id = woi.web_order_id
+      where woi.batch_id = previous_batch.id and wo.status in ('pending', 'confirmed')
+    ) previous_reservation on true
+    where previous_batch.recipe_id = b.recipe_id
+      and (previous_batch.batch_date, previous_batch.created_at, previous_batch.id)
+        < (b.batch_date, b.created_at, b.id)
+  ) previous_free_stock on true
+  where b.id = p_batch_id;
+$$;
+
+create or replace function public.get_web_catalog()
+returns jsonb
+language sql
+stable
+security definer
+set search_path = ''
+as $$
+  select jsonb_build_object(
+    'settings', (
+      select jsonb_build_object(
+        'business_name', business_name,
+        'tagline', tagline,
+        'logo_path', logo_path,
+        'phone', phone,
+        'whatsapp_phone', whatsapp_phone,
+        'email', email,
+        'address', address,
+        'about_text', about_text
+      )
+      from public.web_settings
+      where id = 1
+    ),
+    'products', coalesce((
+      select jsonb_agg(
+        jsonb_build_object(
+          'id', wp.id,
+          'name', wp.name,
+          'image_path', wp.image_path,
+          'benefits', wp.benefits,
+          'composition', wp.composition,
+          'usage_instructions', wp.usage_instructions,
+          'available', public.web_available_batch_stock(b.id),
+          'price', r.price_detail,
+          'soap_weight', r.soap_weight,
+          'batch_code', b.code
+        )
+        order by wp.sort_order, wp.name
+      )
+      from public.web_products wp
+      join public.batches b on b.id = wp.batch_id
+      join public.recipes r on r.id = b.recipe_id
+      where wp.active and r.price_detail is not null
+    ), '[]'::jsonb)
+  );
+$$;
+
+create or replace function public.submit_web_order(
+  p_customer_name text,
+  p_customer_phone text,
+  p_customer_email text,
+  p_delivery_address text,
+  p_notes text,
+  p_items jsonb
+)
+returns text
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_order_id uuid;
+  v_order_number text;
+  v_item record;
+  v_available numeric;
+begin
+  if nullif(trim(p_customer_name), '') is null or length(trim(p_customer_name)) > 120
+     or nullif(trim(p_customer_phone), '') is null or length(trim(p_customer_phone)) > 40
+     or (p_customer_email is not null and length(trim(p_customer_email)) > 254)
+     or (p_delivery_address is not null and length(trim(p_delivery_address)) > 500)
+     or (p_notes is not null and length(trim(p_notes)) > 1000) then
+    raise exception 'Completa un nombre y teléfono válidos; revisa también los límites de los demás campos.';
+  end if;
+  if p_items is null or jsonb_typeof(p_items) is distinct from 'array' then
+    raise exception 'El pedido debe incluir entre 1 y 20 productos.';
+  end if;
+  if jsonb_array_length(p_items) = 0 or jsonb_array_length(p_items) > 20 then
+    raise exception 'El pedido debe incluir entre 1 y 20 productos.';
+  end if;
+
+  perform wp.id
+  from jsonb_to_recordset(p_items) as item(product_id uuid, quantity integer)
+  join public.web_products wp on wp.id = item.product_id
+  order by wp.id
+  for share of wp;
+
+  if exists (
+    select 1
+    from jsonb_to_recordset(p_items) as item(product_id uuid, quantity integer)
+    left join public.web_products wp on wp.id = item.product_id
+    left join public.batches b on b.id = wp.batch_id
+    left join public.recipes r on r.id = b.recipe_id
+    where item.product_id is null or item.quantity is null or item.quantity < 1 or item.quantity > 100
+      or wp.id is null or not wp.active or b.id is null or r.id is null or r.price_detail is null
+  ) then
+    raise exception 'El pedido contiene un producto no disponible o una cantidad inválida.';
+  end if;
+
+  for v_item in
+    select distinct b.recipe_id
+    from jsonb_to_recordset(p_items) as item(product_id uuid, quantity integer)
+    join public.web_products wp on wp.id = item.product_id
+    join public.batches b on b.id = wp.batch_id
+    order by b.recipe_id
+  loop
+    perform 1 from public.recipes where id = v_item.recipe_id for update;
+  end loop;
+
+  for v_item in
+    select b.id as batch_id, sum(item.quantity)::integer as quantity
+    from jsonb_to_recordset(p_items) as item(product_id uuid, quantity integer)
+    join public.web_products wp on wp.id = item.product_id
+    join public.batches b on b.id = wp.batch_id
+    group by b.id
+    order by b.id
+  loop
+    v_available := public.web_available_batch_stock(v_item.batch_id);
+    if v_available < v_item.quantity then
+      raise exception 'No hay suficientes unidades disponibles del lote seleccionado. Disponibles: %, solicitadas: %.',
+        v_available, v_item.quantity;
+    end if;
+  end loop;
+
+  v_order_number := 'WEB-' || pg_catalog.lpad(pg_catalog.nextval('public.web_order_number_seq')::text, 7, '0');
+  insert into public.web_orders (
+    order_number, customer_name, customer_phone, customer_email, delivery_address, notes
+  )
+  values (
+    v_order_number, trim(p_customer_name), trim(p_customer_phone),
+    nullif(trim(p_customer_email), ''), nullif(trim(p_delivery_address), ''), nullif(trim(p_notes), '')
+  )
+  returning id into v_order_id;
+
+  insert into public.web_order_items (
+    web_order_id, web_product_id, batch_id, recipe_id, product_name, quantity, unit_price, line_total
+  )
+  select
+    v_order_id, wp.id, b.id, r.id, wp.name, item.quantity, r.price_detail,
+    round(r.price_detail * item.quantity, 2)
+  from jsonb_to_recordset(p_items) as item(product_id uuid, quantity integer)
+  join public.web_products wp on wp.id = item.product_id
+  join public.batches b on b.id = wp.batch_id
+  join public.recipes r on r.id = b.recipe_id;
+
+  update public.web_orders wo
+  set total = totals.total
+  from (
+    select coalesce(sum(line_total), 0) as total
+    from public.web_order_items
+    where web_order_id = v_order_id
+  ) totals
+  where wo.id = v_order_id;
+
+  return v_order_number;
+end;
+$$;
+
+create or replace function public.manage_web_order(p_order_id uuid, p_status text)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_order public.web_orders%rowtype;
+  v_item record;
+begin
+  if auth.uid() is null then
+    raise exception 'Debes iniciar sesión para administrar pedidos web.';
+  end if;
+  if p_status is null or p_status not in ('confirmed', 'cancelled') then
+    raise exception 'El estado solicitado no es válido.';
+  end if;
+
+  select * into v_order from public.web_orders where id = p_order_id for update;
+  if not found or v_order.status not in ('pending', 'confirmed') then
+    raise exception 'El pedido web ya fue cerrado o no existe.';
+  end if;
+
+  for v_item in
+    select distinct recipe_id from public.web_order_items
+    where web_order_id = p_order_id order by recipe_id
+  loop
+    perform 1 from public.recipes where id = v_item.recipe_id for update;
+  end loop;
+
+  update public.web_orders
+  set status = p_status, updated_at = now()
+  where id = p_order_id;
+end;
+$$;
+
+create or replace function public.complete_web_order(
+  p_order_id uuid,
+  p_payment_method text,
+  p_payment_status text
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_order public.web_orders%rowtype;
+  v_item record;
+  v_sale_id uuid;
+  v_items jsonb;
+begin
+  if auth.uid() is null then
+    raise exception 'Debes iniciar sesión para completar pedidos web.';
+  end if;
+  if p_payment_method is null or p_payment_method not in ('cash', 'transfer', 'card', 'other')
+     or p_payment_status is null or p_payment_status not in ('paid', 'pending') then
+    raise exception 'Selecciona un método y estado de pago válidos.';
+  end if;
+
+  select * into v_order from public.web_orders where id = p_order_id for update;
+  if not found or v_order.status not in ('pending', 'confirmed') then
+    raise exception 'El pedido web ya fue cerrado o no existe.';
+  end if;
+
+  for v_item in
+    select distinct recipe_id from public.web_order_items
+    where web_order_id = p_order_id order by recipe_id
+  loop
+    perform 1 from public.recipes where id = v_item.recipe_id for update;
+  end loop;
+
+  select jsonb_agg(jsonb_build_object(
+    'recipe_id', recipe_id,
+    'quantity', quantity,
+    'price_type', 'detail'
+  ))
+  into v_items
+  from (
+    select recipe_id, sum(quantity)::integer as quantity
+    from public.web_order_items
+    where web_order_id = p_order_id
+    group by recipe_id
+  ) order_items;
+
+  update public.web_orders set status = 'completed', updated_at = now() where id = p_order_id;
+  v_sale_id := public.save_sales_order(
+    null, v_order.customer_name, v_order.customer_phone,
+    p_payment_method, p_payment_status, v_items
+  );
+
+  update public.sale_items si
+  set unit_price = order_prices.unit_price,
+      line_total = round(order_prices.unit_price * si.quantity, 2)
+  from (
+    select recipe_id, sum(quantity)::integer as quantity,
+      sum(unit_price * quantity) / nullif(sum(quantity), 0) as unit_price
+    from public.web_order_items
+    where web_order_id = p_order_id
+    group by recipe_id
+  ) order_prices
+  where si.sale_id = v_sale_id and si.recipe_id = order_prices.recipe_id;
+
+  update public.sales s
+  set subtotal = totals.total, total = totals.total
+  from (
+    select coalesce(sum(line_total), 0) as total
+    from public.sale_items
+    where sale_id = v_sale_id
+  ) totals
+  where s.id = v_sale_id;
+
+  perform public.issue_sales_order(v_sale_id);
+  update public.web_orders set sale_id = v_sale_id where id = p_order_id;
+  return v_sale_id;
+end;
+$$;
+
+revoke all on function public.web_available_batch_stock(uuid) from public;
+revoke all on function public.get_web_catalog() from public;
+revoke all on function public.submit_web_order(text, text, text, text, text, jsonb) from public;
+revoke all on function public.manage_web_order(uuid, text) from public;
+revoke all on function public.complete_web_order(uuid, text, text) from public;
+
+grant execute on function public.get_web_catalog() to anon, authenticated;
+grant execute on function public.submit_web_order(text, text, text, text, text, jsonb) to anon, authenticated;
+grant execute on function public.manage_web_order(uuid, text) to authenticated;
+grant execute on function public.complete_web_order(uuid, text, text) to authenticated;
 
 revoke all on function public.save_recipe(uuid, text, integer, numeric, numeric, numeric, numeric, numeric, jsonb, jsonb, jsonb) from public;
 revoke all on function public.produce_batch(uuid, text, integer) from public;

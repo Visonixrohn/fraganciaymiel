@@ -23,11 +23,16 @@ const navigationGroups = [
     items: [
       ['sales', 'Facturación', '▧'],
       ['purchases', 'Compras', '＋'],
+      ['webOrders', 'Pedidos web', '🛍'],
     ],
   },
   {
     label: 'Administración',
-    items: [['finance', 'Finanzas', '＄']],
+    items: [
+      ['webProducts', 'Productos web', '▣'],
+      ['webSettings', 'Configuración web', '⚙'],
+      ['finance', 'Finanzas', '＄'],
+    ],
   },
 ];
 
@@ -64,7 +69,18 @@ const fromMaterial = (row) => {
     unitCost,
   };
 };
-const fromIndirect = (row) => ({ ...row, yieldVal: number(row.yield_value), cost: number(row.cost) });
+const fromIndirect = (row) => ({
+  ...row,
+  measureUnit: row.measure_unit || 'pza',
+  stock: number(row.stock ?? row.yield_value),
+  minimumStock: number(row.minimum_stock),
+  consumptionPerSoap: number(row.consumption_per_soap ?? 1),
+  unitCost: row.unit_cost == null
+    ? number(row.cost) / Math.max(1, number(row.yield_value))
+    : number(row.unit_cost),
+  yieldVal: number(row.yield_value),
+  cost: number(row.cost),
+});
 const fromUtensil = (row) => ({ ...row, cost: number(row.cost), life: number(row.useful_life) });
 const fromRecipe = (row) => ({
   ...row,
@@ -108,10 +124,17 @@ function App() {
     purchases: [],
     expenses: [],
     financeSettings: null,
+    webSettings: null,
+    webProducts: [],
+    webOrders: [],
   });
   const [modal, setModal] = useState(null);
   const [saleDraft, setSaleDraft] = useState(null);
   const [purchaseDraft, setPurchaseDraft] = useState(null);
+  const [webProductDraft, setWebProductDraft] = useState(null);
+  const [webProductFile, setWebProductFile] = useState(null);
+  const [webLogoFile, setWebLogoFile] = useState(null);
+  const [webSettingsDraft, setWebSettingsDraft] = useState(null);
   const [expenseForm, setExpenseForm] = useState({
     description: '',
     category: '',
@@ -184,12 +207,18 @@ function App() {
       supabase.from('purchases').select('*, purchase_items(*)').order('purchase_date', { ascending: false }),
       supabase.from('expenses').select('*').order('expense_date', { ascending: false }),
       supabase.from('finance_settings').select('*').eq('id', 1).maybeSingle(),
+      supabase.from('web_settings').select('*').eq('id', 1).maybeSingle(),
+      supabase.from('web_products').select('*, batches(*)').order('sort_order').order('name'),
+      supabase.from('web_orders').select('*, web_order_items(*)').order('created_at', { ascending: false }),
     ]);
     const failed = queries.find(({ error: queryError }) => queryError);
     if (failed) {
       setError(failed.error.message);
     } else {
-      const [materials, indirects, utensils, recipes, batches, sales, purchases, expenses, financeSettings] = queries.map((result) => result.data);
+      const [
+        materials, indirects, utensils, recipes, batches, sales, purchases, expenses, financeSettings,
+        webSettings, webProducts, webOrders,
+      ] = queries.map((result) => result.data);
       setData({
         materials: materials.map(fromMaterial),
         indirects: indirects.map(fromIndirect),
@@ -200,6 +229,20 @@ function App() {
         purchases,
         expenses,
         financeSettings,
+        webSettings,
+        webProducts,
+        webOrders,
+      });
+      setWebSettingsDraft(webSettings || {
+        id: 1,
+        business_name: 'Fragancia & Miel',
+        tagline: 'Jabones artesanales hechos con cuidado',
+        logo_path: '',
+        phone: '',
+        whatsapp_phone: '',
+        email: '',
+        address: '',
+        about_text: '',
       });
       if (financeSettings) {
         setOpeningForm({
@@ -220,7 +263,8 @@ function App() {
 
   const metrics = useMemo(() => ({
     materials: data.materials.length,
-    alerts: data.materials.filter((item) => item.initial + item.purchased - item.used <= item.min).length,
+    alerts: data.materials.filter((item) => item.initial + item.purchased - item.used <= item.min).length
+      + data.indirects.filter((item) => item.stock <= item.minimumStock).length,
     recipes: data.recipes.length,
     batches: data.batches.length,
   }), [data]);
@@ -245,7 +289,7 @@ function App() {
     }, 0);
     const indirectCost = recipe.indirectIds.reduce((sum, id) => {
       const indirect = data.indirects.find((item) => item.id === id);
-      return sum + (indirect && indirect.yieldVal > 0 ? (indirect.cost / indirect.yieldVal) * batchSize : 0);
+      return sum + (indirect ? indirect.unitCost * indirect.consumptionPerSoap * batchSize : 0);
     }, 0);
     const utensilCost = recipe.utensilIds.reduce((sum, id) => {
       const utensil = data.utensils.find((item) => item.id === id);
@@ -289,6 +333,7 @@ function App() {
       const remaining = Math.max(0, acquired - material.used);
       return sum + (acquired > 0 ? material.totalCost / acquired : 0) * remaining;
     }, 0);
+    const indirectInventory = data.indirects.reduce((sum, item) => sum + item.stock * item.unitCost, 0);
     const totalProductionCost = data.batches.reduce((sum, batch) => sum + number(batch.total_cost), 0);
     const totalCostOfSales = data.sales
       .filter((sale) => sale.status === 'issued')
@@ -321,7 +366,7 @@ function App() {
         - (sale.sale_items || []).reduce((itemSum, item) => itemSum + number(item.cost_total), 0), 0)
       - data.expenses.filter((expense) => afterOpening(expense.expense_date))
         .reduce((sum, expense) => sum + number(expense.amount), 0);
-    const assets = cash + receivables + rawInventory + finishedInventory;
+    const assets = cash + receivables + rawInventory + indirectInventory + finishedInventory;
     const equity = number(settings.opening_equity) + retainedEarnings;
     return {
       revenue: periodRevenue,
@@ -332,6 +377,7 @@ function App() {
       cash,
       receivables,
       rawInventory,
+      indirectInventory,
       finishedInventory,
       assets,
       payables,
@@ -350,7 +396,193 @@ function App() {
       .flatMap((sale) => sale.sale_items || [])
       .filter((item) => item.recipe_id === recipeId)
       .reduce((sum, item) => sum + number(item.quantity), 0);
-    return produced - sold;
+    const reserved = data.webOrders
+      .filter((order) => ['pending', 'confirmed'].includes(order.status))
+      .flatMap((order) => order.web_order_items || [])
+      .filter((item) => item.recipe_id === recipeId)
+      .reduce((sum, item) => sum + number(item.quantity), 0);
+    return produced - sold - reserved;
+  }
+
+  function availableWebBatchStock(batch) {
+    const recipeBatches = data.batches
+      .filter((item) => item.recipe_id === batch.recipe_id)
+      .sort((a, b) => String(a.batch_date).localeCompare(String(b.batch_date))
+        || String(a.created_at).localeCompare(String(b.created_at))
+        || String(a.id).localeCompare(String(b.id)));
+    const sold = data.sales
+      .filter((sale) => sale.status === 'issued')
+      .flatMap((sale) => sale.sale_items || [])
+      .filter((item) => item.recipe_id === batch.recipe_id)
+      .reduce((sum, item) => sum + number(item.quantity), 0);
+    const reservedForBatch = data.webOrders
+      .filter((order) => ['pending', 'confirmed'].includes(order.status))
+      .flatMap((order) => order.web_order_items || [])
+      .filter((item) => item.batch_id === batch.id)
+      .reduce((sum, item) => sum + number(item.quantity), 0);
+    const earlierFree = recipeBatches
+      .slice(0, recipeBatches.findIndex((item) => item.id === batch.id))
+      .reduce((sum, item) => {
+        const reserved = data.webOrders
+          .filter((order) => ['pending', 'confirmed'].includes(order.status))
+          .flatMap((order) => order.web_order_items || [])
+          .filter((orderItem) => orderItem.batch_id === item.id)
+          .reduce((total, orderItem) => total + number(orderItem.quantity), 0);
+        return sum + Math.max(0, number(item.quantity) - reserved);
+      }, 0);
+    const soldHere = Math.min(
+      Math.max(0, number(batch.quantity) - reservedForBatch),
+      Math.max(0, sold - earlierFree),
+    );
+    return Math.max(0, number(batch.quantity) - reservedForBatch - soldHere);
+  }
+
+  async function uploadWebImage(file, folder) {
+    if (!file) return null;
+    if (!['image/jpeg', 'image/png', 'image/webp'].includes(file.type) || file.size > 8 * 1024 * 1024) {
+      throw new Error('Usa una imagen JPG, PNG o WebP de máximo 8 MB.');
+    }
+    const safeName = file.name.normalize('NFKD').replace(/[^a-zA-Z0-9._-]/g, '-');
+    const path = `${folder}/${crypto.randomUUID()}-${safeName}`;
+    const { error: uploadError } = await supabase.storage.from('jabon').upload(path, file, {
+      cacheControl: '3600',
+      contentType: file.type,
+      upsert: false,
+    });
+    if (uploadError) throw uploadError;
+    return path;
+  }
+
+  function openWebProduct(product = null) {
+    setWebProductDraft(product ? {
+      id: product.id,
+      name: product.name,
+      batchId: product.batch_id,
+      imagePath: product.image_path || '',
+      benefits: (product.benefits || []).join('\n'),
+      composition: (product.composition || []).join('\n'),
+      usageInstructions: product.usage_instructions || '',
+      active: product.active,
+      sortOrder: String(product.sort_order || 0),
+    } : {
+      id: '',
+      name: '',
+      batchId: '',
+      imagePath: '',
+      benefits: '',
+      composition: '',
+      usageInstructions: '',
+      active: true,
+      sortOrder: '0',
+    });
+    setWebProductFile(null);
+  }
+
+  async function saveWebProduct(event) {
+    event.preventDefault();
+    if (!webProductDraft) return;
+    let uploadedPath = null;
+    try {
+      uploadedPath = await uploadWebImage(webProductFile, 'products');
+      const { error: saveError } = await supabase.from('web_products').upsert({
+        id: webProductDraft.id || undefined,
+        name: webProductDraft.name.trim(),
+        batch_id: webProductDraft.batchId,
+        image_path: uploadedPath || webProductDraft.imagePath || null,
+        benefits: webProductDraft.benefits.split('\n').map((item) => item.trim()).filter(Boolean),
+        composition: webProductDraft.composition.split('\n').map((item) => item.trim()).filter(Boolean),
+        usage_instructions: webProductDraft.usageInstructions.trim(),
+        active: webProductDraft.active,
+        sort_order: number(webProductDraft.sortOrder),
+        updated_at: new Date().toISOString(),
+      });
+      if (saveError) {
+        let reportedError = saveError.message;
+        if (uploadedPath) {
+          const { error: cleanupError } = await supabase.storage.from('jabon').remove([uploadedPath]);
+          if (cleanupError) reportedError += ` No se pudo limpiar la imagen: ${cleanupError.message}`;
+        }
+        toast(reportedError, 'error');
+        return;
+      }
+      setWebProductDraft(null);
+      setWebProductFile(null);
+      toast('Producto web guardado');
+      await loadData();
+    } catch (uploadError) {
+      toast(uploadError.message || 'No se pudo subir la imagen.', 'error');
+    }
+  }
+
+  async function deleteWebProduct(product) {
+    if (!window.confirm(`¿Eliminar "${product.name}" del catálogo web?`)) return;
+    const { error: deleteError } = await supabase.from('web_products').delete().eq('id', product.id);
+    if (deleteError) {
+      toast(deleteError.message, 'error');
+      return;
+    }
+    toast('Producto eliminado del catálogo web');
+    await loadData();
+  }
+
+  async function saveWebSettings(event) {
+    event.preventDefault();
+    if (!webSettingsDraft) return;
+    let uploadedPath = null;
+    try {
+      uploadedPath = await uploadWebImage(webLogoFile, 'brand');
+      const { error: saveError } = await supabase.from('web_settings').upsert({
+        ...webSettingsDraft,
+        logo_path: uploadedPath || webSettingsDraft.logo_path || null,
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'id' });
+      if (saveError) {
+        let reportedError = saveError.message;
+        if (uploadedPath) {
+          const { error: cleanupError } = await supabase.storage.from('jabon').remove([uploadedPath]);
+          if (cleanupError) reportedError += ` No se pudo limpiar el logo: ${cleanupError.message}`;
+        }
+        toast(reportedError, 'error');
+        return;
+      }
+      setWebLogoFile(null);
+      toast('Configuración de la tienda guardada');
+      await loadData();
+    } catch (uploadError) {
+      toast(uploadError.message || 'No se pudo subir el logo.', 'error');
+    }
+  }
+
+  async function updateWebOrder(order, status) {
+    const { error: orderError } = await supabase.rpc('manage_web_order', {
+      p_order_id: order.id,
+      p_status: status,
+    });
+    if (orderError) {
+      toast(orderError.message, 'error');
+      return;
+    }
+    toast(status === 'confirmed' ? 'Pedido confirmado; el stock sigue reservado.' : 'Pedido cancelado; el stock fue liberado.');
+    await loadData();
+  }
+
+  async function completeWebOrder(event) {
+    event.preventDefault();
+    const order = modal?.order;
+    if (!order) return;
+    const form = new FormData(event.currentTarget);
+    const { error: completeError } = await supabase.rpc('complete_web_order', {
+      p_order_id: order.id,
+      p_payment_method: form.get('paymentMethod'),
+      p_payment_status: form.get('paymentStatus'),
+    });
+    if (completeError) {
+      toast(completeError.message, 'error');
+      return;
+    }
+    setModal(null);
+    toast('Pedido convertido a venta; inventario actualizado');
+    await loadData();
   }
 
   async function handleAccessCode(event) {
@@ -400,8 +632,30 @@ function App() {
         }
         : { code: '', name: '', unit: 'g', min: '', initial: 0, purchased: 0, unitCost: '' },
       indirects: item
-        ? { code: item.code, name: item.name, type: item.type, cost: item.cost, yieldVal: item.yieldVal }
-        : { code: '', name: '', type: 'Envase / Botella', cost: '', yieldVal: '' },
+        ? {
+          code: item.code,
+          name: item.name,
+          type: item.type,
+          measureUnit: item.measureUnit,
+          stock: item.stock,
+          minimumStock: item.minimumStock,
+          consumptionPerSoap: item.consumptionPerSoap,
+          cost: item.cost,
+          yieldVal: item.yieldVal,
+          unitCost: item.unitCost,
+        }
+        : {
+          code: '',
+          name: '',
+          type: 'Envase / Botella',
+          measureUnit: 'g',
+          stock: 0,
+          minimumStock: 0,
+          consumptionPerSoap: 1,
+          cost: 0,
+          yieldVal: 1,
+          unitCost: 0,
+        },
       utensils: item
         ? { code: item.code, name: item.name, cost: item.cost, life: item.life }
         : { code: '', name: '', cost: '', life: '' },
@@ -426,8 +680,13 @@ function App() {
       indirects: {
         ...common,
         type: values.type,
-        cost: number(values.cost),
-        yield_value: number(values.yieldVal),
+        measure_unit: values.measureUnit,
+        stock: number(values.stock),
+        minimum_stock: number(values.minimumStock),
+        consumption_per_soap: number(values.consumptionPerSoap),
+        cost: item?.cost ?? number(values.cost),
+        yield_value: item?.yieldVal ?? 1,
+        unit_cost: item?.unitCost ?? number(values.unitCost),
       },
       utensils: {
         ...common,
@@ -774,6 +1033,13 @@ function App() {
           type: row.type,
           cost: number(row.cost),
           yield_value: number(row.yield_value ?? row.yieldVal),
+          measure_unit: row.measure_unit ?? row.measureUnit ?? 'pza',
+          stock: number(row.stock ?? row.yield_value ?? row.yieldVal),
+          minimum_stock: number(row.minimum_stock ?? row.minimumStock),
+          consumption_per_soap: number(row.consumption_per_soap ?? row.consumptionPerSoap ?? 1),
+          unit_cost: row.unit_cost != null || row.unitCost != null
+            ? number(row.unit_cost ?? row.unitCost)
+            : number(row.cost) / Math.max(1, number(row.yield_value ?? row.yieldVal)),
         })),
         utensils: backup.utensils.map((row) => ({
           owner_id: session.user.id,
@@ -888,6 +1154,7 @@ function App() {
           const sourceId = item.material_id || item.indirect_id || item.utensil_id;
           const itemId = ids?.get(sourceId);
           if (!itemId) throw new Error(`No se encontró "${item.item_name || item.material_name}" de la compra.`);
+          const sourceItem = backup[itemType]?.find((row) => row.id === sourceId);
           return {
             id: item.id,
             purchase_id: savedPurchase.id,
@@ -898,6 +1165,8 @@ function App() {
             item_name: item.item_name || item.material_name,
             material_name: itemType === 'materials' ? item.item_name || item.material_name : null,
             quantity: number(item.quantity),
+            unit_label: item.unit_label || sourceItem?.unit || sourceItem?.measure_unit || sourceItem?.measureUnit
+              || (itemType === 'utensils' ? 'uso' : 'unidad'),
             unit_cost: number(item.unit_cost),
             line_total: number(item.line_total),
             created_at: item.created_at,
@@ -1081,7 +1350,7 @@ function App() {
         {error && <Notice type="error">{error}</Notice>}
         <section className="metrics-grid">
           <Metric label="Materias primas" value={metrics.materials} detail="Insumos registrados" icon="◈" />
-          <Metric label="Stock bajo" value={metrics.alerts} detail="Requieren reposición" icon="⚠" warning={metrics.alerts > 0} />
+          <Metric label="Stock bajo" value={metrics.alerts} detail="Materias primas e indirectos" icon="⚠" warning={metrics.alerts > 0} />
           <Metric label="Recetas" value={metrics.recipes} detail="Fichas técnicas" icon="⌗" />
           <Metric label="Lotes producidos" value={metrics.batches} detail="Producciones registradas" icon="▤" />
         </section>
@@ -1117,13 +1386,19 @@ function App() {
           </Section>
         )}
         {tab === 'indirects' && (
-          <Section title="Insumos indirectos" subtitle="Gastos y consumibles asignados a cada barra" action="＋ Nuevo insumo indirecto" onAction={() => openEntity('indirects')}>
-            <Table headers={['Código', 'Nombre', 'Tipo', 'Costo', 'Rendimiento', 'Cuota por jabón', '']}>
-              {data.indirects.map((item) => <tr key={item.id}>
-                <td><code>{item.code}</code></td><td className="strong">{item.name}</td><td>{item.type}</td><td>{money(item.cost)}</td>
-                <td>{item.yieldVal} jabones</td><td className="green">{money(item.cost / Math.max(1, item.yieldVal))}</td>
-                <Actions onEdit={() => openEntity('indirects', item)} onDelete={() => deleteRow('indirects', item.id, 'este insumo indirecto')} />
-              </tr>)}
+          <Section title="Insumos indirectos" subtitle="Controla unidades, existencias, consumo por jabón y reposición" action="＋ Nuevo insumo indirecto" onAction={() => openEntity('indirects')}>
+            <Table headers={['Código', 'Nombre', 'Tipo', 'Unidad', 'Stock actual', 'Mínimo', 'Consumo por jabón', 'Rinde aprox.', 'Costo por unidad', 'Estado', '']}>
+              {data.indirects.map((item) => {
+                const low = item.stock <= item.minimumStock;
+                return <tr key={item.id}>
+                  <td><code>{item.code}</code></td><td className="strong">{item.name}</td><td>{item.type}</td>
+                  <td>{item.measureUnit}</td><td className="strong">{item.stock.toFixed(3)}</td><td>{item.minimumStock}</td>
+                  <td>{item.consumptionPerSoap} {item.measureUnit} / jabón</td>
+                  <td>{Math.floor(item.stock / item.consumptionPerSoap)} jabones</td><td className="green">{unitMoney(item.unitCost)} / {item.measureUnit}</td>
+                  <td><span className={`pill ${low ? 'danger' : 'good'}`}>{low ? 'Reabastecer' : 'Óptimo'}</span></td>
+                  <Actions onEdit={() => openEntity('indirects', item)} onDelete={() => deleteRow('indirects', item.id, 'este insumo indirecto')} />
+                </tr>;
+              })}
             </Table>
           </Section>
         )}
@@ -1171,8 +1446,8 @@ function App() {
                 </div>
                 {recipe.indirectIds.map((id, index) => {
                   const indirect = data.indirects.find((item) => item.id === id);
-                  const cost = indirect && indirect.yieldVal > 0
-                    ? (indirect.cost / indirect.yieldVal) * number(recipe.batchSize) : 0;
+                  const cost = indirect
+                    ? indirect.unitCost * indirect.consumptionPerSoap * number(recipe.batchSize) : 0;
                   return (
                     <div className="resource-item-row" key={`indirect-${index}`}>
                       <select aria-label="Insumo indirecto" value={id} onChange={(event) => setRecipe({
@@ -1186,7 +1461,7 @@ function App() {
                       <button type="button" className="icon-button danger-text" aria-label="Quitar insumo indirecto" onClick={() => setRecipe({
                         ...recipe, indirectIds: recipe.indirectIds.filter((_, rowIndex) => rowIndex !== index),
                       })}>×</button>
-                      <div className="resource-item-cost">{indirect ? `Costo para este lote: ${money(cost)}` : 'Selecciona un insumo indirecto.'}</div>
+                      <div className="resource-item-cost">{indirect ? `Consumo: ${indirect.consumptionPerSoap} ${indirect.measureUnit} por jabón · Costo del lote: ${money(cost)}` : 'Selecciona un insumo indirecto.'}</div>
                     </div>
                   );
                 })}
@@ -1324,6 +1599,127 @@ function App() {
             </Table>
           </Section>
         )}
+        {tab === 'webOrders' && (
+          <Section title="Pedidos web" subtitle="Los pedidos pendientes y confirmados reservan el stock de su lote">
+            <Table headers={['Pedido', 'Fecha', 'Cliente', 'Productos', 'Total', 'Estado', 'Acciones']}>
+              {data.webOrders.map((order) => {
+                const statusLabel = {
+                  pending: 'Pendiente',
+                  confirmed: 'Confirmado · reservado',
+                  cancelled: 'Cancelado',
+                  completed: 'Venta registrada',
+                }[order.status] || order.status;
+                const statusTone = order.status === 'completed' ? 'good'
+                  : ['pending', 'confirmed'].includes(order.status) ? 'warning' : 'danger';
+                return (
+                  <tr key={order.id}>
+                    <td><code>{order.order_number}</code></td>
+                    <td>{new Date(order.created_at).toLocaleDateString('es-HN')}</td>
+                    <td className="strong">{order.customer_name}<small className="table-secondary">{order.customer_phone}</small></td>
+                    <td>{(order.web_order_items || []).map((item) => `${item.product_name} × ${item.quantity}`).join(', ')}</td>
+                    <td className="green">{money(order.total)}</td>
+                    <td><span className={`pill ${statusTone}`}>{statusLabel}</span></td>
+                    <td className="sale-actions">
+                      <button className="button secondary small" onClick={() => setModal({ kind: 'webOrderDetail', order })}>Ver</button>
+                      {['pending', 'confirmed'].includes(order.status) && <>
+                        {order.status === 'pending' && <button className="button secondary small" onClick={() => updateWebOrder(order, 'confirmed')}>Confirmar</button>}
+                        <button className="button primary small" onClick={() => setModal({ kind: 'completeWebOrder', order })}>Completar venta</button>
+                        <button className="icon-button danger-text" aria-label="Cancelar pedido" title="Cancelar pedido y liberar stock" onClick={() => updateWebOrder(order, 'cancelled')}>×</button>
+                      </>}
+                      {order.sale_id && (() => {
+                        const sale = data.sales.find((item) => item.id === order.sale_id);
+                        return sale ? <button className="button secondary small" onClick={() => setModal({ kind: 'invoice', sale })}>Ver factura</button> : null;
+                      })()}
+                    </td>
+                  </tr>
+                );
+              })}
+            </Table>
+          </Section>
+        )}
+        {tab === 'webProducts' && (
+          <div className="web-admin-layout">
+            <Section
+              title={webProductDraft ? (webProductDraft.id ? 'Editar producto web' : 'Agregar producto web') : 'Catálogo de la tienda'}
+              subtitle="Publica jabones ligados a un lote y muestra su disponibilidad en tiempo real"
+              action={webProductDraft ? 'Cancelar' : '＋ Nuevo producto'}
+              onAction={() => webProductDraft ? setWebProductDraft(null) : openWebProduct()}
+            >
+              {webProductDraft && (
+                <form className="web-editor stack-form" onSubmit={saveWebProduct}>
+                  <div className="form-grid">
+                    <Field label="Nombre del producto"><input required maxLength="120" value={webProductDraft.name} onChange={(event) => setWebProductDraft({ ...webProductDraft, name: event.target.value })} /></Field>
+                    <Field label="Lote de producción">
+                      <select required value={webProductDraft.batchId} onChange={(event) => setWebProductDraft({ ...webProductDraft, batchId: event.target.value })}>
+                        <option value="">Selecciona un lote</option>
+                        {data.batches.map((batch) => {
+                          const available = availableWebBatchStock(batch);
+                          return <option key={batch.id} value={batch.id}>{batch.recipe_name} · {batch.code} · {available} disponibles</option>;
+                        })}
+                      </select>
+                    </Field>
+                  </div>
+                  <div className="form-grid">
+                    <Field label="Foto del producto (JPG, PNG o WebP; máximo 8 MB)">
+                      <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setWebProductFile(event.target.files?.[0] || null)} />
+                    </Field>
+                    <Field label="Orden en el catálogo"><input type="number" step="1" value={webProductDraft.sortOrder} onChange={(event) => setWebProductDraft({ ...webProductDraft, sortOrder: event.target.value })} /></Field>
+                  </div>
+                  {webProductDraft.imagePath && !webProductFile && <p className="form-note">Ya hay una imagen guardada. Sube otra para reemplazarla.</p>}
+                  <Field label="Beneficios (un beneficio por línea)"><textarea rows="4" value={webProductDraft.benefits} onChange={(event) => setWebProductDraft({ ...webProductDraft, benefits: event.target.value })} placeholder={'Suaviza la piel\nElaborado artesanalmente'} /></Field>
+                  <Field label="Composición y unidades (un ingrediente por línea)"><textarea rows="4" value={webProductDraft.composition} onChange={(event) => setWebProductDraft({ ...webProductDraft, composition: event.target.value })} placeholder={'Base de glicerina: 90 g\nAceite de coco: 5 ml'} /></Field>
+                  <Field label="Modo de uso"><textarea rows="3" maxLength="1000" value={webProductDraft.usageInstructions} onChange={(event) => setWebProductDraft({ ...webProductDraft, usageInstructions: event.target.value })} /></Field>
+                  <label className="checkbox-field"><input type="checkbox" checked={webProductDraft.active} onChange={(event) => setWebProductDraft({ ...webProductDraft, active: event.target.checked })} /> Producto visible en la tienda</label>
+                  <button className="button primary">Guardar producto</button>
+                </form>
+              )}
+              <Table headers={['Producto', 'Receta / lote', 'Stock disponible', 'Precio', 'Visible', 'Acciones']}>
+                {data.webProducts.map((product) => {
+                  const batch = data.batches.find((item) => item.id === product.batch_id);
+                  const recipeItem = data.recipes.find((item) => item.id === batch?.recipe_id);
+                  const available = batch ? availableWebBatchStock(batch) : 0;
+                  const image = product.image_path
+                    ? supabase.storage.from('jabon').getPublicUrl(product.image_path).data.publicUrl
+                    : null;
+                  return <tr key={product.id}>
+                    <td className="strong">{image && <img className="web-product-thumb" src={image} alt="" />}{product.name}</td>
+                    <td>{batch ? `${batch.recipe_name} · ${batch.code}` : 'Lote no disponible'}</td>
+                    <td>{available}</td><td>{recipeItem?.prices.detail == null ? '—' : money(recipeItem.prices.detail)}</td>
+                    <td><span className={`pill ${product.active ? 'good' : 'warning'}`}>{product.active ? 'Sí' : 'No'}</span></td>
+                    <td className="sale-actions">
+                      <button className="icon-button" aria-label={`Editar ${product.name}`} onClick={() => openWebProduct(product)}>✎</button>
+                      <button className="icon-button danger-text" aria-label={`Eliminar ${product.name}`} onClick={() => deleteWebProduct(product)}>×</button>
+                    </td>
+                  </tr>;
+                })}
+              </Table>
+              <div className="web-store-link"><a className="button secondary small" href="./storefront.html" target="_blank" rel="noreferrer">Abrir tienda pública ↗</a></div>
+            </Section>
+          </div>
+        )}
+        {tab === 'webSettings' && (
+          <Section title="Configuración web" subtitle="Identidad y datos de contacto que aparecen en la tienda pública">
+            <form className="web-editor stack-form" onSubmit={saveWebSettings}>
+              <div className="form-grid">
+                <Field label="Nombre del negocio"><input required maxLength="120" value={webSettingsDraft?.business_name || ''} onChange={(event) => setWebSettingsDraft({ ...webSettingsDraft, business_name: event.target.value })} /></Field>
+                <Field label="Frase de marca"><input maxLength="180" value={webSettingsDraft?.tagline || ''} onChange={(event) => setWebSettingsDraft({ ...webSettingsDraft, tagline: event.target.value })} /></Field>
+              </div>
+              <Field label="Logo (JPG, PNG o WebP; máximo 8 MB)"><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setWebLogoFile(event.target.files?.[0] || null)} /></Field>
+              {webSettingsDraft?.logo_path && !webLogoFile && <p className="form-note">Ya hay un logo guardado. Sube otro para reemplazarlo.</p>}
+              <div className="form-grid">
+                <Field label="Teléfono de contacto"><input type="tel" maxLength="40" value={webSettingsDraft?.phone || ''} onChange={(event) => setWebSettingsDraft({ ...webSettingsDraft, phone: event.target.value })} /></Field>
+                <Field label="WhatsApp para revendedores (con código de país)"><input type="tel" maxLength="40" value={webSettingsDraft?.whatsapp_phone || ''} onChange={(event) => setWebSettingsDraft({ ...webSettingsDraft, whatsapp_phone: event.target.value })} placeholder="50499999999" /></Field>
+              </div>
+              <div className="form-grid">
+                <Field label="Correo electrónico"><input type="email" maxLength="254" value={webSettingsDraft?.email || ''} onChange={(event) => setWebSettingsDraft({ ...webSettingsDraft, email: event.target.value })} /></Field>
+                <Field label="Dirección / zona de entrega"><input maxLength="300" value={webSettingsDraft?.address || ''} onChange={(event) => setWebSettingsDraft({ ...webSettingsDraft, address: event.target.value })} /></Field>
+              </div>
+              <Field label="Presentación del negocio"><textarea rows="5" maxLength="2000" value={webSettingsDraft?.about_text || ''} onChange={(event) => setWebSettingsDraft({ ...webSettingsDraft, about_text: event.target.value })} placeholder="Cuenta brevemente la historia de tu taller y cómo elaboras tus jabones." /></Field>
+              <p className="form-note">El enlace para revendedores abre WhatsApp con el número configurado. No se publican credenciales secretas en la tienda.</p>
+              <button className="button primary">Guardar configuración</button>
+            </form>
+          </Section>
+        )}
         {tab === 'finance' && (
           <div className="finance-layout">
             <div className="report-period">
@@ -1348,6 +1744,7 @@ function App() {
                     <div><span>Efectivo y bancos</span><strong>{money(reports.cash)}</strong></div>
                     <div><span>Cuentas por cobrar</span><strong>{money(reports.receivables)}</strong></div>
                     <div><span>Inventario de materias primas</span><strong>{money(reports.rawInventory)}</strong></div>
+                    <div><span>Insumos indirectos disponibles</span><strong>{money(reports.indirectInventory)}</strong></div>
                     <div><span>Inventario de jabones terminados</span><strong>{money(reports.finishedInventory)}</strong></div>
                     <div className="statement-total"><span>Total activos</span><strong>{money(reports.assets)}</strong></div>
                   </div>
@@ -1407,7 +1804,7 @@ function App() {
       </main>
       </div>
 
-      {modal && !['production', 'sale', 'purchase', 'purchaseDetail', 'invoice'].includes(modal.kind) && (
+      {modal && !['production', 'sale', 'purchase', 'purchaseDetail', 'invoice', 'completeWebOrder', 'webOrderDetail'].includes(modal.kind) && (
         <Dialog title={`${modal.item ? 'Editar' : 'Registrar'} ${modal.kind === 'materials' ? 'materia prima' : modal.kind === 'indirects' ? 'insumo indirecto' : 'utensilio'}`} onClose={() => setModal(null)}>
           <form className="stack-form" onSubmit={saveEntity}>
             <Field label="Código"><input required value={modal.values.code} onChange={(e) => setModal({ ...modal, values: { ...modal.values, code: e.target.value } })} /></Field>
@@ -1427,9 +1824,22 @@ function App() {
             {modal.kind === 'indirects' && <>
               <Field label="Tipo de asignación"><select value={modal.values.type} onChange={(e) => setModal({ ...modal, values: { ...modal.values, type: e.target.value } })}><option>Envase / Botella</option><option>Gasto Mensual Fijo</option></select></Field>
               <div className="form-grid">
-                <Field label="Costo (LPS)"><input type="number" min="0" step="any" required value={modal.values.cost} onChange={(e) => setModal({ ...modal, values: { ...modal.values, cost: e.target.value } })} /></Field>
-                <Field label="Rendimiento (jabones)"><input type="number" min="1" step="any" required value={modal.values.yieldVal} onChange={(e) => setModal({ ...modal, values: { ...modal.values, yieldVal: e.target.value } })} /></Field>
+                <Field label="Unidad de medida">
+                  <select value={modal.values.measureUnit} onChange={(e) => setModal({ ...modal, values: { ...modal.values, measureUnit: e.target.value } })}>
+                    <option value="g">Gramos (g)</option><option value="ml">Mililitros (ml)</option><option value="pza">Piezas (pza)</option>
+                  </select>
+                </Field>
+                <Field label="Consumo por jabón">
+                  <input type="number" min="0.001" step="0.001" required value={modal.values.consumptionPerSoap} onChange={(e) => setModal({ ...modal, values: { ...modal.values, consumptionPerSoap: e.target.value } })} />
+                </Field>
+                <Field label={`Existencias actuales (${modal.values.measureUnit})`}>
+                  <input type="number" min="0" step="0.001" required value={modal.values.stock} onChange={(e) => setModal({ ...modal, values: { ...modal.values, stock: e.target.value } })} />
+                </Field>
+                <Field label={`Stock mínimo (${modal.values.measureUnit})`}>
+                  <input type="number" min="0" step="0.001" required value={modal.values.minimumStock} onChange={(e) => setModal({ ...modal, values: { ...modal.values, minimumStock: e.target.value } })} />
+                </Field>
               </div>
+              <p className="form-note">Las compras agregan existencias en esta unidad y la producción consume la cantidad indicada por cada jabón. El sistema estima cuántos jabones puede cubrir el stock y avisa cuando llega al mínimo.</p>
             </>}
             {modal.kind === 'utensils' && <div className="form-grid">
               <Field label="Costo de adquisición (LPS)"><input type="number" min="0" step="any" required value={modal.values.cost} onChange={(e) => setModal({ ...modal, values: { ...modal.values, cost: e.target.value } })} /></Field>
@@ -1521,7 +1931,7 @@ function App() {
                 const selectedItem = catalog.find((entry) => entry.id === item.itemId);
                 const typeLabels = { materials: 'Materia prima', indirects: 'Insumo indirecto', utensils: 'Utensilio' };
                 const unitLabel = item.itemType === 'materials' ? selectedItem?.unit || 'unidades'
-                  : item.itemType === 'indirects' ? 'unidades de rendimiento'
+                  : item.itemType === 'indirects' ? selectedItem?.measureUnit || 'unidad'
                     : 'usos de vida útil';
                 return (
                   <div className="purchase-item-row" key={`${index}-${item.itemId}`}>
@@ -1538,11 +1948,11 @@ function App() {
                       <option value="" disabled>Selecciona</option>
                       {catalog.map((entry) => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
                     </select>
-                    <input aria-label="Cantidad o rendimiento comprado" placeholder={item.itemType === 'utensils' ? 'Usos' : 'Cantidad'} type="number" min="0.001" step="0.001" required value={item.quantity} onChange={(event) => setPurchaseDraft({
+                    <input aria-label={item.itemType === 'utensils' ? 'Usos comprados' : `Cantidad comprada en ${unitLabel}`} placeholder={item.itemType === 'utensils' ? 'Usos' : unitLabel} type="number" min="0.001" step="0.001" required value={item.quantity} onChange={(event) => setPurchaseDraft({
                       ...purchaseDraft,
                       items: purchaseDraft.items.map((row, rowIndex) => rowIndex === index ? { ...row, quantity: event.target.value } : row),
                     })} />
-                    <input aria-label={`Costo unitario en LPS por ${unitLabel}`} type="number" min="0" step="0.000001" required value={item.unitCost} placeholder={`LPS / ${item.itemType === 'utensils' ? 'uso' : 'unidad'}`} onChange={(event) => setPurchaseDraft({
+                    <input aria-label={`Costo unitario en LPS por ${unitLabel}`} type="number" min="0" step="0.000001" required value={item.unitCost} placeholder={`LPS / ${unitLabel}`} onChange={(event) => setPurchaseDraft({
                       ...purchaseDraft,
                       items: purchaseDraft.items.map((row, rowIndex) => rowIndex === index ? { ...row, unitCost: event.target.value } : row),
                     })} />
@@ -1575,14 +1985,25 @@ function App() {
             <p><span>Pago</span><strong>{modal.purchase.payment_status === 'paid' ? 'Pagada' : 'Pendiente'}</strong></p>
             <p><span>Método</span><strong>{paymentMethods.find(([value]) => value === modal.purchase.payment_method)?.[1] || 'Otro'}</strong></p>
           </div>
-          <Table headers={['Artículo', 'Tipo', 'Cantidad / rendimiento', 'Costo unitario', 'Total']}>
-            {(modal.purchase.purchase_items || []).map((item) => (
-              <tr key={item.id}>
-                <td>{item.item_name || item.material_name}</td>
-                <td>{{ materials: 'Materia prima', indirects: 'Insumo indirecto', utensils: 'Utensilio' }[item.item_type || 'materials']}</td>
-                <td>{item.quantity}</td><td>{unitMoney(item.unit_cost)}</td><td>{money(item.line_total)}</td>
-              </tr>
-            ))}
+          <Table headers={['Artículo', 'Tipo', 'Cantidad / unidad', 'Costo unitario', 'Total']}>
+            {(modal.purchase.purchase_items || []).map((item) => {
+              const unitLabel = item.unit_label
+                || (item.item_type === 'indirects'
+                  ? data.indirects.find((entry) => entry.id === item.indirect_id)?.measureUnit
+                  : item.item_type === 'materials'
+                    ? data.materials.find((entry) => entry.id === item.material_id)?.unit
+                    : 'uso')
+                || 'unidad';
+              return (
+                <tr key={item.id}>
+                  <td>{item.item_name || item.material_name}</td>
+                  <td>{{ materials: 'Materia prima', indirects: 'Insumo indirecto', utensils: 'Utensilio' }[item.item_type || 'materials']}</td>
+                  <td>{item.quantity} {unitLabel}</td>
+                  <td>{unitMoney(item.unit_cost)} / {unitLabel}</td>
+                  <td>{money(item.line_total)}</td>
+                </tr>
+              );
+            })}
           </Table>
           <div className="sale-total purchase-detail-total"><span>Total de compra</span><strong>{money(modal.purchase.total)}</strong></div>
         </Dialog>
@@ -1620,6 +2041,51 @@ function App() {
             <button type="button" className="button secondary" onClick={() => setModal(null)}>Cerrar</button>
             <button type="button" className="button primary" onClick={() => window.print()}>Imprimir / reimprimir</button>
           </div>
+        </Dialog>
+      )}
+      {modal?.kind === 'completeWebOrder' && (
+        <Dialog title={`Completar pedido ${modal.order.order_number}`} onClose={() => setModal(null)}>
+          <form className="stack-form" onSubmit={completeWebOrder}>
+            <p className="form-note">Al completar, se creará una venta y se descontará el lote reservado del inventario de productos terminados.</p>
+            <Field label="Método de pago">
+              <select name="paymentMethod" defaultValue="cash">
+                {paymentMethods.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+              </select>
+            </Field>
+            <Field label="Estado de pago">
+              <select name="paymentStatus" defaultValue="paid">
+                <option value="paid">Pagado</option><option value="pending">Pendiente de cobro</option>
+              </select>
+            </Field>
+            <div className="sale-total"><span>Total del pedido</span><strong>{money(modal.order.total)}</strong></div>
+            <div className="dialog-actions">
+              <button type="button" className="button secondary" onClick={() => setModal(null)}>Volver</button>
+              <button className="button primary">Crear venta</button>
+            </div>
+          </form>
+        </Dialog>
+      )}
+      {modal?.kind === 'webOrderDetail' && (
+        <Dialog title={`Pedido web ${modal.order.order_number}`} onClose={() => setModal(null)}>
+          <div className="invoice-meta">
+            <p><span>Cliente</span><strong>{modal.order.customer_name}</strong></p>
+            <p><span>Teléfono</span><strong>{modal.order.customer_phone}</strong></p>
+            <p><span>Correo</span><strong>{modal.order.customer_email || '—'}</strong></p>
+            <p><span>Dirección / entrega</span><strong>{modal.order.delivery_address || 'No especificada'}</strong></p>
+            <p><span>Fecha</span><strong>{new Date(modal.order.created_at).toLocaleString('es-HN')}</strong></p>
+            <p><span>Estado</span><strong>{modal.order.status}</strong></p>
+          </div>
+          {modal.order.notes && <p className="form-note">Nota: {modal.order.notes}</p>}
+          <Table headers={['Producto', 'Lote', 'Cantidad', 'Precio', 'Importe']}>
+            {(modal.order.web_order_items || []).map((item) => (
+              <tr key={item.id}>
+                <td>{item.product_name}</td>
+                <td><code>{data.batches.find((batch) => batch.id === item.batch_id)?.code || '—'}</code></td>
+                <td>{item.quantity}</td><td>{money(item.unit_price)}</td><td>{money(item.line_total)}</td>
+              </tr>
+            ))}
+          </Table>
+          <div className="sale-total purchase-detail-total"><span>Total del pedido</span><strong>{money(modal.order.total)}</strong></div>
         </Dialog>
       )}
       {modal?.kind === 'production' && (

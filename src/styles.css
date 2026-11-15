@@ -114,6 +114,10 @@ code { padding: 4px 7px; border: 1px solid #e8ebe7; border-radius: 4px; backgrou
 .stack-form label, .dialog label { display: grid; gap: 6px; color: #536157; font-size: 11px; font-weight: 600; }
 input, select { width: 100%; min-width: 0; height: 39px; padding: 0 10px; border: 1px solid #dfe5df; border-radius: 6px; outline: none; background: white; color: #39483e; font-size: 11px; }
 input:focus, select:focus { border-color: #7eac8a; box-shadow: 0 0 0 3px #27754d12; }
+textarea { width: 100%; min-width: 0; padding: 10px; border: 1px solid #dfe5df; border-radius: 6px; outline: none; background: white; color: #39483e; font: 11px/1.5 "DM Sans", sans-serif; resize: vertical; }
+textarea:focus { border-color: #7eac8a; box-shadow: 0 0 0 3px #27754d12; }
+input[type="file"] { height: auto; min-height: 39px; padding: 8px; }
+input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--green); }
 .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
 .list-heading { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-top: 5px; }
 .list-heading h3 { margin: 0; color: #35473a; font-size: 11px; }
@@ -172,6 +176,12 @@ input:focus, select:focus { border-color: #7eac8a; box-shadow: 0 0 0 3px #27754d
 .invoice-total { margin-top: 16px; }
 .invoice-thanks { margin: 20px 0 0; color: var(--green); font: 700 14px "Playfair Display", serif; text-align: center; }
 .finance-layout { display: grid; gap: 16px; }
+.web-admin-layout { display: grid; gap: 16px; }
+.web-editor { padding: 20px; }
+.checkbox-field { display: flex !important; align-items: center; gap: 9px !important; }
+.table-secondary { display: block; margin-top: 3px; color: #88948b; font-size: 9px; }
+.web-store-link { display: flex; justify-content: flex-end; padding: 13px 19px; border-top: 1px solid var(--line); }
+.web-product-thumb { width: 38px; height: 38px; margin-right: 9px; border-radius: 5px; object-fit: cover; vertical-align: middle; }
 .report-period { display: flex; justify-content: flex-end; gap: 12px; }
 .report-period label, .opening-form label, .expense-form label { display: grid; gap: 6px; color: #536157; font-size: 11px; font-weight: 600; }
 .report-period label { width: min(190px, 50%); }
