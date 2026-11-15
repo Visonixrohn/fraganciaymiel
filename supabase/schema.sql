@@ -69,6 +69,28 @@ create table if not exists public.recipe_items (
   unique (recipe_id, material_id)
 );
 
+create table if not exists public.recipe_indirects (
+  id uuid primary key default gen_random_uuid(),
+  recipe_id uuid not null references public.recipes(id) on delete cascade,
+  indirect_id uuid not null references public.indirects(id) on delete restrict,
+  unique (recipe_id, indirect_id)
+);
+
+create table if not exists public.recipe_utensils (
+  id uuid primary key default gen_random_uuid(),
+  recipe_id uuid not null references public.recipes(id) on delete cascade,
+  utensil_id uuid not null references public.utensils(id) on delete restrict,
+  unique (recipe_id, utensil_id)
+);
+
+insert into public.recipe_indirects (recipe_id, indirect_id)
+select id, indirect_id from public.recipes where indirect_id is not null
+on conflict (recipe_id, indirect_id) do nothing;
+
+insert into public.recipe_utensils (recipe_id, utensil_id)
+select id, utensil_id from public.recipes where utensil_id is not null
+on conflict (recipe_id, utensil_id) do nothing;
+
 create table if not exists public.batches (
   id uuid primary key default gen_random_uuid(),
   owner_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
@@ -241,6 +263,8 @@ create index if not exists utensils_owner_idx on public.utensils(owner_id);
 create index if not exists recipes_owner_idx on public.recipes(owner_id);
 create index if not exists batches_owner_date_idx on public.batches(owner_id, batch_date desc);
 create index if not exists recipe_items_recipe_idx on public.recipe_items(recipe_id);
+create index if not exists recipe_indirects_recipe_idx on public.recipe_indirects(recipe_id);
+create index if not exists recipe_utensils_recipe_idx on public.recipe_utensils(recipe_id);
 create index if not exists sales_created_at_idx on public.sales(created_at desc);
 create index if not exists sale_items_sale_idx on public.sale_items(sale_id);
 create index if not exists sale_items_recipe_idx on public.sale_items(recipe_id);
@@ -253,6 +277,8 @@ alter table public.indirects enable row level security;
 alter table public.utensils enable row level security;
 alter table public.recipes enable row level security;
 alter table public.recipe_items enable row level security;
+alter table public.recipe_indirects enable row level security;
+alter table public.recipe_utensils enable row level security;
 alter table public.batches enable row level security;
 alter table public.sales enable row level security;
 alter table public.sale_items enable row level security;
@@ -286,6 +312,14 @@ drop policy if exists "Authenticated users manage shared recipe items" on public
 create policy "Authenticated users manage shared recipe items" on public.recipe_items
   for all to authenticated using (true) with check (true);
 
+drop policy if exists "Authenticated users manage shared recipe indirects" on public.recipe_indirects;
+create policy "Authenticated users manage shared recipe indirects" on public.recipe_indirects
+  for all to authenticated using (true) with check (true);
+
+drop policy if exists "Authenticated users manage shared recipe utensils" on public.recipe_utensils;
+create policy "Authenticated users manage shared recipe utensils" on public.recipe_utensils
+  for all to authenticated using (true) with check (true);
+
 drop policy if exists "Owners manage their batches" on public.batches;
 drop policy if exists "Authenticated users manage shared batches" on public.batches;
 create policy "Authenticated users manage shared batches" on public.batches
@@ -315,23 +349,24 @@ drop policy if exists "Authenticated users manage finance settings" on public.fi
 create policy "Authenticated users manage finance settings" on public.finance_settings
   for all to authenticated using (true) with check (true);
 
-grant select, insert, update, delete on public.materials, public.indirects, public.utensils, public.recipes, public.recipe_items, public.batches, public.sales, public.sale_items, public.purchases, public.purchase_items, public.expenses, public.finance_settings to authenticated;
+grant select, insert, update, delete on public.materials, public.indirects, public.utensils, public.recipes, public.recipe_items, public.recipe_indirects, public.recipe_utensils, public.batches, public.sales, public.sale_items, public.purchases, public.purchase_items, public.expenses, public.finance_settings to authenticated;
 grant usage, select on sequence public.sales_invoice_number_seq, public.purchases_number_seq to authenticated;
 
 drop function if exists public.save_recipe(uuid, text, integer, numeric, uuid, uuid, numeric, jsonb);
+drop function if exists public.save_recipe(uuid, text, integer, numeric, uuid, uuid, numeric, numeric, numeric, numeric, jsonb);
 
 create or replace function public.save_recipe(
   p_recipe_id uuid,
   p_name text,
   p_batch_size integer,
   p_soap_weight numeric,
-  p_indirect_id uuid,
-  p_utensil_id uuid,
   p_margin numeric,
   p_price_detail numeric,
   p_price_wholesale numeric,
   p_price_event numeric,
-  p_items jsonb
+  p_items jsonb,
+  p_indirects jsonb,
+  p_utensils jsonb
 )
 returns uuid
 language plpgsql
@@ -349,7 +384,9 @@ begin
      or (p_price_detail is not null and p_price_detail < 0)
      or (p_price_wholesale is not null and p_price_wholesale < 0)
      or (p_price_event is not null and p_price_event < 0)
-     or p_items is null or jsonb_typeof(p_items) is distinct from 'array' or jsonb_array_length(p_items) = 0 then
+     or p_items is null or jsonb_typeof(p_items) is distinct from 'array' or jsonb_array_length(p_items) = 0
+     or p_indirects is null or jsonb_typeof(p_indirects) is distinct from 'array'
+     or p_utensils is null or jsonb_typeof(p_utensils) is distinct from 'array' then
     raise exception 'La receta debe tener nombre, cantidades válidas y al menos un ingrediente.';
   end if;
   if exists (
@@ -360,31 +397,37 @@ begin
   ) then
     raise exception 'La receta contiene una materia prima inexistente o una cantidad inválida.';
   end if;
-  if p_indirect_id is not null and not exists (
-    select 1 from public.indirects where id = p_indirect_id
+  if exists (
+    select 1
+    from jsonb_to_recordset(p_indirects) as item(indirect_id uuid)
+    left join public.indirects i on i.id = item.indirect_id
+    where i.id is null
   ) then
-    raise exception 'No se encontró el insumo indirecto seleccionado.';
+    raise exception 'La receta contiene un insumo indirecto inexistente.';
   end if;
-  if p_utensil_id is not null and not exists (
-    select 1 from public.utensils where id = p_utensil_id
+  if exists (
+    select 1
+    from jsonb_to_recordset(p_utensils) as item(utensil_id uuid)
+    left join public.utensils u on u.id = item.utensil_id
+    where u.id is null
   ) then
-    raise exception 'No se encontró el utensilio seleccionado.';
+    raise exception 'La receta contiene un utensilio inexistente.';
   end if;
 
   if p_recipe_id is null then
     insert into public.recipes (
-      owner_id, name, batch_size, soap_weight, indirect_id, utensil_id, margin,
+      owner_id, name, batch_size, soap_weight, margin,
       price_detail, price_wholesale, price_event
     )
     values (
-      v_owner, trim(p_name), p_batch_size, p_soap_weight, p_indirect_id, p_utensil_id, p_margin,
+      v_owner, trim(p_name), p_batch_size, p_soap_weight, p_margin,
       p_price_detail, p_price_wholesale, p_price_event
     )
     returning id into v_recipe_id;
   else
     update public.recipes
     set name = trim(p_name), batch_size = p_batch_size, soap_weight = p_soap_weight,
-        indirect_id = p_indirect_id, utensil_id = p_utensil_id, margin = p_margin,
+        indirect_id = null, utensil_id = null, margin = p_margin,
         price_detail = p_price_detail, price_wholesale = p_price_wholesale, price_event = p_price_event
     where id = p_recipe_id
     returning id into v_recipe_id;
@@ -392,12 +435,24 @@ begin
       raise exception 'No se encontró la receta para actualizar.';
     end if;
     delete from public.recipe_items where recipe_id = v_recipe_id;
+    delete from public.recipe_indirects where recipe_id = v_recipe_id;
+    delete from public.recipe_utensils where recipe_id = v_recipe_id;
   end if;
 
   insert into public.recipe_items (recipe_id, material_id, quantity)
   select v_recipe_id, item.material_id, sum(item.quantity)
   from jsonb_to_recordset(p_items) as item(material_id uuid, quantity numeric)
   group by item.material_id;
+
+  insert into public.recipe_indirects (recipe_id, indirect_id)
+  select v_recipe_id, item.indirect_id
+  from jsonb_to_recordset(p_indirects) as item(indirect_id uuid)
+  group by item.indirect_id;
+
+  insert into public.recipe_utensils (recipe_id, utensil_id)
+  select v_recipe_id, item.utensil_id
+  from jsonb_to_recordset(p_utensils) as item(utensil_id uuid)
+  group by item.utensil_id;
 
   return v_recipe_id;
 end;
@@ -452,16 +507,17 @@ begin
     update public.materials set used = used + v_required where id = v_item.material_id;
   end loop;
 
-  if v_recipe.indirect_id is not null then
-    select i.cost / i.yield_value * p_quantity into v_indirect_cost
-    from public.indirects i where i.id = v_recipe.indirect_id;
-    v_indirect_cost := coalesce(v_indirect_cost, 0);
-  end if;
-  if v_recipe.utensil_id is not null then
-    select u.cost / u.useful_life * p_quantity into v_utensil_cost
-    from public.utensils u where u.id = v_recipe.utensil_id;
-    v_utensil_cost := coalesce(v_utensil_cost, 0);
-  end if;
+  select coalesce(sum(i.cost / i.yield_value * p_quantity), 0)
+  into v_indirect_cost
+  from public.recipe_indirects ri
+  join public.indirects i on i.id = ri.indirect_id
+  where ri.recipe_id = v_recipe.id;
+
+  select coalesce(sum(u.cost / u.useful_life * p_quantity), 0)
+  into v_utensil_cost
+  from public.recipe_utensils ru
+  join public.utensils u on u.id = ru.utensil_id
+  where ru.recipe_id = v_recipe.id;
 
   v_total := v_material_cost + v_indirect_cost + v_utensil_cost;
   insert into public.batches (owner_id, recipe_id, recipe_name, code, quantity, total_cost, unit_cost)
@@ -898,7 +954,7 @@ begin
 end;
 $$;
 
-revoke all on function public.save_recipe(uuid, text, integer, numeric, uuid, uuid, numeric, numeric, numeric, numeric, jsonb) from public;
+revoke all on function public.save_recipe(uuid, text, integer, numeric, numeric, numeric, numeric, numeric, jsonb, jsonb, jsonb) from public;
 revoke all on function public.produce_batch(uuid, text, integer) from public;
 revoke all on function public.save_sales_order(uuid, text, text, text, text, jsonb) from public;
 revoke all on function public.issue_sales_order(uuid) from public;
@@ -907,7 +963,7 @@ revoke all on function public.mark_purchase_paid(uuid, text) from public;
 revoke all on function public.mark_sale_paid(uuid, text) from public;
 revoke all on function public.record_expense(text, text, numeric, date, text, text) from public;
 revoke all on function public.mark_expense_paid(uuid, text) from public;
-grant execute on function public.save_recipe(uuid, text, integer, numeric, uuid, uuid, numeric, numeric, numeric, numeric, jsonb) to authenticated;
+grant execute on function public.save_recipe(uuid, text, integer, numeric, numeric, numeric, numeric, numeric, jsonb, jsonb, jsonb) to authenticated;
 grant execute on function public.produce_batch(uuid, text, integer) to authenticated;
 grant execute on function public.save_sales_order(uuid, text, text, text, text, jsonb) to authenticated;
 grant execute on function public.issue_sales_order(uuid) to authenticated;

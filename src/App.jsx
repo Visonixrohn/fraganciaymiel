@@ -44,8 +44,12 @@ const fromRecipe = (row) => ({
   ...row,
   batchSize: number(row.batch_size),
   soapWeight: number(row.soap_weight),
-  indirectId: row.indirect_id,
-  utId: row.utensil_id,
+  indirectIds: (row.recipe_indirects || []).length
+    ? row.recipe_indirects.map((item) => item.indirect_id)
+    : [row.indirect_id].filter(Boolean),
+  utensilIds: (row.recipe_utensils || []).length
+    ? row.recipe_utensils.map((item) => item.utensil_id)
+    : [row.utensil_id].filter(Boolean),
   margin: number(row.margin),
   prices: {
     detail: row.price_detail == null ? null : number(row.price_detail),
@@ -104,8 +108,8 @@ function App() {
     name: '',
     batchSize: 10,
     soapWeight: 100,
-    indirectId: '',
-    utId: '',
+    indirectIds: [],
+    utensilIds: [],
     margin: 100,
     prices: { detail: null, wholesale: null, event: null },
     items: [{ materialId: '', qty: '' }],
@@ -146,7 +150,7 @@ function App() {
       supabase.from('materials').select('*').order('name'),
       supabase.from('indirects').select('*').order('name'),
       supabase.from('utensils').select('*').order('name'),
-      supabase.from('recipes').select('*, recipe_items(*)').order('name'),
+      supabase.from('recipes').select('*, recipe_items(*), recipe_indirects(*), recipe_utensils(*)').order('name'),
       supabase.from('batches').select('*').order('created_at', { ascending: false }),
       supabase.from('sales').select('*, sale_items(*)').order('created_at', { ascending: false }),
       supabase.from('purchases').select('*, purchase_items(*)').order('purchase_date', { ascending: false }),
@@ -201,10 +205,14 @@ function App() {
       const available = material.initial + material.purchased;
       return sum + (available > 0 ? material.totalCost / available : 0) * number(item.qty);
     }, 0);
-    const indirect = data.indirects.find((item) => item.id === recipe.indirectId);
-    const utensil = data.utensils.find((item) => item.id === recipe.utId);
-    const indirectCost = indirect && indirect.yieldVal > 0 ? (indirect.cost / indirect.yieldVal) * batchSize : 0;
-    const utensilCost = utensil && utensil.life > 0 ? (utensil.cost / utensil.life) * batchSize : 0;
+    const indirectCost = recipe.indirectIds.reduce((sum, id) => {
+      const indirect = data.indirects.find((item) => item.id === id);
+      return sum + (indirect && indirect.yieldVal > 0 ? (indirect.cost / indirect.yieldVal) * batchSize : 0);
+    }, 0);
+    const utensilCost = recipe.utensilIds.reduce((sum, id) => {
+      const utensil = data.utensils.find((item) => item.id === id);
+      return sum + (utensil && utensil.life > 0 ? (utensil.cost / utensil.life) * batchSize : 0);
+    }, 0);
     const total = materials + indirectCost + utensilCost;
     const unit = total / batchSize;
     return { materials, indirect: indirectCost, utensil: utensilCost, total, unit };
@@ -410,8 +418,8 @@ function App() {
       name: item.name,
       batchSize: item.batchSize,
       soapWeight: item.soapWeight,
-      indirectId: item.indirectId || '',
-      utId: item.utId || '',
+      indirectIds: item.indirectIds,
+      utensilIds: item.utensilIds,
       margin: item.margin ?? 100,
       prices: item.prices,
       items: item.items.length ? item.items.map((row) => ({ ...row })) : [{ materialId: '', qty: '' }],
@@ -437,20 +445,20 @@ function App() {
       p_name: recipe.name.trim(),
       p_batch_size: number(recipe.batchSize),
       p_soap_weight: number(recipe.soapWeight),
-      p_indirect_id: recipe.indirectId || null,
-      p_utensil_id: recipe.utId || null,
       p_margin: number(recipe.margin),
       p_price_detail: number(salePrices.detail),
       p_price_wholesale: number(salePrices.wholesale),
       p_price_event: number(salePrices.event),
       p_items: items,
+      p_indirects: recipe.indirectIds.filter(Boolean).map((indirect_id) => ({ indirect_id })),
+      p_utensils: recipe.utensilIds.filter(Boolean).map((utensil_id) => ({ utensil_id })),
     });
     if (saveError) {
       toast(saveError.message, 'error');
       return;
     }
     setRecipe({
-      id: '', name: '', batchSize: 10, soapWeight: 100, indirectId: '', utId: '', margin: 100,
+      id: '', name: '', batchSize: 10, soapWeight: 100, indirectIds: [], utensilIds: [], margin: 100,
       prices: { detail: null, wholesale: null, event: null },
       items: [{ materialId: '', qty: '' }],
     });
@@ -736,18 +744,34 @@ function App() {
           if (!materialId) throw new Error(`No se encontró la materia prima de la receta "${row.name}".`);
           return { material_id: materialId, quantity: number(item.qty ?? item.quantity) };
         });
+        const indirects = (row.indirectIds || (row.recipe_indirects?.length
+          ? row.recipe_indirects.map((item) => item.indirect_id)
+          : [row.indirect_id || row.indirectId].filter(Boolean)))
+          .map((id) => {
+            const indirectId = idMaps.indirects.get(id);
+            if (!indirectId) throw new Error(`No se encontró un insumo indirecto de la receta "${row.name}".`);
+            return { indirect_id: indirectId };
+          });
+        const utensils = (row.utensilIds || (row.recipe_utensils?.length
+          ? row.recipe_utensils.map((item) => item.utensil_id)
+          : [row.utensil_id || row.utId].filter(Boolean)))
+          .map((id) => {
+            const utensilId = idMaps.utensils.get(id);
+            if (!utensilId) throw new Error(`No se encontró un utensilio de la receta "${row.name}".`);
+            return { utensil_id: utensilId };
+          });
         const { data: savedId, error: importError } = await supabase.rpc('save_recipe', {
           p_recipe_id: recipeNames.get(row.name) || null,
           p_name: row.name,
           p_batch_size: number(row.batch_size ?? row.batchSize),
           p_soap_weight: number(row.soap_weight ?? row.soapWeight),
-          p_indirect_id: idMaps.indirects.get(row.indirect_id || row.indirectId) || null,
-          p_utensil_id: idMaps.utensils.get(row.utensil_id || row.utId) || null,
           p_margin: number(row.margin ?? 100),
           p_price_detail: row.price_detail ?? row.prices?.detail ?? null,
           p_price_wholesale: row.price_wholesale ?? row.prices?.wholesale ?? null,
           p_price_event: row.price_event ?? row.prices?.event ?? null,
           p_items: ingredients,
+          p_indirects: indirects,
+          p_utensils: utensils,
         });
         if (importError) throw importError;
         if (row.id) idMaps.recipes.set(row.id, savedId);
@@ -1024,22 +1048,76 @@ function App() {
                   <label>Peso por barra (g)<input type="number" min="1" value={recipe.soapWeight} onChange={(event) => setRecipe({ ...recipe, soapWeight: event.target.value })} required /></label>
                 </div>
                 <div className="list-heading"><h3>Materia prima del lote</h3><button type="button" className="text-button" onClick={() => setRecipe({ ...recipe, items: [...recipe.items, { materialId: '', qty: '' }] })}>＋ Agregar ingrediente</button></div>
-                {recipe.items.map((item, index) => (
-                  <div className="ingredient-row" key={index}>
-                    <select aria-label="Materia prima" value={item.materialId} onChange={(event) => setRecipe({ ...recipe, items: recipe.items.map((row, i) => i === index ? { ...row, materialId: event.target.value } : row) })}>
-                      <option value="">Selecciona un insumo</option>
-                      {data.materials.map((material) => <option key={material.id} value={material.id}>{material.name} ({material.unit})</option>)}
-                    </select>
-                    <input type="number" min="0" step="any" placeholder="Cantidad" aria-label="Cantidad" value={item.qty} onChange={(event) => setRecipe({ ...recipe, items: recipe.items.map((row, i) => i === index ? { ...row, qty: event.target.value } : row) })} />
-                    <button type="button" className="icon-button danger-text" aria-label="Quitar ingrediente" onClick={() => setRecipe({ ...recipe, items: recipe.items.filter((_, i) => i !== index) })}>×</button>
-                  </div>
-                ))}
-                <div className="form-grid">
-                  <label>Insumo indirecto<select value={recipe.indirectId} onChange={(event) => setRecipe({ ...recipe, indirectId: event.target.value })}><option value="">Ninguno</option>{data.indirects.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
-                  <label>Utensilio / molde<select value={recipe.utId} onChange={(event) => setRecipe({ ...recipe, utId: event.target.value })}><option value="">Ninguno</option>{data.utensils.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
+                {recipe.items.map((item, index) => {
+                  const material = data.materials.find((entry) => entry.id === item.materialId);
+                  const available = material ? material.initial + material.purchased : 0;
+                  const unitCost = available > 0 ? material.totalCost / available : 0;
+                  return (
+                    <div className="ingredient-row" key={index}>
+                      <select aria-label="Materia prima" value={item.materialId} onChange={(event) => setRecipe({ ...recipe, items: recipe.items.map((row, i) => i === index ? { ...row, materialId: event.target.value } : row) })}>
+                        <option value="">Selecciona un insumo</option>
+                        {data.materials.map((material) => <option key={material.id} value={material.id}>{material.name} ({material.unit})</option>)}
+                      </select>
+                      <input type="number" min="0" step="any" placeholder="Cantidad" aria-label="Cantidad" value={item.qty} onChange={(event) => setRecipe({ ...recipe, items: recipe.items.map((row, i) => i === index ? { ...row, qty: event.target.value } : row) })} />
+                      <button type="button" className="icon-button danger-text" aria-label="Quitar ingrediente" onClick={() => setRecipe({ ...recipe, items: recipe.items.filter((_, i) => i !== index) })}>×</button>
+                      <div className="ingredient-cost">
+                        {material ? `Costo unitario: ${unitMoney(unitCost)} / ${material.unit} · Subtotal: ${money(unitCost * number(item.qty))}` : 'Selecciona la materia prima para calcular su costo.'}
+                      </div>
+                    </div>
+                  );
+                })}
+                <div className="list-heading">
+                  <h3>Insumos indirectos</h3>
+                  <button type="button" className="text-button" onClick={() => setRecipe({ ...recipe, indirectIds: [...recipe.indirectIds, ''] })}>＋ Agregar insumo</button>
                 </div>
+                {recipe.indirectIds.map((id, index) => {
+                  const indirect = data.indirects.find((item) => item.id === id);
+                  const cost = indirect && indirect.yieldVal > 0
+                    ? (indirect.cost / indirect.yieldVal) * number(recipe.batchSize) : 0;
+                  return (
+                    <div className="resource-item-row" key={`indirect-${index}`}>
+                      <select aria-label="Insumo indirecto" value={id} onChange={(event) => setRecipe({
+                        ...recipe,
+                        indirectIds: recipe.indirectIds.map((row, rowIndex) => rowIndex === index ? event.target.value : row),
+                      })}>
+                        <option value="">Selecciona un insumo</option>
+                        {data.indirects.filter((item) => !recipe.indirectIds.includes(item.id) || item.id === id)
+                          .map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                      </select>
+                      <button type="button" className="icon-button danger-text" aria-label="Quitar insumo indirecto" onClick={() => setRecipe({
+                        ...recipe, indirectIds: recipe.indirectIds.filter((_, rowIndex) => rowIndex !== index),
+                      })}>×</button>
+                      <div className="resource-item-cost">{indirect ? `Costo para este lote: ${money(cost)}` : 'Selecciona un insumo indirecto.'}</div>
+                    </div>
+                  );
+                })}
+                <div className="list-heading">
+                  <h3>Utensilios y moldes</h3>
+                  <button type="button" className="text-button" onClick={() => setRecipe({ ...recipe, utensilIds: [...recipe.utensilIds, ''] })}>＋ Agregar utensilio</button>
+                </div>
+                {recipe.utensilIds.map((id, index) => {
+                  const utensil = data.utensils.find((item) => item.id === id);
+                  const cost = utensil && utensil.life > 0
+                    ? (utensil.cost / utensil.life) * number(recipe.batchSize) : 0;
+                  return (
+                    <div className="resource-item-row" key={`utensil-${index}`}>
+                      <select aria-label="Utensilio o molde" value={id} onChange={(event) => setRecipe({
+                        ...recipe,
+                        utensilIds: recipe.utensilIds.map((row, rowIndex) => rowIndex === index ? event.target.value : row),
+                      })}>
+                        <option value="">Selecciona un utensilio</option>
+                        {data.utensils.filter((item) => !recipe.utensilIds.includes(item.id) || item.id === id)
+                          .map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+                      </select>
+                      <button type="button" className="icon-button danger-text" aria-label="Quitar utensilio" onClick={() => setRecipe({
+                        ...recipe, utensilIds: recipe.utensilIds.filter((_, rowIndex) => rowIndex !== index),
+                      })}>×</button>
+                      <div className="resource-item-cost">{utensil ? `Depreciación para este lote: ${money(cost)}` : 'Selecciona un utensilio.'}</div>
+                    </div>
+                  );
+                })}
                 <button className="button primary wide">{recipe.id ? 'Guardar cambios' : 'Guardar receta'}</button>
-                {recipe.id && <button type="button" className="button secondary wide" onClick={() => setRecipe({ id: '', name: '', batchSize: 10, soapWeight: 100, indirectId: '', utId: '', margin: 100, prices: { detail: null, wholesale: null, event: null }, items: [{ materialId: '', qty: '' }] })}>Cancelar edición</button>}
+                {recipe.id && <button type="button" className="button secondary wide" onClick={() => setRecipe({ id: '', name: '', batchSize: 10, soapWeight: 100, indirectIds: [], utensilIds: [], margin: 100, prices: { detail: null, wholesale: null, event: null }, items: [{ materialId: '', qty: '' }] })}>Cancelar edición</button>}
               </form>
             </Section>
             <div className="recipe-side">
