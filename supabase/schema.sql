@@ -178,12 +178,14 @@ create table if not exists public.web_settings (
   updated_at timestamptz not null default now()
 );
 
+alter table public.web_products alter column batch_id drop not null;
+
 insert into public.web_settings (id) values (1) on conflict (id) do nothing;
 
 create table if not exists public.web_products (
   id uuid primary key default gen_random_uuid(),
   name text not null,
-  batch_id uuid not null references public.batches(id) on delete restrict,
+  batch_id uuid references public.batches(id) on delete restrict,
   image_path text,
   benefits text[] not null default '{}',
   composition text[] not null default '{}',
@@ -1077,6 +1079,132 @@ begin
 end;
 $$;
 
+create or replace function public.update_purchase(
+  p_purchase_id uuid,
+  p_supplier_name text,
+  p_purchase_date date,
+  p_payment_status text,
+  p_payment_method text,
+  p_items jsonb,
+  p_delete boolean default false
+)
+returns public.purchases
+language plpgsql
+set search_path = ''
+as $$
+declare
+  v_owner uuid := auth.uid();
+  v_purchase public.purchases%rowtype;
+  v_replacement public.purchases%rowtype;
+begin
+  if v_owner is null then
+    raise exception 'Debes iniciar sesión para editar compras.';
+  end if;
+
+  select * into v_purchase
+  from public.purchases
+  where id = p_purchase_id
+  for update;
+  if not found then
+    raise exception 'No se encontró la compra.';
+  end if;
+
+  if p_delete and (p_items is null or jsonb_typeof(p_items) is distinct from 'array' or jsonb_array_length(p_items) <> 0) then
+    raise exception 'No se pueden incluir artículos al eliminar una compra.';
+  end if;
+  if not p_delete and (p_items is null or jsonb_typeof(p_items) is distinct from 'array' or jsonb_array_length(p_items) = 0) then
+    raise exception 'Agrega por lo menos un artículo a la compra.';
+  end if;
+
+  if exists (
+    select 1
+    from public.purchase_items pi
+    left join public.materials m on m.id = pi.material_id
+    left join public.indirects i on i.id = pi.indirect_id
+    left join public.utensils u on u.id = pi.utensil_id
+    where pi.purchase_id = p_purchase_id
+      and (
+        (pi.item_type = 'materials' and m.initial_stock + m.purchased - m.used < pi.quantity)
+        or (pi.item_type = 'indirects' and i.stock < pi.quantity)
+        or (pi.item_type = 'utensils' and u.useful_life <= pi.quantity)
+      )
+  ) then
+    raise exception 'No se puede ajustar esta compra: parte de sus artículos ya fue consumida.';
+  end if;
+
+  update public.materials m
+  set purchased = m.purchased - item_totals.quantity,
+      total_cost = greatest(0, round(m.total_cost - item_totals.total_cost, 2)),
+      unit_cost = case
+        when m.initial_stock + m.purchased - item_totals.quantity > 0
+          then greatest(0, round((m.total_cost - item_totals.total_cost)
+            / (m.initial_stock + m.purchased - item_totals.quantity), 6))
+        else 0
+      end
+  from (
+    select pi.material_id, sum(pi.quantity) as quantity, sum(pi.line_total) as total_cost
+    from public.purchase_items pi
+    where pi.purchase_id = p_purchase_id and pi.item_type = 'materials'
+    group by pi.material_id
+  ) item_totals
+  where m.id = item_totals.material_id;
+
+  update public.indirects i
+  set stock = i.stock - item_totals.quantity,
+      cost = greatest(0, round(i.cost - item_totals.total_cost, 2)),
+      unit_cost = case
+        when i.stock - item_totals.quantity > 0
+          then greatest(0, round((i.cost - item_totals.total_cost)
+            / (i.stock - item_totals.quantity), 6))
+        else 0
+      end
+  from (
+    select pi.indirect_id, sum(pi.quantity) as quantity, sum(pi.line_total) as total_cost
+    from public.purchase_items pi
+    where pi.purchase_id = p_purchase_id and pi.item_type = 'indirects'
+    group by pi.indirect_id
+  ) item_totals
+  where i.id = item_totals.indirect_id;
+
+  update public.utensils u
+  set useful_life = u.useful_life - item_totals.quantity,
+      cost = greatest(0, round(u.cost - item_totals.total_cost, 2))
+  from (
+    select pi.utensil_id, sum(pi.quantity) as quantity, sum(pi.line_total) as total_cost
+    from public.purchase_items pi
+    where pi.purchase_id = p_purchase_id and pi.item_type = 'utensils'
+    group by pi.utensil_id
+  ) item_totals
+  where u.id = item_totals.utensil_id;
+
+  delete from public.purchase_items where purchase_id = p_purchase_id;
+
+  if p_delete then
+    delete from public.purchases where id = p_purchase_id;
+    return v_purchase;
+  end if;
+
+  v_replacement := public.record_purchase(
+    p_supplier_name, p_purchase_date, p_payment_status, p_payment_method, p_items
+  );
+  update public.purchase_items
+  set purchase_id = p_purchase_id
+  where purchase_id = v_replacement.id;
+  delete from public.purchases where id = v_replacement.id;
+
+  update public.purchases
+  set supplier_name = v_replacement.supplier_name,
+      purchase_date = v_replacement.purchase_date,
+      payment_status = v_replacement.payment_status,
+      payment_method = v_replacement.payment_method,
+      total = v_replacement.total,
+      paid_at = v_replacement.paid_at
+  where id = p_purchase_id
+  returning * into v_purchase;
+  return v_purchase;
+end;
+$$;
+
 create or replace function public.mark_purchase_paid(p_purchase_id uuid, p_payment_method text)
 returns void
 language plpgsql
@@ -1436,6 +1564,24 @@ begin
 end;
 $$;
 
+create or replace function public.delete_web_order(p_order_id uuid)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'Debes iniciar sesión para eliminar pedidos web.';
+  end if;
+
+  delete from public.web_orders where id = p_order_id;
+  if not found then
+    raise exception 'No se encontró el pedido web.';
+  end if;
+end;
+$$;
+
 create or replace function public.complete_web_order(
   p_order_id uuid,
   p_payment_method text,
@@ -1522,11 +1668,13 @@ revoke all on function public.web_available_batch_stock(uuid) from public;
 revoke all on function public.get_web_catalog() from public;
 revoke all on function public.submit_web_order(text, text, text, text, text, jsonb) from public;
 revoke all on function public.manage_web_order(uuid, text) from public;
+revoke all on function public.delete_web_order(uuid) from public;
 revoke all on function public.complete_web_order(uuid, text, text) from public;
 
 grant execute on function public.get_web_catalog() to anon, authenticated;
 grant execute on function public.submit_web_order(text, text, text, text, text, jsonb) to anon, authenticated;
 grant execute on function public.manage_web_order(uuid, text) to authenticated;
+grant execute on function public.delete_web_order(uuid) to authenticated;
 grant execute on function public.complete_web_order(uuid, text, text) to authenticated;
 
 revoke all on function public.save_recipe(uuid, text, integer, numeric, numeric, numeric, numeric, numeric, jsonb, jsonb, jsonb) from public;
@@ -1535,6 +1683,7 @@ revoke all on function public.save_sales_order(uuid, text, text, text, text, jso
 revoke all on function public.issue_sales_order(uuid) from public;
 revoke all on function public.record_purchase(text, date, text, text, jsonb) from public;
 revoke all on function public.mark_purchase_paid(uuid, text) from public;
+revoke all on function public.update_purchase(uuid, text, date, text, text, jsonb, boolean) from public;
 revoke all on function public.mark_sale_paid(uuid, text) from public;
 revoke all on function public.record_expense(text, text, numeric, date, text, text) from public;
 revoke all on function public.mark_expense_paid(uuid, text) from public;
@@ -1544,6 +1693,7 @@ grant execute on function public.save_sales_order(uuid, text, text, text, text, 
 grant execute on function public.issue_sales_order(uuid) to authenticated;
 grant execute on function public.record_purchase(text, date, text, text, jsonb) to authenticated;
 grant execute on function public.mark_purchase_paid(uuid, text) to authenticated;
+grant execute on function public.update_purchase(uuid, text, date, text, text, jsonb, boolean) to authenticated;
 grant execute on function public.mark_sale_paid(uuid, text) to authenticated;
 grant execute on function public.record_expense(text, text, numeric, date, text, text) to authenticated;
 grant execute on function public.mark_expense_paid(uuid, text) to authenticated;

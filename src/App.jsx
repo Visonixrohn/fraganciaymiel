@@ -477,11 +477,11 @@ function App() {
     return path;
   }
 
-  function openWebProduct(product = null) {
+  function openWebProduct(product = null, duplicate = false) {
     setWebProductDraft(product ? {
-      id: product.id,
-      name: product.name,
-      batchId: product.batch_id,
+      id: duplicate ? '' : product.id,
+      name: duplicate ? `${product.name} (copia)` : product.name,
+      batchId: product.batch_id || '',
       imagePath: product.image_path || '',
       benefits: (product.benefits || []).join('\n'),
       composition: (product.composition || []).join('\n'),
@@ -500,6 +500,7 @@ function App() {
       sortOrder: '0',
     });
     setWebProductFile(null);
+    setModal({ kind: 'webProduct' });
   }
 
   async function saveWebProduct(event) {
@@ -511,7 +512,7 @@ function App() {
       const { error: saveError } = await supabase.from('web_products').upsert({
         id: webProductDraft.id || undefined,
         name: webProductDraft.name.trim(),
-        batch_id: webProductDraft.batchId,
+        batch_id: webProductDraft.batchId || null,
         image_path: uploadedPath || webProductDraft.imagePath || null,
         benefits: webProductDraft.benefits.split('\n').map((item) => item.trim()).filter(Boolean),
         composition: webProductDraft.composition.split('\n').map((item) => item.trim()).filter(Boolean),
@@ -531,6 +532,7 @@ function App() {
       }
       setWebProductDraft(null);
       setWebProductFile(null);
+      setModal(null);
       toast('Producto web guardado');
       await loadData();
     } catch (uploadError) {
@@ -587,6 +589,24 @@ function App() {
       return;
     }
     toast(status === 'confirmed' ? 'Pedido reservado; el stock fue apartado.' : 'Pedido cancelado; el stock fue liberado.');
+    await loadData();
+  }
+
+  async function deleteWebOrder(order) {
+    const detail = order.status === 'confirmed'
+      ? ' La reserva de inventario se liberará.'
+      : order.status === 'completed'
+        ? ' La venta registrada se conservará.'
+        : '';
+    if (!window.confirm(`¿Eliminar el pedido ${order.order_number}?${detail}`)) return;
+    const { error: deleteError } = await supabase.rpc('delete_web_order', {
+      p_order_id: order.id,
+    });
+    if (deleteError) {
+      toast(deleteError.message, 'error');
+      return;
+    }
+    toast('Pedido eliminado');
     await loadData();
   }
 
@@ -757,6 +777,28 @@ function App() {
     setTab('recipes');
   }
 
+  function duplicateRecipe(item) {
+    const baseName = `${item.name} (copia)`;
+    let copyName = baseName;
+    let copyNumber = 2;
+    while (data.recipes.some((recipeItem) => recipeItem.name.toLocaleLowerCase('es') === copyName.toLocaleLowerCase('es'))) {
+      copyName = `${baseName} ${copyNumber}`;
+      copyNumber += 1;
+    }
+    setRecipe({
+      id: '',
+      name: copyName,
+      batchSize: item.batchSize,
+      soapWeight: item.soapWeight,
+      indirectIds: [...item.indirectIds],
+      utensilIds: [...item.utensilIds],
+      margin: item.margin ?? 100,
+      prices: { ...item.prices },
+      items: item.items.length ? item.items.map((row) => ({ ...row })) : [{ materialId: '', qty: '' }],
+    });
+    setTab('recipes');
+  }
+
   function createRecipe() {
     setRecipe({
       id: '',
@@ -853,8 +895,21 @@ function App() {
     setModal({ kind: 'sale' });
   }
 
-  function openPurchaseForm() {
-    setPurchaseDraft({
+  function openPurchaseForm(purchase = null) {
+    setPurchaseDraft(purchase ? {
+      id: purchase.id,
+      supplierName: purchase.supplier_name === 'Proveedor general' ? '' : purchase.supplier_name,
+      purchaseDate: purchase.purchase_date,
+      paymentStatus: purchase.payment_status,
+      paymentMethod: purchase.payment_method,
+      items: (purchase.purchase_items || []).map((item) => ({
+        itemType: item.item_type || 'materials',
+        itemId: item.material_id || item.indirect_id || item.utensil_id || '',
+        quantity: String(item.quantity),
+        unitCost: String(item.unit_cost),
+      })),
+    } : {
+      id: '',
       supplierName: '',
       purchaseDate: today,
       paymentStatus: 'paid',
@@ -881,7 +936,8 @@ function App() {
       return;
     }
 
-    const { error: purchaseError } = await supabase.rpc('record_purchase', {
+    const { error: purchaseError } = await supabase.rpc(purchaseDraft.id ? 'update_purchase' : 'record_purchase', {
+      ...(purchaseDraft.id ? { p_purchase_id: purchaseDraft.id, p_delete: false } : {}),
       p_supplier_name: purchaseDraft.supplierName.trim() || null,
       p_purchase_date: purchaseDraft.purchaseDate,
       p_payment_status: purchaseDraft.paymentStatus,
@@ -894,7 +950,27 @@ function App() {
     }
     setModal(null);
     setPurchaseDraft(null);
-    toast('Compra registrada y stock actualizado');
+    toast(purchaseDraft.id ? 'Compra actualizada y stock ajustado' : 'Compra registrada y stock actualizado');
+    await loadData();
+  }
+
+  async function deletePurchase(purchase) {
+    if (!window.confirm(`¿Eliminar la compra ${purchase.purchase_number}? El inventario se ajustará; no se podrá eliminar si los artículos ya fueron consumidos.`)) return;
+    const { error: purchaseError } = await supabase.rpc('update_purchase', {
+      p_purchase_id: purchase.id,
+      p_supplier_name: purchase.supplier_name,
+      p_purchase_date: purchase.purchase_date,
+      p_payment_status: purchase.payment_status,
+      p_payment_method: purchase.payment_method,
+      p_items: [],
+      p_delete: true,
+    });
+    if (purchaseError) {
+      toast(purchaseError.message, 'error');
+      return;
+    }
+    setModal(null);
+    toast('Compra eliminada y stock ajustado');
     await loadData();
   }
 
@@ -1553,6 +1629,7 @@ function App() {
             <div className="saved-recipes">
               {data.recipes.map((item) => <div className="saved-recipe" key={item.id}>
                 <button className="recipe-name" onClick={() => editRecipe(item)}><strong>{item.name}</strong><small>{item.batchSize} barras · {item.soapWeight} g c/u</small></button>
+                <button className="icon-button" aria-label={`Duplicar ${item.name}`} title="Duplicar receta" onClick={() => duplicateRecipe(item)}>⧉</button>
                 <button className="icon-button danger-text" aria-label={`Eliminar ${item.name}`} onClick={() => deleteRow('recipes', item.id, 'esta receta')}>×</button>
               </div>)}
               {data.recipes.length === 0 && <Empty text="Guarda tu primera receta para verla aquí." />}
@@ -1621,6 +1698,8 @@ function App() {
                   <td><span className={`pill ${purchase.payment_status === 'paid' ? 'good' : 'warning'}`}>{purchase.payment_status === 'paid' ? 'Pagada' : 'Pendiente'}</span></td>
                   <td className="sale-actions">
                     <button className="button secondary small" onClick={() => setModal({ kind: 'purchaseDetail', purchase })}>Ver</button>
+                    <button className="icon-button" aria-label={`Editar ${purchase.purchase_number}`} title="Editar compra" onClick={() => openPurchaseForm(purchase)}>✎</button>
+                    <button className="icon-button danger-text" aria-label={`Eliminar ${purchase.purchase_number}`} title="Eliminar compra" onClick={() => deletePurchase(purchase)}>×</button>
                     {purchase.payment_status === 'pending' && <button className="button primary small" onClick={() => markAsPaid('purchases', purchase)}>Marcar pagada</button>}
                   </td>
                 </tr>
@@ -1655,6 +1734,7 @@ function App() {
                         <button className="button primary small" onClick={() => setModal({ kind: 'completeWebOrder', order })}>Completar venta</button>
                         <button className="icon-button danger-text" aria-label="Cancelar pedido" title="Cancelar pedido y liberar stock" onClick={() => updateWebOrder(order, 'cancelled')}>×</button>
                       </>}
+                      <button className="icon-button danger-text" aria-label={`Eliminar pedido ${order.order_number}`} title="Eliminar pedido" onClick={() => deleteWebOrder(order)}>⌫</button>
                       {order.sale_id && (() => {
                         const sale = data.sales.find((item) => item.id === order.sale_id);
                         return sale ? <button className="button secondary small" onClick={() => setModal({ kind: 'invoice', sale })}>Ver factura</button> : null;
@@ -1669,40 +1749,12 @@ function App() {
         {tab === 'webProducts' && (
           <div className="web-admin-layout">
             <Section
-              title={webProductDraft ? (webProductDraft.id ? 'Editar producto web' : 'Agregar producto web') : 'Catálogo de la tienda'}
-              subtitle="Publica jabones ligados a un lote y muestra su disponibilidad en tiempo real"
-              action={webProductDraft ? 'Cancelar' : '＋ Nuevo producto'}
-              onAction={() => webProductDraft ? setWebProductDraft(null) : openWebProduct()}
+              title="Catálogo de la tienda"
+              subtitle={`${data.webProducts.length} productos · asigna un lote para mostrar disponibilidad en la tienda`}
+              action="＋ Nuevo producto"
+              onAction={() => openWebProduct()}
             >
-              {webProductDraft && (
-                <form className="web-editor stack-form" onSubmit={saveWebProduct}>
-                  <div className="form-grid">
-                    <Field label="Nombre del producto"><input required maxLength="120" value={webProductDraft.name} onChange={(event) => setWebProductDraft({ ...webProductDraft, name: event.target.value })} /></Field>
-                    <Field label="Lote de producción">
-                      <select required value={webProductDraft.batchId} onChange={(event) => setWebProductDraft({ ...webProductDraft, batchId: event.target.value })}>
-                        <option value="">Selecciona un lote</option>
-                        {data.batches.map((batch) => {
-                          const available = availableWebBatchStock(batch);
-                          return <option key={batch.id} value={batch.id}>{batch.recipe_name} · {batch.code} · {available} disponibles</option>;
-                        })}
-                      </select>
-                    </Field>
-                  </div>
-                  <div className="form-grid">
-                    <Field label="Foto del producto (JPG, PNG o WebP; máximo 8 MB)">
-                      <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setWebProductFile(event.target.files?.[0] || null)} />
-                    </Field>
-                    <Field label="Orden en el catálogo"><input type="number" step="1" value={webProductDraft.sortOrder} onChange={(event) => setWebProductDraft({ ...webProductDraft, sortOrder: event.target.value })} /></Field>
-                  </div>
-                  {webProductDraft.imagePath && !webProductFile && <p className="form-note">Ya hay una imagen guardada. Sube otra para reemplazarla.</p>}
-                  <Field label="Beneficios (un beneficio por línea)"><textarea rows="4" value={webProductDraft.benefits} onChange={(event) => setWebProductDraft({ ...webProductDraft, benefits: event.target.value })} placeholder={'Suaviza la piel\nElaborado artesanalmente'} /></Field>
-                  <Field label="Composición y unidades (un ingrediente por línea)"><textarea rows="4" value={webProductDraft.composition} onChange={(event) => setWebProductDraft({ ...webProductDraft, composition: event.target.value })} placeholder={'Base de glicerina: 90 g\nAceite de coco: 5 ml'} /></Field>
-                  <Field label="Modo de uso"><textarea rows="3" maxLength="1000" value={webProductDraft.usageInstructions} onChange={(event) => setWebProductDraft({ ...webProductDraft, usageInstructions: event.target.value })} /></Field>
-                  <label className="checkbox-field"><input type="checkbox" checked={webProductDraft.active} onChange={(event) => setWebProductDraft({ ...webProductDraft, active: event.target.checked })} /> Producto visible en la tienda</label>
-                  <button className="button primary">Guardar producto</button>
-                </form>
-              )}
-              <Table headers={['Producto', 'Receta / lote', 'Stock disponible', 'Precio', 'Visible', 'Acciones']}>
+              <div className="web-product-grid">
                 {data.webProducts.map((product) => {
                   const batch = data.batches.find((item) => item.id === product.batch_id);
                   const recipeItem = data.recipes.find((item) => item.id === batch?.recipe_id);
@@ -1710,18 +1762,29 @@ function App() {
                   const image = product.image_path
                     ? supabase.storage.from('jabon').getPublicUrl(product.image_path).data.publicUrl
                     : null;
-                  return <tr key={product.id}>
-                    <td className="strong">{image && <img className="web-product-thumb" src={image} alt="" />}{product.name}</td>
-                    <td>{batch ? `${batch.recipe_name} · ${batch.code}` : 'Lote no disponible'}</td>
-                    <td>{available}</td><td>{recipeItem?.prices.detail == null ? '—' : money(recipeItem.prices.detail)}</td>
-                    <td><span className={`pill ${product.active ? 'good' : 'warning'}`}>{product.active ? 'Sí' : 'No'}</span></td>
-                    <td className="sale-actions">
-                      <button className="icon-button" aria-label={`Editar ${product.name}`} onClick={() => openWebProduct(product)}>✎</button>
-                      <button className="icon-button danger-text" aria-label={`Eliminar ${product.name}`} onClick={() => deleteWebProduct(product)}>×</button>
-                    </td>
-                  </tr>;
+                  return <article className="web-product-card" key={product.id}>
+                    {image
+                      ? <img className="web-product-image" src={image} alt="" />
+                      : <div className="web-product-image web-product-placeholder" aria-hidden="true">✦</div>}
+                    <div className="web-product-card-content">
+                      <div className="web-product-card-heading">
+                        <div><h3>{product.name}</h3><span className={`pill ${product.active ? 'good' : 'warning'}`}>{product.active ? 'Visible' : 'Oculto'}</span></div>
+                        <strong>{recipeItem?.prices.detail == null ? 'Sin precio' : money(recipeItem.prices.detail)}</strong>
+                      </div>
+                      <p>{batch ? `${batch.recipe_name} · ${batch.code}` : 'Sin lote asignado'}</p>
+                      <div className="web-product-card-footer">
+                        <span>{batch ? `${available} disponibles` : 'Asigna un lote para publicar'}</span>
+                        <div>
+                          <button className="icon-button" aria-label={`Editar ${product.name}`} title="Editar producto" onClick={() => openWebProduct(product)}>✎</button>
+                          <button className="icon-button" aria-label={`Duplicar ${product.name}`} title="Duplicar producto" onClick={() => openWebProduct(product, true)}>⧉</button>
+                          <button className="icon-button danger-text" aria-label={`Eliminar ${product.name}`} title="Eliminar producto" onClick={() => deleteWebProduct(product)}>×</button>
+                        </div>
+                      </div>
+                    </div>
+                  </article>;
                 })}
-              </Table>
+                {data.webProducts.length === 0 && <Empty text="Agrega tu primer producto para organizar el catálogo de la tienda." />}
+              </div>
               <div className="web-store-link"><a className="button secondary small" href="./storefront.html" target="_blank" rel="noreferrer">Abrir tienda pública ↗</a></div>
             </Section>
           </div>
@@ -1833,7 +1896,7 @@ function App() {
       </main>
       </div>
 
-      {modal && !['production', 'sale', 'purchase', 'purchaseDetail', 'invoice', 'completeWebOrder', 'webOrderDetail'].includes(modal.kind) && (
+      {modal && !['production', 'sale', 'purchase', 'purchaseDetail', 'invoice', 'completeWebOrder', 'webOrderDetail', 'webProduct'].includes(modal.kind) && (
         <Dialog title={`${modal.item ? 'Editar' : 'Registrar'} ${modal.kind === 'materials' ? 'materia prima' : modal.kind === 'indirects' ? 'insumo indirecto' : 'utensilio'}`} onClose={() => setModal(null)}>
           <form className="stack-form" onSubmit={saveEntity}>
             <Field label="Código"><input required value={modal.values.code} onChange={(e) => setModal({ ...modal, values: { ...modal.values, code: e.target.value } })} /></Field>
@@ -1875,6 +1938,40 @@ function App() {
               <Field label="Vida útil (jabones)"><input type="number" min="1" step="any" required value={modal.values.life} onChange={(e) => setModal({ ...modal, values: { ...modal.values, life: e.target.value } })} /></Field>
             </div>}
             <div className="dialog-actions"><button type="button" className="button secondary" onClick={() => setModal(null)}>Cancelar</button><button className="button primary">Guardar</button></div>
+          </form>
+        </Dialog>
+      )}
+      {modal?.kind === 'webProduct' && webProductDraft && (
+        <Dialog className="sales-dialog web-product-dialog" title={webProductDraft.id ? 'Editar producto web' : 'Agregar producto a la tienda'} onClose={() => { setModal(null); setWebProductDraft(null); setWebProductFile(null); }}>
+          <form className="stack-form" onSubmit={saveWebProduct}>
+            <div className="form-grid">
+              <Field label="Nombre del producto"><input required maxLength="120" value={webProductDraft.name} onChange={(event) => setWebProductDraft({ ...webProductDraft, name: event.target.value })} /></Field>
+              <Field label="Lote de producción (opcional)">
+                <select value={webProductDraft.batchId} onChange={(event) => setWebProductDraft({ ...webProductDraft, batchId: event.target.value })}>
+                  <option value="">Sin lote por ahora</option>
+                  {data.batches.map((batch) => {
+                    const available = availableWebBatchStock(batch);
+                    return <option key={batch.id} value={batch.id}>{batch.recipe_name} · {batch.code} · {available} disponibles</option>;
+                  })}
+                </select>
+              </Field>
+            </div>
+            {!webProductDraft.batchId && <p className="form-note">Puedes guardarlo sin lote. No aparecerá en la tienda pública hasta que le asignes un lote producido.</p>}
+            <div className="form-grid">
+              <Field label="Foto del producto (JPG, PNG o WebP; máximo 8 MB)">
+                <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setWebProductFile(event.target.files?.[0] || null)} />
+              </Field>
+              <Field label="Orden en el catálogo"><input type="number" step="1" value={webProductDraft.sortOrder} onChange={(event) => setWebProductDraft({ ...webProductDraft, sortOrder: event.target.value })} /></Field>
+            </div>
+            {webProductDraft.imagePath && !webProductFile && <p className="form-note">Ya hay una imagen guardada. Sube otra para reemplazarla.</p>}
+            <Field label="Beneficios (un beneficio por línea)"><textarea rows="4" value={webProductDraft.benefits} onChange={(event) => setWebProductDraft({ ...webProductDraft, benefits: event.target.value })} placeholder={'Suaviza la piel\nElaborado artesanalmente'} /></Field>
+            <Field label="Composición y unidades (un ingrediente por línea)"><textarea rows="4" value={webProductDraft.composition} onChange={(event) => setWebProductDraft({ ...webProductDraft, composition: event.target.value })} placeholder={'Base de glicerina: 90 g\nAceite de coco: 5 ml'} /></Field>
+            <Field label="Modo de uso"><textarea rows="3" maxLength="1000" value={webProductDraft.usageInstructions} onChange={(event) => setWebProductDraft({ ...webProductDraft, usageInstructions: event.target.value })} /></Field>
+            <label className="checkbox-field"><input type="checkbox" checked={webProductDraft.active} onChange={(event) => setWebProductDraft({ ...webProductDraft, active: event.target.checked })} /> Producto visible en la tienda</label>
+            <div className="dialog-actions">
+              <button type="button" className="button secondary" onClick={() => { setModal(null); setWebProductDraft(null); setWebProductFile(null); }}>Cancelar</button>
+              <button className="button primary">{webProductDraft.id ? 'Guardar cambios' : 'Crear producto'}</button>
+            </div>
           </form>
         </Dialog>
       )}
@@ -1939,7 +2036,7 @@ function App() {
         </Dialog>
       )}
       {modal?.kind === 'purchase' && purchaseDraft && (
-        <Dialog className="sales-dialog" title="Registrar compra" onClose={() => { setModal(null); setPurchaseDraft(null); }}>
+        <Dialog className="sales-dialog" title={purchaseDraft.id ? 'Editar compra' : 'Registrar compra'} onClose={() => { setModal(null); setPurchaseDraft(null); }}>
           <form className="stack-form" onSubmit={savePurchase}>
             <div className="form-grid">
               <Field label="Proveedor (opcional)"><input value={purchaseDraft.supplierName} placeholder="Proveedor general" onChange={(event) => setPurchaseDraft({ ...purchaseDraft, supplierName: event.target.value })} /></Field>
@@ -2001,7 +2098,7 @@ function App() {
             <p className="form-note">Ingresa el costo de una unidad del artículo; el importe de cada línea se calcula como cantidad × costo unitario. La compra suma stock y costo a materias primas, rendimiento a insumos indirectos y vida útil (usos) a utensilios.</p>
             <div className="dialog-actions">
               <button type="button" className="button secondary" onClick={() => { setModal(null); setPurchaseDraft(null); }}>Cancelar</button>
-              <button className="button primary">Registrar compra</button>
+              <button className="button primary">{purchaseDraft.id ? 'Guardar cambios' : 'Registrar compra'}</button>
             </div>
           </form>
         </Dialog>

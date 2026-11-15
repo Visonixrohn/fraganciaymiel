@@ -11,7 +11,7 @@ Aplicación React para administrar materias primas, insumos indirectos, utensili
 
 1. Instala dependencias con `npm install`.
 2. Copia `.env.example` a `.env` y configura `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
-3. En Supabase, abre **SQL Editor**, ejecuta el contenido de [`supabase/schema.sql`](./supabase/schema.sql) y confirma que terminó sin errores.
+3. En Supabase, abre **SQL Editor**, ejecuta el contenido de [`supabase/schema.sql`](./supabase/schema.sql) y confirma que terminó sin errores. Vuelve a ejecutar el esquema actualizado cuando incorpores cambios de base de datos.
 4. En Supabase, habilita **Anonymous Sign-Ins** en la configuración de proveedores de autenticación.
 5. Inicia el servidor de desarrollo con `npm run dev`.
 
@@ -49,7 +49,7 @@ Al registrar una compra, ingresa el costo de una unidad por artículo; el sistem
 
 1. Vuelve a ejecutar el esquema actualizado `supabase/schema.sql` desde **Supabase → SQL Editor**. Esto crea las vistas de catálogo y pedidos, los procedimientos de reserva/venta y el bucket público `jabon`.
 2. En la aplicación, abre **Configuración web** y guarda la identidad y los datos de contacto. Para WhatsApp, usa el número internacional con código de país (por ejemplo, `504...`).
-3. En **Productos web**, crea cada producto y asígnalo a un lote de producción. Completa beneficios, composición con unidades y modo de uso; sube una imagen JPG, PNG o WebP de hasta 8 MB.
+3. En **Productos web**, crea cada producto y, si ya está disponible, asígnale un lote de producción. Puedes guardar productos sin lote y asignarlo más adelante; solo se mostrarán en la tienda cuando tengan lote y precio. Completa beneficios, composición con unidades y modo de uso; sube una imagen JPG, PNG o WebP de hasta 8 MB.
 4. Publica el archivo [`src/public/storefront.html`](./src/public/storefront.html) junto a la aplicación. En ese HTML reemplaza `SUPABASE_URL` y `SUPABASE_PUBLISHABLE_KEY` con la URL del proyecto y su clave **publicable**. Nunca pegues una clave `service_role` o secreta; la tienda necesita únicamente la RPC pública de catálogo y envío de pedidos.
 5. El despliegue existente de GitHub Pages incluye la tienda en `storefront.html`. Desde **Pedidos web**, reserva, cancela o completa cada pedido. Solo los pedidos reservados afectan el stock; los pendientes no descuentan existencias. Al completar, el sistema crea la venta y factura con los datos del pedido.
 
