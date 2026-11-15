@@ -37,6 +37,7 @@ const fromMaterial = (row) => ({
   used: number(row.used),
   min: number(row.minimum_stock),
   totalCost: number(row.total_cost),
+  unitCost: number(row.unit_cost),
 });
 const fromIndirect = (row) => ({ ...row, yieldVal: number(row.yield_value), cost: number(row.cost) });
 const fromUtensil = (row) => ({ ...row, cost: number(row.cost), life: number(row.useful_life) });
@@ -203,7 +204,7 @@ function App() {
       const material = data.materials.find((entry) => entry.id === item.materialId);
       if (!material) return sum;
       const available = material.initial + material.purchased;
-      return sum + (available > 0 ? material.totalCost / available : 0) * number(item.qty);
+      return sum + material.unitCost * number(item.qty);
     }, 0);
     const indirectCost = recipe.indirectIds.reduce((sum, id) => {
       const indirect = data.indirects.find((item) => item.id === id);
@@ -358,7 +359,7 @@ function App() {
           min: item.min,
           initial: item.initial,
           purchased: item.purchased,
-          unitCost: item.totalCost / Math.max(1, item.initial + item.purchased),
+          unitCost: item.unitCost || item.totalCost / Math.max(1, item.initial + item.purchased),
         }
         : { code: '', name: '', unit: 'g', min: '', initial: 0, purchased: 0, unitCost: '' },
       indirects: item
@@ -382,6 +383,7 @@ function App() {
         minimum_stock: number(values.min),
         initial_stock: number(values.initial),
         purchased: number(values.purchased),
+        unit_cost: number(values.unitCost),
         total_cost: number(values.unitCost) * (number(values.initial) + number(values.purchased)),
       },
       indirects: {
@@ -710,6 +712,8 @@ function App() {
           used: number(row.used),
           minimum_stock: number(row.minimum_stock ?? row.min),
           total_cost: number(row.total_cost ?? row.totalCost),
+          unit_cost: number(row.unit_cost ?? row.unitCost
+            ?? number(row.total_cost ?? row.totalCost) / Math.max(1, number(row.initial_stock ?? row.initial) + number(row.purchased))),
         })),
         indirects: backup.indirects.map((row) => ({
           owner_id: session.user.id,
@@ -1016,7 +1020,7 @@ function App() {
                 return <tr key={item.id}>
                   <td><code>{item.code}</code></td><td className="strong">{item.name}</td><td>{item.unit}</td>
                   <td>{item.initial}</td><td>{item.purchased}</td><td>{item.used.toFixed(2)}</td><td className="strong">{stock.toFixed(2)}</td><td>{item.min}</td>
-                  <td>{money(item.totalCost)}</td><td className="green">{money(item.totalCost / Math.max(1, item.initial + item.purchased))}</td>
+                  <td>{money(item.totalCost)}</td><td className="green">{unitMoney(item.unitCost)}</td>
                   <td><span className={`pill ${low ? 'danger' : 'good'}`}>{low ? 'Reordenar' : 'Óptimo'}</span></td>
                   <Actions onEdit={() => openEntity('materials', item)} onDelete={() => deleteRow('materials', item.id, 'esta materia prima')} />
                 </tr>;
@@ -1058,8 +1062,7 @@ function App() {
                 <div className="list-heading"><h3>Materia prima del lote</h3><button type="button" className="text-button" onClick={() => setRecipe({ ...recipe, items: [...recipe.items, { materialId: '', qty: '' }] })}>＋ Agregar ingrediente</button></div>
                 {recipe.items.map((item, index) => {
                   const material = data.materials.find((entry) => entry.id === item.materialId);
-                  const available = material ? material.initial + material.purchased : 0;
-                  const unitCost = available > 0 ? material.totalCost / available : 0;
+                  const unitCost = material?.unitCost || 0;
                   return (
                     <div className="ingredient-row" key={index}>
                       <select aria-label="Materia prima" value={item.materialId} onChange={(event) => setRecipe({ ...recipe, items: recipe.items.map((row, i) => i === index ? { ...row, materialId: event.target.value } : row) })}>

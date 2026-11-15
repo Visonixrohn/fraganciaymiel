@@ -13,10 +13,16 @@ create table if not exists public.materials (
   purchased numeric(14, 3) not null default 0 check (purchased >= 0),
   used numeric(14, 3) not null default 0 check (used >= 0),
   minimum_stock numeric(14, 3) not null default 0 check (minimum_stock >= 0),
+  unit_cost numeric(14, 6) not null default 0 check (unit_cost >= 0),
   total_cost numeric(14, 2) not null default 0 check (total_cost >= 0),
   created_at timestamptz not null default now(),
   unique (owner_id, code)
 );
+
+alter table public.materials add column if not exists unit_cost numeric(14, 6) not null default 0 check (unit_cost >= 0);
+update public.materials
+set unit_cost = total_cost / nullif(initial_stock + purchased, 0)
+where unit_cost = 0 and total_cost > 0 and initial_stock + purchased > 0;
 
 create table if not exists public.indirects (
   id uuid primary key default gen_random_uuid(),
@@ -490,7 +496,7 @@ begin
   end if;
 
   for v_item in
-    select ri.material_id, ri.quantity, m.initial_stock, m.purchased, m.used, m.total_cost
+    select ri.material_id, ri.quantity, m.initial_stock, m.purchased, m.used, m.unit_cost
     from public.recipe_items ri
     join public.materials m on m.id = ri.material_id
     where ri.recipe_id = v_recipe.id
@@ -501,8 +507,7 @@ begin
     if v_item.initial_stock + v_item.purchased - v_item.used < v_required then
       raise exception 'Existencias insuficientes para una o más materias primas.';
     end if;
-    v_unit_cost := case when v_item.initial_stock + v_item.purchased > 0
-      then v_item.total_cost / (v_item.initial_stock + v_item.purchased) else 0 end;
+    v_unit_cost := v_item.unit_cost;
     v_material_cost := v_material_cost + v_unit_cost * v_required;
     update public.materials set used = used + v_required where id = v_item.material_id;
   end loop;
@@ -805,7 +810,13 @@ begin
 
   update public.materials m
   set purchased = m.purchased + item_totals.quantity,
-      total_cost = m.total_cost + item_totals.total_cost
+      total_cost = m.total_cost + item_totals.total_cost,
+      unit_cost = case
+        when m.initial_stock + m.purchased + item_totals.quantity > 0
+          then (m.total_cost + item_totals.total_cost)
+            / (m.initial_stock + m.purchased + item_totals.quantity)
+        else m.unit_cost
+      end
   from (
     select item.material_id,
       sum(quantity) as quantity,
