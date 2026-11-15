@@ -23,12 +23,13 @@ En **Settings → Pages → Build and deployment**, selecciona **GitHub Actions*
 
 ## Funciones
 
+- Navegación lateral adaptable a escritorio y móvil; incluye vistas separadas para crear recetas, consultar recetas guardadas y facturar/consultar ventas.
 - Inventario de materias primas con alertas, existencias y costo unitario configurable por gramo, mililitro o pieza.
 - Control de insumos indirectos y depreciación de utensilios.
 - Creación de recetas con varias materias primas, insumos indirectos y utensilios; las cantidades de materia prima se ingresan por jabón, se multiplican por el tamaño del lote y se muestra el costo por barra.
 - Precios editables al detalle, por mayor y para eventos; calcula ganancia por barra y margen bruto (`(precio - costo) / precio`).
 - Registro transaccional de producción: verifica existencias y descuenta materias primas.
-- Pedidos en borrador y comprobantes internos numerados; al emitirlos valida las existencias de jabones terminados (producción menos ventas), registra la venta y permite imprimir o reimprimir el comprobante.
+- Ventas en borrador y comprobantes internos numerados; al emitirlos valida las existencias de jabones terminados (producción menos ventas), registra la venta y permite imprimir o reimprimir la factura.
 - Registro de compras por materia prima, insumo indirecto o utensilio, con proveedor, costo unitario y forma de pago; las compras acumulan stock/costo y rendimiento o vida útil según el tipo.
 - Control de cobros, pagos y gastos, con estado de resultados por período y balance general de gestión.
 - Exportación de los datos visibles a JSON.

@@ -25,7 +25,8 @@ button { cursor: pointer; }
 .top-actions { display: flex; align-items: center; gap: 12px; }
 .currency-label { margin-right: 10px; font-size: 12px; font-weight: 700; letter-spacing: .5px; }
 .currency-label span { color: #b7cfc0; font-weight: 400; }
-.main-content { max-width: 1440px; margin: auto; padding: 40px 5.2% 26px; }
+.app-workspace { display: flex; min-height: calc(100vh - 76px); }
+.main-content { flex: 1; min-width: 0; max-width: 1440px; margin: 0 auto; padding: 40px clamp(22px, 3.8vw, 56px) 26px; }
 .welcome-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 28px; }
 .welcome-row h1, .auth-card h1 { margin: 5px 0 7px; color: #20372c; font: 700 31px "Playfair Display", serif; letter-spacing: -.5px; }
 .welcome-row p { margin: 0; }
@@ -50,10 +51,15 @@ button { cursor: pointer; }
 .metric-icon { display: grid; width: 42px; height: 42px; place-items: center; border-radius: 50%; background: var(--green-soft); color: var(--green); font-size: 21px; }
 .metric-warning .metric-icon { background: #fff4df; color: #cb8a18; }
 .metric-warning strong { color: #ba7d12; }
-.tabs { display: flex; gap: 6px; overflow-x: auto; margin: 0 0 19px; padding: 7px; border: 1px solid var(--line); border-radius: 9px; background: white; }
-.tab { display: inline-flex; flex: 0 0 auto; align-items: center; gap: 8px; padding: 10px 14px; border: 0; border-radius: 6px; background: transparent; color: #69756e; font-size: 11px; font-weight: 600; }
-.tab span { font-size: 15px; }
-.tab.active { background: var(--green); color: white; box-shadow: 0 2px 5px #27754d38; }
+.sidebar { position: sticky; top: 0; align-self: flex-start; flex: 0 0 250px; height: calc(100vh - 76px); overflow-y: auto; padding: 24px 14px; border-right: 1px solid var(--line); background: white; }
+.nav-group + .nav-group { margin-top: 23px; }
+.nav-group h2 { margin: 0 10px 8px; color: #98a39b; font-size: 9px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; }
+.nav-item { display: flex; width: 100%; min-height: 42px; align-items: center; gap: 11px; padding: 0 11px; border: 0; border-radius: 7px; background: transparent; color: #647168; font-size: 11px; font-weight: 600; text-align: left; transition: background .15s ease, color .15s ease; }
+.nav-item:hover { background: #f4f8f4; color: var(--green-dark); }
+.nav-item.active { background: var(--green-soft); color: var(--green-dark); box-shadow: inset 3px 0 var(--green); }
+.nav-icon { display: grid; width: 20px; place-items: center; color: var(--green); font-size: 16px; }
+.menu-toggle { display: none; }
+.sidebar-backdrop { display: none; }
 .panel { overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: white; box-shadow: 0 2px 7px #253c2e08; }
 .section-heading { display: flex; min-height: 76px; align-items: center; justify-content: space-between; gap: 16px; padding: 17px 21px; border-bottom: 1px solid var(--line); }
 .section-heading h2 { margin: 0 0 4px; color: #263d30; font: 700 16px "Playfair Display", serif; }
@@ -117,6 +123,10 @@ input:focus, select:focus { border-color: #7eac8a; box-shadow: 0 0 0 3px #27754d
 .recipe-name { display: grid; gap: 4px; padding: 12px 0; border: 0; background: transparent; text-align: left; }
 .recipe-name strong { color: #34473a; font-size: 11px; }
 .recipe-name small { color: #8d978f; font-size: 9px; }
+.sales-page { display: grid; gap: 17px; }
+.sales-intro { display: flex; align-items: center; gap: 13px; padding: 16px 21px; }
+.sales-intro p { margin: 0; color: #69766d; font-size: 11px; line-height: 1.6; }
+.sales-intro-icon { display: grid; width: 38px; height: 38px; flex: 0 0 38px; place-items: center; border-radius: 50%; background: var(--green-soft); color: var(--green); font-size: 19px; }
 .footer { padding: 25px 0 0; color: #98a19b; font-size: 10px; text-align: center; }
 .footer span { color: #bdc9be; }
 .loading-inline { padding: 9px 13px; margin-bottom: 13px; border-radius: 6px; background: #edf5ef; color: #477354; font-size: 11px; }
@@ -190,13 +200,20 @@ input:focus, select:focus { border-color: #7eac8a; box-shadow: 0 0 0 3px #27754d
 .loading-screen { color: #4a6652; font-size: 13px; }
 
 @media (max-width: 900px) {
-  .main-content { padding-right: 3%; padding-left: 3%; }
+  .sidebar { position: fixed; z-index: 19; top: 76px; bottom: 0; left: 0; width: min(288px, 85vw); height: auto; box-shadow: 8px 0 30px #15241d1c; transform: translateX(-105%); transition: transform .2s ease; visibility: hidden; }
+  .sidebar.open { transform: translateX(0); visibility: visible; }
+  .sidebar-backdrop { position: fixed; z-index: 18; inset: 76px 0 0; display: block; border: 0; background: #15241d88; }
+  .menu-toggle { display: grid; width: 34px; height: 34px; place-items: center; padding: 0; border: 1px solid #567462; border-radius: 6px; background: transparent; color: white; font-size: 16px; }
+  .main-content { width: 100%; max-width: 1440px; margin: 0 auto; padding-right: 3%; padding-left: 3%; }
   .topbar { padding-right: 3%; padding-left: 3%; }
   .metrics-grid { grid-template-columns: repeat(2, 1fr); }
   .recipe-layout { grid-template-columns: 1fr; }
 }
 @media (max-width: 620px) {
   .topbar { height: 65px; }
+  .sidebar { top: 65px; }
+  .sidebar-backdrop { inset: 65px 0 0; }
+  .app-workspace { min-height: calc(100vh - 65px); }
   .brand { gap: 8px; font-size: 16px; }
   .brand-icon { width: 33px; height: 33px; }
   .top-actions { gap: 6px; }

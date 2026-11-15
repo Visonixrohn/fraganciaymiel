@@ -1,15 +1,34 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { isSupabaseConfigured, supabase } from './supabase.js';
 
-const tabs = [
-  ['materials', 'Materia prima', '◈'],
-  ['indirects', 'Insumos indirectos', '✳'],
-  ['utensils', 'Utensilios', '⌑'],
-  ['recipes', 'Calculadora y recetas', '⌗'],
-  ['production', 'Producción', '▤'],
-  ['sales', 'Pedidos y facturas', '▧'],
-  ['purchases', 'Compras', '＋'],
-  ['finance', 'Finanzas', '＄'],
+const navigationGroups = [
+  {
+    label: 'Inventario',
+    items: [
+      ['materials', 'Materia prima', '◈'],
+      ['indirects', 'Insumos indirectos', '✳'],
+      ['utensils', 'Utensilios', '⌑'],
+    ],
+  },
+  {
+    label: 'Producción',
+    items: [
+      ['recipes', 'Calculadora y recetas', '⌗'],
+      ['savedRecipes', 'Recetas guardadas', '✦'],
+      ['production', 'Producción', '▤'],
+    ],
+  },
+  {
+    label: 'Comercial',
+    items: [
+      ['sales', 'Facturación', '▧'],
+      ['purchases', 'Compras', '＋'],
+    ],
+  },
+  {
+    label: 'Administración',
+    items: [['finance', 'Finanzas', '＄']],
+  },
 ];
 
 const money = (value) => `L ${Number(value || 0).toFixed(2)}`;
@@ -71,6 +90,7 @@ function App() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState(null);
   const [tab, setTab] = useState('materials');
+  const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [data, setData] = useState({
     materials: [],
     indirects: [],
@@ -436,6 +456,21 @@ function App() {
     setTab('recipes');
   }
 
+  function createRecipe() {
+    setRecipe({
+      id: '',
+      name: '',
+      batchSize: 10,
+      soapWeight: 100,
+      indirectIds: [],
+      utensilIds: [],
+      margin: 100,
+      prices: { detail: null, wholesale: null, event: null },
+      items: [{ materialId: '', qty: '' }],
+    });
+    setTab('recipes');
+  }
+
   async function saveRecipe(event) {
     event.preventDefault();
     if (Object.values(salePrices).some((price) => price === '' || price == null || !Number.isFinite(Number(price)))) {
@@ -635,7 +670,7 @@ function App() {
         price_type: item.priceType,
       }));
     if (!items.length || items.some((item) => item.quantity < 1)) {
-      toast('Agrega productos y cantidades válidas al pedido.', 'error');
+      toast('Agrega productos y cantidades válidas a la venta.', 'error');
       return;
     }
 
@@ -653,12 +688,12 @@ function App() {
     }
     setModal(null);
     setSaleDraft(null);
-    toast('Pedido guardado en borrador');
+    toast('Venta guardada en borrador');
     await loadData();
   }
 
   async function issueSalesOrder(sale) {
-    if (!window.confirm('¿Emitir el comprobante? Se validará y descontará el stock de jabones terminados.')) return;
+    if (!window.confirm('¿Emitir la factura? Se validará y descontará el stock de jabones terminados.')) return;
     const { error: issueError } = await supabase.rpc('issue_sales_order', { p_sale_id: sale.id });
     if (issueError) {
       toast(issueError.message, 'error');
@@ -979,6 +1014,14 @@ function App() {
           <span>Fragancia <i>&</i> Miel<small>CONTROL DE PRODUCCIÓN</small></span>
         </a>
         <div className="top-actions">
+          <button
+            type="button"
+            className="menu-toggle"
+            aria-label={mobileNavOpen ? 'Cerrar menú de navegación' : 'Abrir menú de navegación'}
+            aria-expanded={mobileNavOpen}
+            aria-controls="primary-navigation"
+            onClick={() => setMobileNavOpen(!mobileNavOpen)}
+          >☰</button>
           <span className="currency-label">LPS <span>· Lempiras</span></span>
           <button className="button ghost" onClick={exportData}>↓ <span>Exportar</span></button>
           <button className="button ghost" onClick={() => document.getElementById('import-backup').click()}>↑ <span>Importar</span></button>
@@ -986,6 +1029,30 @@ function App() {
           <button className="button ghost" onClick={lockApp}>Salir</button>
         </div>
       </header>
+
+      <div className="app-workspace">
+        {mobileNavOpen && <button type="button" className="sidebar-backdrop" aria-label="Cerrar menú" onClick={() => setMobileNavOpen(false)} />}
+        <aside id="primary-navigation" className={`sidebar${mobileNavOpen ? ' open' : ''}`} aria-label="Navegación principal">
+          {navigationGroups.map((group) => (
+            <section className="nav-group" key={group.label}>
+              <h2>{group.label}</h2>
+              {group.items.map(([id, title, icon]) => (
+                <button
+                  type="button"
+                  key={id}
+                  className={`nav-item${tab === id ? ' active' : ''}`}
+                  aria-current={tab === id ? 'page' : undefined}
+                  onClick={() => {
+                    setTab(id);
+                    setMobileNavOpen(false);
+                  }}
+                >
+                  <span className="nav-icon">{icon}</span><span>{title}</span>
+                </button>
+              ))}
+            </section>
+          ))}
+        </aside>
 
       <main className="main-content">
         <div className="welcome-row">
@@ -1000,14 +1067,6 @@ function App() {
           <Metric label="Recetas" value={metrics.recipes} detail="Fichas técnicas" icon="⌗" />
           <Metric label="Lotes producidos" value={metrics.batches} detail="Producciones registradas" icon="▤" />
         </section>
-
-        <nav className="tabs" aria-label="Secciones del sistema">
-          {tabs.map(([id, title, icon]) => (
-            <button key={id} className={tab === id ? 'tab active' : 'tab'} onClick={() => setTab(id)}>
-              <span>{icon}</span>{title}
-            </button>
-          ))}
-        </nav>
 
         {loading && <div className="loading-inline">Sincronizando datos con Supabase…</div>}
         {tab === 'materials' && (
@@ -1147,17 +1206,24 @@ function App() {
                   <PriceEditor label="Eventos" value={salePrices.event} cost={costs.unit} onChange={(value) => setRecipe({ ...recipe, prices: { ...recipe.prices, event: value } })} />
                 </div>
               </section>
-              <Section title="Recetas guardadas" subtitle={`${data.recipes.length} fichas técnicas`}>
-                <div className="saved-recipes">
-                  {data.recipes.map((item) => <div className="saved-recipe" key={item.id}>
-                    <button className="recipe-name" onClick={() => editRecipe(item)}><strong>{item.name}</strong><small>{item.batchSize} barras · {item.soapWeight} g c/u</small></button>
-                    <button className="icon-button danger-text" aria-label={`Eliminar ${item.name}`} onClick={() => deleteRow('recipes', item.id, 'esta receta')}>×</button>
-                  </div>)}
-                  {data.recipes.length === 0 && <Empty text="Guarda tu primera receta para verla aquí." />}
-                </div>
-              </Section>
             </div>
           </div>
+        )}
+        {tab === 'savedRecipes' && (
+          <Section
+            title="Recetas guardadas"
+            subtitle={`${data.recipes.length} fichas técnicas disponibles`}
+            action="＋ Nueva receta"
+            onAction={createRecipe}
+          >
+            <div className="saved-recipes">
+              {data.recipes.map((item) => <div className="saved-recipe" key={item.id}>
+                <button className="recipe-name" onClick={() => editRecipe(item)}><strong>{item.name}</strong><small>{item.batchSize} barras · {item.soapWeight} g c/u</small></button>
+                <button className="icon-button danger-text" aria-label={`Eliminar ${item.name}`} onClick={() => deleteRow('recipes', item.id, 'esta receta')}>×</button>
+              </div>)}
+              {data.recipes.length === 0 && <Empty text="Guarda tu primera receta para verla aquí." />}
+            </div>
+          </Section>
         )}
         {tab === 'production' && (
           <Section title="Historial de producción" subtitle="Lotes registrados y costos reales" action="＋ Registrar producción" onAction={() => setModal({ kind: 'production' })}>
@@ -1172,33 +1238,41 @@ function App() {
           </Section>
         )}
         {tab === 'sales' && (
-          <Section title="Pedidos y comprobantes" subtitle="Guarda pedidos y emite comprobantes al confirmar la venta" action="＋ Nuevo pedido" onAction={() => openSalesOrder()}>
-            <Table headers={['N.º / pedido', 'Fecha', 'Cliente', 'Unidades', 'Total', 'Estado', 'Acciones']}>
-              {data.sales.map((sale) => (
-                <tr key={sale.id}>
-                  <td><code>{sale.invoice_number || `PED-${sale.id.slice(0, 8).toUpperCase()}`}</code></td>
-                  <td>{new Date(`${sale.invoice_date || sale.created_at.slice(0, 10)}T12:00:00`).toLocaleDateString('es-HN')}</td>
-                  <td className="strong">{sale.customer_name}</td>
-                  <td>{(sale.sale_items || []).reduce((sum, item) => sum + number(item.quantity), 0)}</td>
-                  <td className="green">{money(sale.total)}</td>
-                  <td><span className={`pill ${sale.status === 'issued' && sale.payment_status === 'paid' ? 'good' : 'warning'}`}>
-                    {sale.status === 'draft' ? 'Borrador' : sale.payment_status === 'paid' ? 'Emitido · pagado' : 'Emitido · por cobrar'}
-                  </span></td>
-                  <td className="sale-actions">
-                    {sale.status === 'draft'
-                      ? <>
-                        <button className="icon-button" aria-label="Editar pedido" title="Editar pedido" onClick={() => openSalesOrder(sale)}>✎</button>
-                        <button className="button primary small" onClick={() => issueSalesOrder(sale)}>Emitir</button>
-                      </>
-                      : <>
-                        <button className="button secondary small" onClick={() => setModal({ kind: 'invoice', sale })}>Ver / imprimir</button>
-                        {sale.payment_status === 'pending' && <button className="button primary small" onClick={() => markAsPaid('sales', sale)}>Marcar pagada</button>}
-                      </>}
-                  </td>
-                </tr>
-              ))}
-            </Table>
-          </Section>
+          <div className="sales-page">
+            <Section title="Facturar una venta" subtitle="Crea una venta y emite su comprobante cuando esté lista" action="＋ Crear venta" onAction={() => openSalesOrder()}>
+              <div className="sales-intro">
+                <span className="sales-intro-icon">▧</span>
+                <p>Registra los productos y el pago. La venta quedará como borrador hasta que la emitas; al emitirla se valida el inventario de jabones terminados.</p>
+              </div>
+            </Section>
+            <Section title="Registro de ventas" subtitle={`${data.sales.length} ventas y borradores registrados`}>
+              <Table headers={['N.º / venta', 'Fecha', 'Cliente', 'Unidades', 'Total', 'Estado', 'Acciones']}>
+                {data.sales.map((sale) => (
+                  <tr key={sale.id}>
+                    <td><code>{sale.invoice_number || `VTA-${sale.id.slice(0, 8).toUpperCase()}`}</code></td>
+                    <td>{new Date(`${sale.invoice_date || sale.created_at.slice(0, 10)}T12:00:00`).toLocaleDateString('es-HN')}</td>
+                    <td className="strong">{sale.customer_name}</td>
+                    <td>{(sale.sale_items || []).reduce((sum, item) => sum + number(item.quantity), 0)}</td>
+                    <td className="green">{money(sale.total)}</td>
+                    <td><span className={`pill ${sale.status === 'issued' && sale.payment_status === 'paid' ? 'good' : 'warning'}`}>
+                      {sale.status === 'draft' ? 'Borrador' : sale.payment_status === 'paid' ? 'Facturado · pagado' : 'Facturado · por cobrar'}
+                    </span></td>
+                    <td className="sale-actions">
+                      {sale.status === 'draft'
+                        ? <>
+                          <button className="icon-button" aria-label="Editar venta" title="Editar venta" onClick={() => openSalesOrder(sale)}>✎</button>
+                          <button className="button primary small" onClick={() => issueSalesOrder(sale)}>Emitir factura</button>
+                        </>
+                        : <>
+                          <button className="button secondary small" onClick={() => setModal({ kind: 'invoice', sale })}>Ver / imprimir</button>
+                          {sale.payment_status === 'pending' && <button className="button primary small" onClick={() => markAsPaid('sales', sale)}>Marcar pagada</button>}
+                        </>}
+                    </td>
+                  </tr>
+                ))}
+              </Table>
+            </Section>
+          </div>
         )}
         {tab === 'purchases' && (
           <Section title="Compras e insumos" subtitle="Registra compras de materia prima, insumos indirectos y utensilios" action="＋ Registrar compra" onAction={openPurchaseForm}>
@@ -1301,6 +1375,7 @@ function App() {
         )}
         <footer className="footer">Fragancia & Miel <span>·</span> Control de costos e inventario</footer>
       </main>
+      </div>
 
       {modal && !['production', 'sale', 'purchase', 'purchaseDetail', 'invoice'].includes(modal.kind) && (
         <Dialog title={`${modal.item ? 'Editar' : 'Registrar'} ${modal.kind === 'materials' ? 'materia prima' : modal.kind === 'indirects' ? 'insumo indirecto' : 'utensilio'}`} onClose={() => setModal(null)}>
@@ -1335,7 +1410,7 @@ function App() {
         </Dialog>
       )}
       {modal?.kind === 'sale' && saleDraft && (
-        <Dialog className="sales-dialog" title={saleDraft.id ? 'Editar pedido' : 'Nuevo pedido'} onClose={() => { setModal(null); setSaleDraft(null); }}>
+        <Dialog className="sales-dialog" title={saleDraft.id ? 'Editar venta' : 'Crear venta'} onClose={() => { setModal(null); setSaleDraft(null); }}>
           <form className="stack-form" onSubmit={saveSalesOrder}>
             <div className="form-grid">
               <Field label="Cliente (opcional)"><input value={saleDraft.customerName} placeholder="Cliente general" onChange={(event) => setSaleDraft({ ...saleDraft, customerName: event.target.value })} /></Field>
@@ -1385,11 +1460,11 @@ function App() {
                 );
               })}
             </div>
-            <div className="sale-total"><span>Total del pedido</span><strong>{money(saleDraftTotal)}</strong></div>
-            <p className="form-note">El pedido queda en borrador. Al emitir el comprobante se verifica y descuenta el stock de jabones terminados.</p>
+            <div className="sale-total"><span>Total de la venta</span><strong>{money(saleDraftTotal)}</strong></div>
+            <p className="form-note">La venta queda en borrador. Al emitir la factura se verifica y descuenta el stock de jabones terminados.</p>
             <div className="dialog-actions">
               <button type="button" className="button secondary" onClick={() => { setModal(null); setSaleDraft(null); }}>Cancelar</button>
-              <button className="button primary">Guardar pedido</button>
+              <button className="button primary">Guardar venta</button>
             </div>
           </form>
         </Dialog>
