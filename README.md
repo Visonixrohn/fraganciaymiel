@@ -23,7 +23,7 @@ En **Settings → Pages → Build and deployment**, selecciona **GitHub Actions*
 
 ## Funciones
 
-- Inventario de materias primas con alertas, existencias y costo unitario.
+- Inventario de materias primas con alertas, existencias y costo unitario configurable por gramo, mililitro o pieza.
 - Control de insumos indirectos y depreciación de utensilios.
 - Creación de recetas con varias materias primas, insumos indirectos y utensilios; muestra el costo unitario y subtotal por ingrediente, simula costos y precios por margen.
 - Precios editables al detalle, por mayor y para eventos; calcula ganancia por barra y margen bruto (`(precio - costo) / precio`).
@@ -37,3 +37,5 @@ En **Settings → Pages → Build and deployment**, selecciona **GitHub Actions*
 **Importante:** `8863` se valida en React y puede encontrarse inspeccionando los archivos del frontend; es una pantalla de acceso, no una autenticación segura. Todas las sesiones anónimas comparten el mismo inventario y pueden consultar, crear, editar o eliminar sus registros. Por tanto, cualquier persona que pueda abrir la aplicación puede acceder a esos datos; para restringir el acceso, configura autenticación real en Supabase y políticas RLS por usuario. Nunca pongas una clave secreta o `service_role` en React.
 
 Los comprobantes de venta y los reportes financieros son internos/de gestión; no tienen validez fiscal ni representan estados auditados. Configura los saldos iniciales en **Finanzas** para reflejar caja, cuentas por cobrar/pagar y capital a la fecha de apertura. El balance muestra inventario, efectivo, cuentas por cobrar, cuentas por pagar y patrimonio; no contempla préstamos, impuestos ni activos fijos como cuentas separadas. Al comprar insumos indirectos, la cantidad representa unidades de rendimiento agregadas; al comprar utensilios, representa usos de vida útil agregados. Si ya habías ejecutado una versión anterior de `supabase/schema.sql`, vuelve a ejecutar el archivo actualizado para habilitar varias selecciones por receta y actualizar el registro de compras.
+
+Al registrar o editar una materia prima, ingresa su costo por unidad de medida (LPS/g, LPS/ml o LPS/pza). El sistema calcula el costo total de las existencias y lo usa para estimar el costo de cada receta.

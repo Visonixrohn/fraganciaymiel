@@ -351,8 +351,16 @@ function App() {
   function openEntity(kind, item = null) {
     const fields = {
       materials: item
-        ? { code: item.code, name: item.name, unit: item.unit, min: item.min, initial: item.initial, purchased: item.purchased, totalCost: item.totalCost }
-        : { code: '', name: '', unit: 'g', min: '', initial: 0, purchased: 0, totalCost: '' },
+        ? {
+          code: item.code,
+          name: item.name,
+          unit: item.unit,
+          min: item.min,
+          initial: item.initial,
+          purchased: item.purchased,
+          unitCost: item.totalCost / Math.max(1, item.initial + item.purchased),
+        }
+        : { code: '', name: '', unit: 'g', min: '', initial: 0, purchased: 0, unitCost: '' },
       indirects: item
         ? { code: item.code, name: item.name, type: item.type, cost: item.cost, yieldVal: item.yieldVal }
         : { code: '', name: '', type: 'Envase / Botella', cost: '', yieldVal: '' },
@@ -374,7 +382,7 @@ function App() {
         minimum_stock: number(values.min),
         initial_stock: number(values.initial),
         purchased: number(values.purchased),
-        total_cost: number(values.totalCost),
+        total_cost: number(values.unitCost) * (number(values.initial) + number(values.purchased)),
       },
       indirects: {
         ...common,
@@ -1304,7 +1312,10 @@ function App() {
                 <Field label="Stock inicial"><input type="number" min="0" step="any" required value={modal.values.initial} onChange={(e) => setModal({ ...modal, values: { ...modal.values, initial: e.target.value } })} /></Field>
                 <Field label="Compras / entradas"><input type="number" min="0" step="any" required value={modal.values.purchased} onChange={(e) => setModal({ ...modal, values: { ...modal.values, purchased: e.target.value } })} /></Field>
               </div>
-              <Field label="Costo total de compra (LPS)"><input type="number" min="0" step="any" required value={modal.values.totalCost} onChange={(e) => setModal({ ...modal, values: { ...modal.values, totalCost: e.target.value } })} /></Field>
+              <Field label={`Costo unitario (LPS por ${modal.values.unit})`}>
+                <input type="number" min="0" step="any" required value={modal.values.unitCost} onChange={(e) => setModal({ ...modal, values: { ...modal.values, unitCost: e.target.value } })} />
+              </Field>
+              <p className="form-note">Este costo se aplica a cada ingrediente de las recetas. El valor total del inventario se calcula con el stock inicial y las compras.</p>
             </>}
             {modal.kind === 'indirects' && <>
               <Field label="Tipo de asignación"><select value={modal.values.type} onChange={(e) => setModal({ ...modal, values: { ...modal.values, type: e.target.value } })}><option>Envase / Botella</option><option>Gasto Mensual Fijo</option></select></Field>
