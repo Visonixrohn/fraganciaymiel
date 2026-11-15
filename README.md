@@ -25,7 +25,7 @@ En **Settings → Pages → Build and deployment**, selecciona **GitHub Actions*
 
 - Inventario de materias primas con alertas, existencias y costo unitario configurable por gramo, mililitro o pieza.
 - Control de insumos indirectos y depreciación de utensilios.
-- Creación de recetas con varias materias primas, insumos indirectos y utensilios; muestra el costo unitario y subtotal por ingrediente, simula costos y precios por margen.
+- Creación de recetas con varias materias primas, insumos indirectos y utensilios; las cantidades de materia prima se ingresan por jabón, se multiplican por el tamaño del lote y se muestra el costo por barra.
 - Precios editables al detalle, por mayor y para eventos; calcula ganancia por barra y margen bruto (`(precio - costo) / precio`).
 - Registro transaccional de producción: verifica existencias y descuenta materias primas.
 - Pedidos en borrador y comprobantes internos numerados; al emitirlos valida las existencias de jabones terminados (producción menos ventas), registra la venta y permite imprimir o reimprimir el comprobante.
@@ -38,4 +38,4 @@ En **Settings → Pages → Build and deployment**, selecciona **GitHub Actions*
 
 Los comprobantes de venta y los reportes financieros son internos/de gestión; no tienen validez fiscal ni representan estados auditados. Configura los saldos iniciales en **Finanzas** para reflejar caja, cuentas por cobrar/pagar y capital a la fecha de apertura. El balance muestra inventario, efectivo, cuentas por cobrar, cuentas por pagar y patrimonio; no contempla préstamos, impuestos ni activos fijos como cuentas separadas. Al comprar insumos indirectos, la cantidad representa unidades de rendimiento agregadas; al comprar utensilios, representa usos de vida útil agregados. Si ya habías ejecutado una versión anterior de `supabase/schema.sql`, vuelve a ejecutar el archivo actualizado para habilitar varias selecciones por receta, guardar el costo unitario de materias primas y actualizar el registro de compras.
 
-Al registrar o editar una materia prima, ingresa su costo por unidad de medida (LPS/g, LPS/ml o LPS/pza). El sistema calcula el costo total de las existencias y lo usa para estimar el costo de cada receta.
+Al registrar una compra, ingresa el costo de una unidad por artículo; el sistema calcula cada importe como cantidad × costo unitario y actualiza el costo promedio ponderado de la materia prima. Al registrar o editar una materia prima, ingresa su costo por unidad de medida (LPS/g, LPS/ml o LPS/pza). En las recetas, ingresa las cantidades de ingredientes necesarias para un jabón: el costo total del lote multiplica ese consumo por la cantidad de jabones y la producción descuenta del inventario el consumo por jabón multiplicado por los jabones fabricados.

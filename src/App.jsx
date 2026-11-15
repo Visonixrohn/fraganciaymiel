@@ -203,8 +203,7 @@ function App() {
     const materials = recipe.items.reduce((sum, item) => {
       const material = data.materials.find((entry) => entry.id === item.materialId);
       if (!material) return sum;
-      const available = material.initial + material.purchased;
-      return sum + material.unitCost * number(item.qty);
+      return sum + material.unitCost * number(item.qty) * batchSize;
     }, 0);
     const indirectCost = recipe.indirectIds.reduce((sum, id) => {
       const indirect = data.indirects.find((item) => item.id === id);
@@ -1059,7 +1058,7 @@ function App() {
                   <label>Tamaño del lote (jabones)<input type="number" min="1" value={recipe.batchSize} onChange={(event) => setRecipe({ ...recipe, batchSize: event.target.value })} required /></label>
                   <label>Peso por barra (g)<input type="number" min="1" value={recipe.soapWeight} onChange={(event) => setRecipe({ ...recipe, soapWeight: event.target.value })} required /></label>
                 </div>
-                <div className="list-heading"><h3>Materia prima del lote</h3><button type="button" className="text-button" onClick={() => setRecipe({ ...recipe, items: [...recipe.items, { materialId: '', qty: '' }] })}>＋ Agregar ingrediente</button></div>
+                <div className="list-heading"><h3>Materia prima por jabón</h3><button type="button" className="text-button" onClick={() => setRecipe({ ...recipe, items: [...recipe.items, { materialId: '', qty: '' }] })}>＋ Agregar ingrediente</button></div>
                 {recipe.items.map((item, index) => {
                   const material = data.materials.find((entry) => entry.id === item.materialId);
                   const unitCost = material?.unitCost || 0;
@@ -1072,7 +1071,7 @@ function App() {
                       <input type="number" min="0" step="any" placeholder="Cantidad" aria-label="Cantidad" value={item.qty} onChange={(event) => setRecipe({ ...recipe, items: recipe.items.map((row, i) => i === index ? { ...row, qty: event.target.value } : row) })} />
                       <button type="button" className="icon-button danger-text" aria-label="Quitar ingrediente" onClick={() => setRecipe({ ...recipe, items: recipe.items.filter((_, i) => i !== index) })}>×</button>
                       <div className="ingredient-cost">
-                        {material ? `Costo unitario: ${unitMoney(unitCost)} / ${material.unit} · Subtotal: ${money(unitCost * number(item.qty))}` : 'Selecciona la materia prima para calcular su costo.'}
+                        {material ? `Costo unitario: ${unitMoney(unitCost)} / ${material.unit} · Subtotal por jabón: ${money(unitCost * number(item.qty))}` : 'Selecciona la materia prima para calcular su costo.'}
                       </div>
                     </div>
                   );
@@ -1438,7 +1437,7 @@ function App() {
                       ...purchaseDraft,
                       items: purchaseDraft.items.map((row, rowIndex) => rowIndex === index ? { ...row, quantity: event.target.value } : row),
                     })} />
-                    <input aria-label="Costo unitario" type="number" min="0" step="0.000001" required value={item.unitCost} placeholder={`LPS / ${item.itemType === 'utensils' ? 'uso' : 'unidad'}`} onChange={(event) => setPurchaseDraft({
+                    <input aria-label={`Costo unitario en LPS por ${unitLabel}`} type="number" min="0" step="0.000001" required value={item.unitCost} placeholder={`LPS / ${item.itemType === 'utensils' ? 'uso' : 'unidad'}`} onChange={(event) => setPurchaseDraft({
                       ...purchaseDraft,
                       items: purchaseDraft.items.map((row, rowIndex) => rowIndex === index ? { ...row, unitCost: event.target.value } : row),
                     })} />
@@ -1455,7 +1454,7 @@ function App() {
               <span>Total de compra</span>
               <strong>{money(purchaseDraft.items.reduce((sum, item) => sum + number(item.quantity) * number(item.unitCost), 0))}</strong>
             </div>
-            <p className="form-note">La compra suma stock y costo a materias primas; en insumos indirectos acumula costo y rendimiento, y en utensilios acumula costo y vida útil (usos).</p>
+            <p className="form-note">Ingresa el costo de una unidad del artículo; el importe de cada línea se calcula como cantidad × costo unitario. La compra suma stock y costo a materias primas, rendimiento a insumos indirectos y vida útil (usos) a utensilios.</p>
             <div className="dialog-actions">
               <button type="button" className="button secondary" onClick={() => { setModal(null); setPurchaseDraft(null); }}>Cancelar</button>
               <button className="button primary">Registrar compra</button>

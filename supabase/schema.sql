@@ -503,7 +503,7 @@ begin
     order by ri.material_id
     for update of m
   loop
-    v_required := v_item.quantity * p_quantity::numeric / v_recipe.batch_size;
+    v_required := v_item.quantity * p_quantity::numeric;
     if v_item.initial_stock + v_item.purchased - v_item.used < v_required then
       raise exception 'Existencias insuficientes para una o más materias primas.';
     end if;
@@ -813,14 +813,15 @@ begin
       total_cost = m.total_cost + item_totals.total_cost,
       unit_cost = case
         when m.initial_stock + m.purchased + item_totals.quantity > 0
-          then (m.total_cost + item_totals.total_cost)
+          then (m.unit_cost * (m.initial_stock + m.purchased) + item_totals.weighted_cost)
             / (m.initial_stock + m.purchased + item_totals.quantity)
         else m.unit_cost
       end
   from (
     select item.material_id,
       sum(quantity) as quantity,
-      sum(round(quantity * unit_cost, 2)) as total_cost
+      sum(round(quantity * unit_cost, 2)) as total_cost,
+      sum(quantity * unit_cost) as weighted_cost
     from jsonb_to_recordset(p_items) as item(item_type text, material_id uuid, indirect_id uuid, utensil_id uuid, quantity numeric, unit_cost numeric)
     where item.item_type = 'materials'
     group by item.material_id
