@@ -23,6 +23,9 @@ alter table public.materials add column if not exists unit_cost numeric(14, 6) n
 update public.materials
 set unit_cost = total_cost / nullif(initial_stock + purchased, 0)
 where unit_cost = 0 and total_cost > 0 and initial_stock + purchased > 0;
+update public.materials
+set total_cost = round(unit_cost * (initial_stock + purchased), 2)
+where total_cost is distinct from round(unit_cost * (initial_stock + purchased), 2);
 
 create table if not exists public.indirects (
   id uuid primary key default gen_random_uuid(),
@@ -810,18 +813,20 @@ begin
 
   update public.materials m
   set purchased = m.purchased + item_totals.quantity,
-      total_cost = m.total_cost + item_totals.total_cost,
+      total_cost = round(m.unit_cost * (m.initial_stock + m.purchased) + item_totals.purchase_cost, 2),
       unit_cost = case
         when m.initial_stock + m.purchased + item_totals.quantity > 0
-          then (m.unit_cost * (m.initial_stock + m.purchased) + item_totals.weighted_cost)
-            / (m.initial_stock + m.purchased + item_totals.quantity)
+          then round(
+            (m.unit_cost * (m.initial_stock + m.purchased) + item_totals.purchase_cost)
+              / (m.initial_stock + m.purchased + item_totals.quantity),
+            6
+          )
         else m.unit_cost
       end
   from (
     select item.material_id,
       sum(quantity) as quantity,
-      sum(round(quantity * unit_cost, 2)) as total_cost,
-      sum(quantity * unit_cost) as weighted_cost
+      sum(round(quantity * unit_cost, 2)) as purchase_cost
     from jsonb_to_recordset(p_items) as item(item_type text, material_id uuid, indirect_id uuid, utensil_id uuid, quantity numeric, unit_cost numeric)
     where item.item_type = 'materials'
     group by item.material_id

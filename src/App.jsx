@@ -49,15 +49,21 @@ const paymentMethods = [
   ['other', 'Otro'],
 ];
 
-const fromMaterial = (row) => ({
-  ...row,
-  initial: number(row.initial_stock),
-  purchased: number(row.purchased),
-  used: number(row.used),
-  min: number(row.minimum_stock),
-  totalCost: number(row.total_cost),
-  unitCost: number(row.unit_cost),
-});
+const fromMaterial = (row) => {
+  const initial = number(row.initial_stock);
+  const purchased = number(row.purchased);
+  const acquired = initial + purchased;
+  const unitCost = number(row.unit_cost) || number(row.total_cost) / Math.max(1, acquired);
+  return {
+    ...row,
+    initial,
+    purchased,
+    used: number(row.used),
+    min: number(row.minimum_stock),
+    totalCost: unitCost * acquired,
+    unitCost,
+  };
+};
 const fromIndirect = (row) => ({ ...row, yieldVal: number(row.yield_value), cost: number(row.cost) });
 const fromUtensil = (row) => ({ ...row, cost: number(row.cost), life: number(row.useful_life) });
 const fromRecipe = (row) => ({
@@ -91,6 +97,7 @@ function App() {
   const [notice, setNotice] = useState(null);
   const [tab, setTab] = useState('materials');
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [materialSearch, setMaterialSearch] = useState('');
   const [data, setData] = useState({
     materials: [],
     indirects: [],
@@ -217,6 +224,17 @@ function App() {
     recipes: data.recipes.length,
     batches: data.batches.length,
   }), [data]);
+
+  const visibleMaterials = useMemo(() => {
+    const query = materialSearch.trim().toLocaleLowerCase('es');
+    return data.materials
+      .filter((material) => !query || [material.code, material.name, material.unit]
+        .some((value) => String(value).toLocaleLowerCase('es').includes(query)))
+      .sort((a, b) => {
+        const stockDifference = (b.initial + b.purchased - b.used) - (a.initial + a.purchased - a.used);
+        return stockDifference || a.name.localeCompare(b.name, 'es');
+      });
+  }, [data.materials, materialSearch]);
 
   const costs = useMemo(() => {
     const batchSize = Math.max(1, number(recipe.batchSize));
@@ -1071,8 +1089,20 @@ function App() {
         {loading && <div className="loading-inline">Sincronizando datos con Supabase…</div>}
         {tab === 'materials' && (
           <Section title="Inventario de materia prima directa" subtitle="Controla existencias, compras y alertas de reposición" action="＋ Nueva materia prima" onAction={() => openEntity('materials')}>
-            <Table headers={['Código', 'Insumo', 'Unidad', 'Stock inicial', 'Compras', 'Usado', 'Stock actual', 'Mínimo', 'Costo compra', 'Costo unitario', 'Estado', '']}>
-              {data.materials.map((item) => {
+            <div className="inventory-toolbar">
+              <label className="inventory-search">
+                <span>Buscar materia prima</span>
+                <input
+                  type="search"
+                  value={materialSearch}
+                  onChange={(event) => setMaterialSearch(event.target.value)}
+                  placeholder="Buscar por código, nombre o unidad…"
+                />
+              </label>
+              <span className="inventory-count">{visibleMaterials.length} de {data.materials.length} insumos · ordenados por stock</span>
+            </div>
+            <Table headers={['Código', 'Insumo', 'Unidad', 'Stock inicial', 'Compras', 'Usado', 'Stock actual', 'Mínimo', 'Costo compra total', 'Costo unitario', 'Estado', '']}>
+              {visibleMaterials.map((item) => {
                 const stock = item.initial + item.purchased - item.used;
                 const low = stock <= item.min;
                 return <tr key={item.id}>
