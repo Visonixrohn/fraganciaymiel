@@ -58,6 +58,8 @@ button { cursor: pointer; }
 .nav-item:hover { background: #f4f8f4; color: var(--green-dark); }
 .nav-item.active { background: var(--green-soft); color: var(--green-dark); box-shadow: inset 3px 0 var(--green); }
 .nav-icon { display: grid; width: 20px; place-items: center; color: var(--green); font-size: 16px; }
+.nav-badge { display: inline-flex; min-width: 20px; height: 20px; align-items: center; justify-content: center; margin-left: auto; padding: 0 6px; border-radius: 999px; background: #b94f3f; color: #fff; font-size: 10px; font-weight: 800; animation: nav-badge-pulse 2s ease-in-out infinite; }
+@keyframes nav-badge-pulse { 50% { box-shadow: 0 0 0 4px #b94f3f20; } }
 .menu-toggle { display: none; }
 .sidebar-backdrop { display: none; }
 .panel { overflow: hidden; border: 1px solid var(--line); border-radius: 10px; background: white; box-shadow: 0 2px 7px #253c2e08; }

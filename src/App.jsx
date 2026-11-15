@@ -261,6 +261,28 @@ function App() {
     loadData();
   }, [loadData]);
 
+  useEffect(() => {
+    if (!session) return undefined;
+    const channel = supabase
+      .channel(`web-orders-${session.user.id}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'web_orders',
+      }, (payload) => {
+        toast(`¡Nuevo pedido web${payload.new?.order_number ? ` ${payload.new.order_number}` : ''}!`);
+        loadData();
+      })
+      .subscribe((status) => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          toast('No se pudo conectar con las notificaciones de pedidos web.', 'error');
+        }
+      });
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [session, loadData, toast]);
+
   const metrics = useMemo(() => ({
     materials: data.materials.length,
     alerts: data.materials.filter((item) => item.initial + item.purchased - item.used <= item.min).length
@@ -268,6 +290,8 @@ function App() {
     recipes: data.recipes.length,
     batches: data.batches.length,
   }), [data]);
+  const activeWebOrderCount = data.webOrders
+    .filter((order) => ['pending', 'confirmed'].includes(order.status)).length;
 
   const visibleMaterials = useMemo(() => {
     const query = materialSearch.trim().toLocaleLowerCase('es');
@@ -1335,6 +1359,11 @@ function App() {
                   }}
                 >
                   <span className="nav-icon">{icon}</span><span>{title}</span>
+                  {id === 'webOrders' && activeWebOrderCount > 0 && (
+                    <span className="nav-badge" aria-label={`${activeWebOrderCount} pedidos por gestionar`} aria-live="polite">
+                      {activeWebOrderCount > 99 ? '99+' : activeWebOrderCount}
+                    </span>
+                  )}
                 </button>
               ))}
             </section>

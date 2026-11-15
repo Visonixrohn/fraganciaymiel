@@ -31,8 +31,8 @@ En **Settings → Pages → Build and deployment**, selecciona **GitHub Actions*
 - Registro transaccional de producción: verifica existencias y descuenta materias primas.
 - Ventas en borrador y comprobantes internos numerados; al emitirlos valida las existencias de jabones terminados (producción menos ventas), registra la venta y permite imprimir o reimprimir la factura.
 - Registro de compras por materia prima, insumo indirecto o utensilio, con proveedor, costo unitario y forma de pago; las compras acumulan stock/costo y rendimiento o vida útil según el tipo.
-- Catálogo público independiente en `storefront.html`, con fotos, disponibilidad por lote, beneficios, composición, modo de uso y formulario de pedidos.
-- Pedidos web con reserva atómica de unidades; confirmar conserva la reserva, cancelar la libera y completar convierte el pedido en una venta facturada.
+- Catálogo público independiente en `storefront.html`, con tarjetas interactivas, carrito de compras modal, disponibilidad por lote, beneficios, composición y modo de uso.
+- Pedidos web con reserva atómica de unidades; confirmar conserva la reserva, cancelar la libera y completar convierte el pedido en una venta facturada. El panel muestra un contador de pedidos activos y notifica nuevas órdenes en tiempo real.
 - Configuración de nombre, logo, contacto, WhatsApp y presentación del negocio desde el panel. Las imágenes se guardan en el bucket público `jabon`; solo usuarios autenticados pueden subirlas o editarlas.
 - Administración de productos web vinculados a un lote producido. La tienda solo publica productos activos con precio definido y muestra existencias actualizadas.
 - Control de cobros, pagos y gastos, con estado de resultados por período y balance general de gestión.

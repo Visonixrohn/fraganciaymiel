@@ -510,6 +510,20 @@ drop policy if exists "Authenticated users view web order items" on public.web_o
 create policy "Authenticated users view web order items" on public.web_order_items
   for select to authenticated using (true);
 
+do $$
+begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime')
+     and not exists (
+       select 1 from pg_publication_tables
+       where pubname = 'supabase_realtime'
+         and schemaname = 'public'
+         and tablename = 'web_orders'
+     ) then
+    alter publication supabase_realtime add table public.web_orders;
+  end if;
+end;
+$$;
+
 grant select, insert, update, delete on public.materials, public.indirects, public.utensils, public.recipes, public.recipe_items, public.recipe_indirects, public.recipe_utensils, public.batches, public.sales, public.sale_items, public.purchases, public.purchase_items, public.expenses, public.finance_settings, public.web_settings, public.web_products to authenticated;
 grant select on public.web_orders, public.web_order_items to authenticated;
 grant usage, select on sequence public.sales_invoice_number_seq, public.purchases_number_seq, public.web_order_number_seq to authenticated;

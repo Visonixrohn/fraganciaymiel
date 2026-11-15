@@ -24,41 +24,140 @@
     @media(max-width:800px){.products{grid-template-columns:repeat(2,minmax(0,1fr))}.about{padding:30px;gap:24px}.order-section{grid-template-columns:1fr}}
     @media(max-width:560px){.top{padding:10px 5%}.top nav>a:not(.cart-link){display:none}.brand strong{font-size:17px}.hero{padding:70px 20px}.hero:before{left:-36px}.hero:after{right:-40px}.products{grid-template-columns:1fr;gap:16px}.section{padding:48px 0}.about{grid-template-columns:1fr;padding:22px}.about-art{min-height:130px}.order-form,.cart-panel{padding:18px}.reseller h2{font-size:28px}}
   </style>
+  <style>
+    html{scroll-behavior:smooth}.cart-link{position:relative;border:0;cursor:pointer;box-shadow:0 6px 16px #244b3828;transition:transform .2s,box-shadow .2s}.cart-link:hover{transform:translateY(-2px);box-shadow:0 10px 24px #244b3838}.cart-link.has-items{animation:cart-attention .45s ease}.cart-count-badge{display:grid;min-width:21px;height:21px;place-items:center;padding:0 5px;border-radius:20px;background:#d9bd82;color:#213d2d;font-size:10px;font-weight:800;transition:transform .2s}.cart-link.has-items .cart-count-badge{animation:badge-pop .36s ease}
+    .product{position:relative;border-color:#e9e4d8;border-radius:16px;box-shadow:0 8px 26px #273a2c0c;transition:transform .28s cubic-bezier(.2,.8,.2,1),box-shadow .28s,border-color .2s}.product:hover{transform:translateY(-7px);border-color:#d6c69e;box-shadow:0 20px 44px #273a2c1c}.product.is-selected{border-color:#78a37e;box-shadow:0 0 0 3px #78a37e25,0 14px 36px #273a2c16}.product-image{position:relative;aspect-ratio:4/3;background:radial-gradient(circle at 30% 20%,#fffdf7,#e9e6d9 78%)}.product-image:after{position:absolute;inset:auto 0 0;height:35%;content:"";background:linear-gradient(transparent,#1a332215);pointer-events:none}.product-image img{transition:transform .55s cubic-bezier(.2,.8,.2,1)}.product:hover .product-image img{transform:scale(1.055)}.product-body{padding:21px}.product-body h3{font-size:23px}.availability{display:inline-flex;align-items:center;gap:5px;border:1px solid #dfebdc}.availability:before{width:6px;height:6px;border-radius:50%;background:#60966a;content:""}.availability.none:before{background:#a55443}.product-details{min-height:145px}.buy-row{align-items:center}.buy-row input{width:78px;border-radius:9px;background:#fcfbf7;text-align:center}.buy-row input:focus{border-color:#78a37e;box-shadow:0 0 0 3px #78a37e25}.buy-row button{border-radius:9px;box-shadow:0 6px 15px #244b3820;transition:transform .18s,background .18s}.buy-row button:hover:not(:disabled){transform:translateY(-2px);background:#315f43}.buy-row button.added{background:#60966a;animation:added-pop .35s ease}
+    .order-section{display:flex;justify-content:center}.order-invitation{width:min(100%,650px);padding:38px;border:1px solid #e8e4d8;border-radius:18px;background:linear-gradient(145deg,#fff,#f4f3eb);box-shadow:0 12px 35px #273a2c0c;text-align:center}.order-invitation .flower{display:grid;width:58px;height:58px;place-items:center;margin:0 auto 15px;border-radius:50%;background:#edf1e8;color:#9e8051;font-size:27px}.order-invitation h3{margin:0 0 9px;color:var(--green);font:700 25px "Playfair Display",serif}.order-invitation p{margin:0 auto 20px;color:var(--muted);font-size:13px;line-height:1.7}.order-invitation .button{border-radius:9px;box-shadow:0 7px 17px #244b3826}
+    .modal-backdrop{position:fixed;z-index:20;inset:0;display:grid;place-items:center;padding:22px;background:#142319a8;backdrop-filter:blur(7px);animation:fade-in .2s ease}.modal-backdrop[hidden]{display:none}.shopping-modal,.result-modal{position:relative;width:min(100%,950px);max-height:min(92vh,900px);overflow:auto;border:1px solid #eee8d9;border-radius:21px;background:#fbfaf6;box-shadow:0 30px 90px #111c14a6;animation:modal-rise .28s cubic-bezier(.2,.8,.2,1)}.modal-heading{position:sticky;top:0;z-index:2;display:flex;align-items:center;justify-content:space-between;gap:15px;padding:21px 26px;border-bottom:1px solid var(--line);background:#fbfaf6ed;backdrop-filter:blur(12px)}.modal-heading h2{margin:0;color:var(--green);font:700 25px "Playfair Display",serif}.modal-heading p{margin:4px 0 0;color:var(--muted);font-size:11px}.modal-close{display:grid;width:38px;height:38px;place-items:center;border:1px solid var(--line);border-radius:50%;background:white;color:#536357;font-size:22px;cursor:pointer;transition:transform .2s,background .2s}.modal-close:hover{transform:rotate(90deg);background:#f1eee5}.modal-body{display:grid;grid-template-columns:1fr .9fr;gap:20px;padding:22px}.modal-cart-summary,.order-form{min-width:0;padding:21px;border:1px solid var(--line);border-radius:14px;background:white;box-shadow:0 5px 18px #273a2c08}.modal-cart-summary h3,.order-form h3{margin:0 0 14px;color:var(--green);font:700 19px "Playfair Display",serif}.cart-lines{display:grid;gap:11px}.cart-empty{display:grid;min-height:180px;place-items:center;padding:20px;border:1px dashed #ded9ca;border-radius:11px;color:var(--muted);font-size:12px;text-align:center}.cart-empty span{display:block;color:#b29b6c;font-size:28px}.cart-item{display:grid;grid-template-columns:68px minmax(0,1fr) auto;gap:11px;align-items:center;padding:10px;border:1px solid #eeece4;border-radius:11px;background:#fffefa;animation:fade-in .2s ease}.cart-item img,.cart-item-art{width:68px;height:68px;border-radius:8px;object-fit:cover}.cart-item-art{display:grid;place-items:center;background:#f0eee4;color:#ac9460;font-size:24px}.cart-item-name{display:block;color:#314838;font-size:12px;font-weight:700}.cart-item-price{display:block;margin-top:4px;color:#778078;font-size:10px}.cart-item-quantity{display:flex;align-items:center;gap:8px;margin-top:8px}.cart-item-quantity button{display:grid;width:25px;height:25px;place-items:center;border:1px solid #e5e6dc;border-radius:50%;background:white;color:var(--green);cursor:pointer}.cart-item-quantity button:disabled{opacity:.35;cursor:not-allowed}.cart-item-quantity strong{min-width:14px;text-align:center;font-size:11px}.cart-line-total{color:var(--green);font-size:11px;font-weight:700;white-space:nowrap}.remove-item{display:block;margin:7px 0 0 auto;padding:0;border:0;background:transparent;color:#a55443;font-size:10px;cursor:pointer}.modal-cart-total{display:flex;justify-content:space-between;margin-top:14px;padding-top:14px;border-top:1px solid var(--line);color:#516052;font-size:12px;font-weight:700}.modal-cart-total strong{color:var(--green);font-size:18px}        *[hidden]{display:none!important}body.modal-open{overflow:hidden}.cart-link.cart-pop{animation:cart-attention .45s ease}.modal-feedback.feedback-shake{animation:feedback-shake .35s ease}.modal-actions .form-note{align-self:center;color:var(--muted);font-size:10px}
+    .modal-feedback{display:flex;gap:10px;align-items:flex-start;margin:0 22px;padding:13px 15px;border:1px solid #edc7bd;border-radius:11px;background:#fff1ed;color:#914536;font-size:12px;line-height:1.55}.modal-feedback-icon{display:grid;width:25px;height:25px;flex:0 0 25px;place-items:center;border-radius:50%;background:#f4d8cf;font-weight:800}.modal-actions{display:flex;justify-content:space-between;gap:10px;padding:0 22px 22px}.modal-actions .button{border-radius:9px;cursor:pointer}.order-form{display:grid;gap:11px;margin:0}.order-form label{gap:5px}.order-form input,.order-form textarea{border-radius:8px;background:#fdfdfa}.order-form .button{width:100%;margin-top:3px;border-radius:9px;cursor:pointer;box-shadow:0 7px 17px #244b3826}.order-form small{color:var(--muted);font-size:10px;line-height:1.5}.result-modal{width:min(100%,460px);overflow:hidden;padding:38px 34px 32px;text-align:center}.result-modal .modal-close{position:absolute;top:17px;right:17px}.result-icon{display:grid;width:76px;height:76px;place-items:center;margin:0 auto 17px;border-radius:50%;background:#e8f3e8;color:#438451;font-size:37px;animation:result-pop .55s cubic-bezier(.2,.8,.2,1)}.result-modal.error .result-icon{background:#fbe9e4;color:#a64d3c}.result-modal h2{margin:0 0 10px;color:var(--green);font:700 28px "Playfair Display",serif}.result-modal p{margin:0 auto 17px;color:#66736a;font-size:13px;line-height:1.7}.result-order{display:inline-flex;margin:0 auto 20px;padding:8px 13px;border:1px solid #e7e1d3;border-radius:20px;background:#f4f1e8;color:#6b5b3f;font-size:11px;font-weight:700}.result-warning{margin:0 auto 14px;padding:10px;border-radius:8px;background:#fff2e4;color:#875b1f;font-size:10px;line-height:1.5}.result-modal .button{min-width:190px;border-radius:9px;cursor:pointer}.site-toast{position:fixed;right:22px;bottom:22px;z-index:30;max-width:min(360px,calc(100vw - 32px));padding:13px 17px;border:1px solid #d5e6d3;border-radius:12px;background:#244b38;color:white;font-size:12px;font-weight:600;box-shadow:0 14px 32px #182b1e36;opacity:0;transform:translateY(15px);pointer-events:none;transition:opacity .22s,transform .22s}.site-toast.visible{opacity:1;transform:translateY(0)}.button:disabled{opacity:.55;cursor:not-allowed}
+    @keyframes fade-in{from{opacity:0}to{opacity:1}}@keyframes modal-rise{from{opacity:0;transform:translateY(18px) scale(.985)}to{opacity:1;transform:translateY(0) scale(1)}}@keyframes badge-pop{0%{transform:scale(.75)}65%{transform:scale(1.25)}100%{transform:scale(1)}}@keyframes cart-attention{35%{transform:rotate(-5deg) scale(1.08)}70%{transform:rotate(5deg) scale(1.08)}100%{transform:none}}@keyframes added-pop{50%{transform:scale(1.05)}}@keyframes result-pop{0%{transform:scale(.5);opacity:.2}70%{transform:scale(1.12)}100%{transform:scale(1);opacity:1}}@keyframes feedback-shake{20%{transform:translateX(-4px)}40%{transform:translateX(4px)}60%{transform:translateX(-3px)}80%{transform:translateX(3px)}}
+    @media(max-width:760px){.modal-backdrop{padding:12px}.shopping-modal{max-height:95vh}.modal-body{grid-template-columns:1fr;padding:15px}.modal-heading{padding:17px 19px}.modal-cart-summary,.order-form{padding:17px}.product-details{min-height:0}}
+    @media(max-width:560px){.order-invitation{padding:28px 20px}.modal-backdrop{align-items:end;padding:0}.shopping-modal{width:100%;max-height:94dvh;border-radius:20px 20px 0 0;animation:modal-sheet .3s ease}.modal-heading h2{font-size:22px}.modal-body{gap:12px;padding:12px}.modal-cart-summary,.order-form{padding:14px}.cart-item{grid-template-columns:54px minmax(0,1fr) auto;gap:8px;padding:8px}.cart-item img,.cart-item-art{width:54px;height:54px}.cart-line-total{font-size:10px}.modal-actions{padding:0 12px 14px}.modal-actions .button{flex:1;padding:0 10px}.result-modal{width:calc(100% - 28px);margin:auto;padding:34px 22px 26px;border-radius:20px}.site-toast{right:12px;bottom:12px}@keyframes modal-sheet{from{transform:translateY(30px);opacity:.6}to{transform:translateY(0);opacity:1}}}
+    @media(prefers-reduced-motion:reduce){*,*::before,*::after{scroll-behavior:auto!important;animation-duration:.01ms!important;animation-iteration-count:1!important;transition-duration:.01ms!important}}
+  </style>
 </head>
 <body>
   <header class="top">
     <a class="brand" href="#inicio"><span id="brand-mark" class="brand-mark">✿</span><span><strong id="brand-name">Fragancia &amp; Miel</strong><small>JABONES ARTESANALES</small></span></a>
-    <nav aria-label="Navegación principal"><a href="#productos">Productos</a><a href="#historia">Nuestra esencia</a><a class="cart-link" href="#pedido">Mi pedido <span id="cart-count">0</span></a></nav>
+    <nav aria-label="Navegación principal"><a href="#productos">Productos</a><a href="#historia">Nuestra esencia</a><button id="open-cart" class="cart-link" type="button" aria-haspopup="dialog" aria-controls="cart-modal">Mi pedido <span id="cart-count" class="cart-count-badge">0</span></button></nav>
   </header>
   <main>
     <section class="hero" id="inicio"><div class="hero-inner"><span class="eyebrow">Hecho a mano, con intención</span><h1 id="hero-title">Pequeños rituales, piel feliz.</h1><p id="hero-tagline">Jabones artesanales elaborados con ingredientes seleccionados y mucho cariño.</p><a class="button" href="#productos">Descubrir jabones</a></div></section>
     <section class="section content" id="productos"><div class="section-title"><span class="eyebrow">Nuestra colección</span><h2>Un jabón para cada momento</h2><p>Elaborados en pequeños lotes. Consulta la disponibilidad de cada producto antes de realizar tu pedido.</p></div><div id="catalog-status" class="loading">Cargando catálogo artesanal…</div><div id="products" class="products"></div></section>
     <section class="section content" id="historia"><div class="about"><div><span class="eyebrow">Conoce nuestro taller</span><h2>La belleza de lo hecho a mano</h2><p id="about-text">Cada jabón nace de una producción cuidada en nuestro taller. Elegimos cada ingrediente y preparamos lotes pequeños para ofrecer una experiencia sencilla y especial.</p></div><div class="about-art" aria-hidden="true">✿</div></div></section>
-    <section class="section content" id="pedido"><div class="section-title"><span class="eyebrow">Compra directa</span><h2>Prepara tu pedido</h2><p>Tu pedido reserva las unidades seleccionadas mientras el taller lo confirma.</p></div><div id="order-notice" class="notice" role="status"></div><div class="order-section"><div class="cart-panel"><h3>Tu selección</h3><div id="cart-lines" class="empty">Aún no agregas jabones.</div><div class="cart-total"><span>Total estimado</span><span id="cart-total">L 0.00</span></div></div><form id="order-form" class="order-form"><h3>Datos de contacto</h3><label>Nombre completo<input name="name" autocomplete="name" maxlength="120" required></label><label>Teléfono / WhatsApp<input name="phone" type="tel" autocomplete="tel" maxlength="40" required></label><label>Correo electrónico (opcional)<input name="email" type="email" autocomplete="email" maxlength="254"></label><label>Dirección o zona de entrega<input name="address" maxlength="500"></label><label>Nota para el taller<textarea name="notes" maxlength="1000"></textarea></label><button id="submit-order" class="button" type="submit">Enviar pedido</button><small>El envío del pedido no realiza ningún cobro en línea. El taller se pondrá en contacto para coordinar.</small></form></div></section>
+    <section class="section content" id="pedido"><div class="section-title"><span class="eyebrow">Compra directa</span><h2>Un detalle hecho para ti</h2><p>Arma tu selección y coordina tu pedido directamente con nuestro taller.</p></div><div class="order-section"><div class="order-invitation"><span class="flower">✿</span><h3>Tu pedido te espera</h3><p>Revisa tus jabones favoritos, elige cantidades y envíanos tu pedido. Te confirmaremos disponibilidad y coordinaremos la entrega.</p><button class="button" type="button" data-open-cart>Ver mi carrito <span aria-hidden="true">→</span></button></div></div></section>
     <section class="reseller"><span class="eyebrow">Para tiendas y proyectos</span><h2>¿Te interesa revender?</h2><p>Conversemos sobre nuestros jabones artesanales, disponibilidad y opciones para tu negocio.</p><a id="reseller-link" class="button whatsapp" href="#" target="_blank" rel="noreferrer">Escríbenos por WhatsApp</a></section>
   </main>
   <footer class="footer"><p id="footer-name">Fragancia &amp; Miel</p><p id="footer-contact"></p><p>Jabones artesanales · Hechos con cuidado</p></footer>
+  <div id="cart-modal" class="modal-backdrop" hidden>
+    <section class="shopping-modal" role="dialog" aria-modal="true" aria-labelledby="cart-title">
+      <header class="modal-heading"><div><h2 id="cart-title">Tu carrito artesanal</h2><p>Tu selección, preparada con cariño.</p></div><button id="close-cart" class="modal-close" type="button" aria-label="Cerrar carrito">×</button></header>
+      <div id="cart-feedback" class="modal-feedback" role="alert" hidden><span class="modal-feedback-icon">!</span><span id="cart-feedback-message"></span></div>
+      <div class="modal-body">
+        <section class="modal-cart-summary" aria-label="Productos seleccionados">
+          <h3>Tu selección</h3><div id="cart-lines" class="cart-lines"></div>
+          <div class="modal-cart-total"><span>Total estimado</span><strong id="cart-total">L 0.00</strong></div>
+        </section>
+        <form id="order-form" class="order-form">
+          <h3>¿A quién contactamos?</h3>
+          <label>Nombre completo<input name="name" autocomplete="name" maxlength="120" required></label>
+          <label>Teléfono / WhatsApp<input name="phone" type="tel" autocomplete="tel" maxlength="40" required></label>
+          <label>Correo electrónico (opcional)<input name="email" type="email" autocomplete="email" maxlength="254"></label>
+          <label>Dirección o zona de entrega<input name="address" maxlength="500"></label>
+          <label>Nota para el taller<textarea name="notes" maxlength="1000"></textarea></label>
+          <button id="submit-order" class="button" type="submit">Enviar mi pedido</button>
+          <small>No se realiza ningún cobro en línea. Fragancia y Miel se contactará contigo para coordinar.</small>
+        </form>
+      </div>
+      <div class="modal-actions"><button id="continue-shopping" class="button secondary" type="button">Seguir explorando</button><span class="form-note">Envío sujeto a disponibilidad.</span></div>
+    </section>
+  </div>
+  <div id="result-backdrop" class="modal-backdrop" hidden>
+    <section id="result-modal" class="result-modal" role="dialog" aria-modal="true" aria-labelledby="result-title">
+      <button id="close-result" class="modal-close" type="button" aria-label="Cerrar mensaje">×</button>
+      <div id="result-icon" class="result-icon" aria-hidden="true">✓</div>
+      <h2 id="result-title">¡Pedido recibido!</h2>
+      <p id="result-message">Fragancia y Miel se contactará contigo para coordinar.</p>
+      <span id="result-order" class="result-order" hidden></span>
+      <div id="refresh-warning" class="result-warning" hidden></div>
+      <button id="result-done" class="button" type="button">Volver a la tienda</button>
+    </section>
+  </div>
+  <div id="site-toast" class="site-toast" role="status" aria-live="polite"></div>
   <script type="module">
     import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
     // Replace both values with the project's URL and public/publishable key.
     // Never use a service_role or secret key in this public page.
-    const SUPABASE_URL = 'https://TU-PROYECTO.supabase.co';
-    const SUPABASE_PUBLISHABLE_KEY = 'PEGA_AQUI_TU_CLAVE_PUBLICABLE';
+    const SUPABASE_URL = 'https://alqoigvsxsgqenqosfbr.supabase.co';
+    const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_bHXZOe0puNVzekZFFxdm0g_qDQ1Aawo';
     const currency = new Intl.NumberFormat('es-HN', { style: 'currency', currency: 'HNL' });
     const cart = new Map();
     let products = [];
     let client;
+    let returnFocus = null;
+    let toastTimer;
 
     const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
       '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
     })[character]);
     const imageUrl = (path) => path ? client.storage.from('jabon').getPublicUrl(path).data.publicUrl : '';
-    const setNotice = (message, isError = false) => {
-      const notice = document.getElementById('order-notice');
-      notice.textContent = message;
-      notice.className = `notice${isError ? ' error' : ''}`;
-      notice.style.display = 'block';
+    const showCartFeedback = (message) => {
+      document.getElementById('cart-feedback-message').textContent = message;
+      const feedback = document.getElementById('cart-feedback');
+      feedback.hidden = false;
+      feedback.classList.remove('feedback-shake');
+      requestAnimationFrame(() => feedback.classList.add('feedback-shake'));
+    };
+    const hideCartFeedback = () => {
+      document.getElementById('cart-feedback').hidden = true;
+      document.getElementById('cart-feedback').classList.remove('feedback-shake');
+    };
+    const showToast = (message) => {
+      const toast = document.getElementById('site-toast');
+      toast.textContent = message;
+      toast.classList.add('visible');
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => toast.classList.remove('visible'), 2600);
+    };
+    const updateCartBadge = () => {
+      const count = [...cart.values()].reduce((sum, amount) => sum + amount, 0);
+      const button = document.getElementById('open-cart');
+      document.getElementById('cart-count').textContent = count > 99 ? '99+' : count;
+      button.classList.toggle('has-items', count > 0);
+      if (count > 0) {
+        button.classList.remove('cart-pop');
+        requestAnimationFrame(() => button.classList.add('cart-pop'));
+      }
+    };
+    const openCart = (trigger) => {
+      returnFocus = trigger || document.activeElement;
+      hideCartFeedback();
+      renderCart();
+      document.getElementById('cart-modal').hidden = false;
+      document.body.classList.add('modal-open');
+      document.querySelector('#cart-modal input[name="name"]').focus();
+    };
+    const closeCart = () => {
+      document.getElementById('cart-modal').hidden = true;
+      document.body.classList.remove('modal-open');
+      returnFocus?.focus?.();
+    };
+    const showOrderResult = ({ success, orderNumber, warning, message }) => {
+      const modal = document.getElementById('result-modal');
+      modal.classList.toggle('error', !success);
+      document.getElementById('result-icon').textContent = success ? '✓' : '!';
+      document.getElementById('result-title').textContent = success ? '¡Pedido recibido!' : 'No pudimos enviar tu pedido';
+      document.getElementById('result-message').textContent = message;
+      const number = document.getElementById('result-order');
+      number.hidden = !orderNumber;
+      number.textContent = orderNumber ? `Pedido ${orderNumber}` : '';
+      const warningBox = document.getElementById('refresh-warning');
+      warningBox.hidden = !warning;
+      warningBox.textContent = warning || '';
+      document.getElementById('result-backdrop').hidden = false;
+      document.body.classList.add('modal-open');
+      document.getElementById('close-result').focus();
     };
 
     function renderCatalog(settings, items) {
@@ -70,9 +169,11 @@
       document.getElementById('about-text').textContent = settings?.about_text || 'Cada jabón nace de una producción cuidada en nuestro taller. Elegimos cada ingrediente y preparamos lotes pequeños para ofrecer una experiencia sencilla y especial.';
       if (settings?.logo_path) {
         const logo = document.createElement('img');
+        logo.id = 'brand-mark';
+        logo.className = 'brand-mark';
         logo.src = imageUrl(settings.logo_path);
         logo.alt = `Logo de ${businessName}`;
-        document.getElementById('brand-mark').replaceWith(logo);
+        document.getElementById('brand-mark')?.replaceWith(logo);
       }
       const contacts = [settings?.phone, settings?.email, settings?.address].filter(Boolean);
       document.getElementById('footer-contact').textContent = contacts.join(' · ');
@@ -105,13 +206,41 @@
           </div><div class="buy-row"><input aria-label="Cantidad de ${escapeHtml(product.name)}" id="quantity-${escapeHtml(product.id)}" type="number" min="1" max="${available}" value="1" ${available < 1 ? 'disabled' : ''}><button class="button" type="button" data-add="${escapeHtml(product.id)}" ${available < 1 ? 'disabled' : ''}>Agregar al pedido</button></div></div>
         </article>`;
       }).join('');
+      container.querySelectorAll('.product input[type="number"]').forEach((input) => {
+        input.addEventListener('input', () => {
+          input.closest('.product').classList.toggle('is-selected', Number(input.value) > 0);
+        });
+      });
       container.querySelectorAll('[data-add]').forEach((button) => button.addEventListener('click', () => {
         const product = products.find((item) => item.id === button.dataset.add);
-        const quantity = Number(document.getElementById(`quantity-${product.id}`).value);
-        if (!Number.isInteger(quantity) || quantity < 1 || quantity > Number(product.available)) return;
-        cart.set(product.id, Math.min(Number(product.available), (cart.get(product.id) || 0) + quantity));
+        const quantityInput = document.getElementById(`quantity-${product.id}`);
+        const quantity = Number(quantityInput.value);
+        if (!Number.isInteger(quantity) || quantity < 1 || quantity > Number(product.available)) {
+          showToast('Elige una cantidad disponible para este jabón.');
+          quantityInput.focus();
+          return;
+        }
+        const existing = cart.get(product.id) || 0;
+        const remaining = Math.max(0, Number(product.available) - existing);
+        const addedQuantity = Math.min(quantity, remaining);
+        if (addedQuantity === 0) {
+          showToast('Ya tienes todas las unidades disponibles de este jabón en tu carrito.');
+          return;
+        }
+        cart.set(product.id, existing + addedQuantity);
         renderCart();
-        document.getElementById('cart-count').textContent = [...cart.values()].reduce((sum, amount) => sum + amount, 0);
+        updateCartBadge();
+        hideCartFeedback();
+        button.classList.add('added');
+        button.textContent = '✓ Agregado';
+        button.closest('.product').classList.add('is-selected');
+        showToast(addedQuantity < quantity
+          ? `Agregamos ${addedQuantity} unidad${addedQuantity === 1 ? '' : 'es'} de ${product.name}; es lo disponible.`
+          : `${quantity} ${product.name} se agregó${quantity === 1 ? '' : 'n'} a tu carrito.`);
+        setTimeout(() => {
+          button.classList.remove('added');
+          button.textContent = 'Agregar al pedido';
+        }, 1400);
       }));
     }
 
@@ -119,25 +248,45 @@
       const lines = document.getElementById('cart-lines');
       const entries = [...cart.entries()];
       if (!entries.length) {
-        lines.className = 'empty';
-        lines.textContent = 'Aún no agregas jabones.';
+        lines.innerHTML = '<div class="cart-empty"><div><span>✿</span>Tu carrito está esperando sus primeros jabones.<br>Explora la colección y agrega tus favoritos.</div></div>';
         document.getElementById('cart-total').textContent = currency.format(0);
         return;
       }
-      lines.className = '';
       lines.innerHTML = entries.map(([id, quantity]) => {
         const product = products.find((item) => item.id === id);
-        return `<div class="cart-line"><span>${escapeHtml(product?.name)} × ${quantity}</span><span>${currency.format(Number(product?.price || 0) * quantity)} <button type="button" data-remove="${escapeHtml(id)}" aria-label="Quitar ${escapeHtml(product?.name)}">Quitar</button></span></div>`;
+        if (!product) return '';
+        const photo = imageUrl(product.image_path);
+        const total = Number(product.price || 0) * quantity;
+        const atMaximum = quantity >= Number(product.available);
+        return `<article class="cart-item">
+          ${photo ? `<img src="${escapeHtml(photo)}" alt="">` : '<div class="cart-item-art" aria-hidden="true">✿</div>'}
+          <div><span class="cart-item-name">${escapeHtml(product.name)}</span><span class="cart-item-price">${currency.format(Number(product.price || 0))} por jabón</span>
+            <div class="cart-item-quantity" aria-label="Cantidad de ${escapeHtml(product.name)}">
+              <button type="button" data-cart-action="decrease" data-product="${escapeHtml(id)}" aria-label="Quitar una unidad">−</button>
+              <strong>${quantity}</strong>
+              <button type="button" data-cart-action="increase" data-product="${escapeHtml(id)}" aria-label="Agregar una unidad" ${atMaximum ? 'disabled' : ''}>+</button>
+            </div>
+          </div><div><span class="cart-line-total">${currency.format(total)}</span><button class="remove-item" type="button" data-cart-action="remove" data-product="${escapeHtml(id)}">Quitar</button></div>
+        </article>`;
       }).join('');
       const total = entries.reduce((sum, [id, quantity]) => {
         const product = products.find((item) => item.id === id);
         return sum + Number(product?.price || 0) * quantity;
       }, 0);
       document.getElementById('cart-total').textContent = currency.format(total);
-      lines.querySelectorAll('[data-remove]').forEach((button) => button.addEventListener('click', () => {
-        cart.delete(button.dataset.remove);
-        document.getElementById('cart-count').textContent = [...cart.values()].reduce((sum, amount) => sum + amount, 0);
+      lines.querySelectorAll('[data-cart-action]').forEach((button) => button.addEventListener('click', () => {
+        const { product: id, cartAction: action } = button.dataset;
+        const product = products.find((item) => item.id === id);
+        if (!product) return;
+        if (action === 'remove') {
+          cart.delete(id);
+        } else {
+          const next = (cart.get(id) || 0) + (action === 'increase' ? 1 : -1);
+          if (next < 1) cart.delete(id);
+          else cart.set(id, Math.min(next, Number(product.available)));
+        }
         renderCart();
+        updateCartBadge();
       }));
     }
 
@@ -146,7 +295,7 @@
       const formElement = event.currentTarget;
       const entries = [...cart.entries()];
       if (!entries.length) {
-        setNotice('Agrega por lo menos un jabón antes de enviar el pedido.', true);
+        showCartFeedback('Agrega por lo menos un jabón antes de enviar el pedido.');
         return;
       }
       const submit = document.getElementById('submit-order');
@@ -165,28 +314,61 @@
         });
       } catch (error) {
         submit.disabled = false;
-        submit.textContent = 'Enviar pedido';
-        setNotice(error.message || 'No se pudo enviar el pedido. Inténtalo de nuevo.', true);
+        submit.textContent = 'Enviar mi pedido';
+        showCartFeedback(error.message || 'No se pudo enviar el pedido. Inténtalo de nuevo.');
         return;
       }
       submit.disabled = false;
-      submit.textContent = 'Enviar pedido';
+      submit.textContent = 'Enviar mi pedido';
       const { data, error } = result;
       if (error) {
-        setNotice(error.message || 'No se pudo enviar el pedido. Comprueba la disponibilidad e inténtalo de nuevo.', true);
+        showCartFeedback(error.message || 'No se pudo enviar el pedido. Comprueba la disponibilidad e inténtalo de nuevo.');
         return;
       }
       cart.clear();
       formElement.reset();
-      document.getElementById('cart-count').textContent = '0';
+      updateCartBadge();
       renderCart();
-      const { data: refreshedCatalog, error: refreshError } = await client.rpc('get_web_catalog');
-      if (!refreshError) renderCatalog(refreshedCatalog?.settings || {}, refreshedCatalog?.products || []);
-      if (refreshError) {
-        setNotice(`Tu pedido ${data} quedó registrado, pero no se pudo actualizar el catálogo: ${refreshError.message}`, true);
-        return;
+      let refreshWarning = '';
+      try {
+        const { data: refreshedCatalog, error: refreshError } = await client.rpc('get_web_catalog');
+        if (refreshError) refreshWarning = refreshError.message;
+        else renderCatalog(refreshedCatalog?.settings || {}, refreshedCatalog?.products || []);
+      } catch (refreshError) {
+        refreshWarning = refreshError.message || 'No se pudo actualizar la disponibilidad en pantalla.';
       }
-      setNotice(`¡Gracias! Tu pedido ${data} quedó registrado. El taller se pondrá en contacto para coordinarlo.`);
+      closeCart();
+      showOrderResult({
+        success: true,
+        orderNumber: data,
+        warning: refreshWarning ? `Tu pedido sí quedó registrado. No se pudo actualizar la disponibilidad en pantalla: ${refreshWarning}` : '',
+        message: 'Fragancia y Miel se contactará contigo para coordinar tu pedido.',
+      });
+    });
+
+    document.getElementById('open-cart').addEventListener('click', (event) => openCart(event.currentTarget));
+    document.querySelectorAll('[data-open-cart]').forEach((button) => {
+    button.addEventListener('click', (event) => openCart(event.currentTarget));
+    });
+    document.getElementById('close-cart').addEventListener('click', closeCart);
+    document.getElementById('continue-shopping').addEventListener('click', closeCart);
+    document.getElementById('cart-modal').addEventListener('click', (event) => {
+    if (event.target === event.currentTarget) closeCart();
+    });
+    const closeResult = () => {
+    document.getElementById('result-backdrop').hidden = true;
+    document.body.classList.remove('modal-open');
+    document.getElementById('open-cart').focus();
+    };
+    document.getElementById('close-result').addEventListener('click', closeResult);
+    document.getElementById('result-done').addEventListener('click', closeResult);
+    document.getElementById('result-backdrop').addEventListener('click', (event) => {
+    if (event.target === event.currentTarget) closeResult();
+    });
+    document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape') return;
+    if (!document.getElementById('result-backdrop').hidden) closeResult();
+    else if (!document.getElementById('cart-modal').hidden) closeCart();
     });
 
     async function init() {
