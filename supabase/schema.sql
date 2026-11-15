@@ -883,7 +883,7 @@ begin
     from public.web_order_items woi
     join public.web_orders wo on wo.id = woi.web_order_id
     where woi.recipe_id = v_item.recipe_id
-      and wo.status in ('pending', 'confirmed');
+      and wo.status = 'confirmed';
 
     v_available := v_available - v_reserved;
     if v_available < v_item.quantity then
@@ -1204,7 +1204,7 @@ as $$
     select coalesce(sum(woi.quantity), 0) as quantity
     from public.web_order_items woi
     join public.web_orders wo on wo.id = woi.web_order_id
-    where woi.batch_id = b.id and wo.status in ('pending', 'confirmed')
+    where woi.batch_id = b.id and wo.status = 'confirmed'
   ) current_reservation on true
   left join lateral (
     select coalesce(sum(si.quantity), 0) as quantity
@@ -1219,7 +1219,7 @@ as $$
       select coalesce(sum(woi.quantity), 0) as quantity
       from public.web_order_items woi
       join public.web_orders wo on wo.id = woi.web_order_id
-      where woi.batch_id = previous_batch.id and wo.status in ('pending', 'confirmed')
+      where woi.batch_id = previous_batch.id and wo.status = 'confirmed'
     ) previous_reservation on true
     where previous_batch.recipe_id = b.recipe_id
       and (previous_batch.batch_date, previous_batch.created_at, previous_batch.id)
@@ -1393,6 +1393,7 @@ as $$
 declare
   v_order public.web_orders%rowtype;
   v_item record;
+  v_available numeric;
 begin
   if auth.uid() is null then
     raise exception 'Debes iniciar sesión para administrar pedidos web.';
@@ -1412,6 +1413,22 @@ begin
   loop
     perform 1 from public.recipes where id = v_item.recipe_id for update;
   end loop;
+
+  if p_status = 'confirmed' and v_order.status = 'pending' then
+    for v_item in
+      select batch_id, sum(quantity)::integer as quantity
+      from public.web_order_items
+      where web_order_id = p_order_id
+      group by batch_id
+      order by batch_id
+    loop
+      v_available := public.web_available_batch_stock(v_item.batch_id);
+      if v_available < v_item.quantity then
+        raise exception 'No hay suficientes unidades disponibles para reservar el lote. Disponibles: %, solicitadas: %.',
+          v_available, v_item.quantity;
+      end if;
+    end loop;
+  end if;
 
   update public.web_orders
   set status = p_status, updated_at = now()

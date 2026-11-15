@@ -421,7 +421,7 @@ function App() {
       .filter((item) => item.recipe_id === recipeId)
       .reduce((sum, item) => sum + number(item.quantity), 0);
     const reserved = data.webOrders
-      .filter((order) => ['pending', 'confirmed'].includes(order.status))
+      .filter((order) => order.status === 'confirmed')
       .flatMap((order) => order.web_order_items || [])
       .filter((item) => item.recipe_id === recipeId)
       .reduce((sum, item) => sum + number(item.quantity), 0);
@@ -440,7 +440,7 @@ function App() {
       .filter((item) => item.recipe_id === batch.recipe_id)
       .reduce((sum, item) => sum + number(item.quantity), 0);
     const reservedForBatch = data.webOrders
-      .filter((order) => ['pending', 'confirmed'].includes(order.status))
+      .filter((order) => order.status === 'confirmed')
       .flatMap((order) => order.web_order_items || [])
       .filter((item) => item.batch_id === batch.id)
       .reduce((sum, item) => sum + number(item.quantity), 0);
@@ -448,7 +448,7 @@ function App() {
       .slice(0, recipeBatches.findIndex((item) => item.id === batch.id))
       .reduce((sum, item) => {
         const reserved = data.webOrders
-          .filter((order) => ['pending', 'confirmed'].includes(order.status))
+          .filter((order) => order.status === 'confirmed')
           .flatMap((order) => order.web_order_items || [])
           .filter((orderItem) => orderItem.batch_id === item.id)
           .reduce((total, orderItem) => total + number(orderItem.quantity), 0);
@@ -586,7 +586,7 @@ function App() {
       toast(orderError.message, 'error');
       return;
     }
-    toast(status === 'confirmed' ? 'Pedido confirmado; el stock sigue reservado.' : 'Pedido cancelado; el stock fue liberado.');
+    toast(status === 'confirmed' ? 'Pedido reservado; el stock fue apartado.' : 'Pedido cancelado; el stock fue liberado.');
     await loadData();
   }
 
@@ -1629,12 +1629,12 @@ function App() {
           </Section>
         )}
         {tab === 'webOrders' && (
-          <Section title="Pedidos web" subtitle="Los pedidos pendientes y confirmados reservan el stock de su lote">
+          <Section title="Pedidos web" subtitle="El stock se descuenta al reservar el pedido; los pedidos pendientes no afectan las existencias">
             <Table headers={['Pedido', 'Fecha', 'Cliente', 'Productos', 'Total', 'Estado', 'Acciones']}>
               {data.webOrders.map((order) => {
                 const statusLabel = {
                   pending: 'Pendiente',
-                  confirmed: 'Confirmado · reservado',
+                  confirmed: 'Reservado',
                   cancelled: 'Cancelado',
                   completed: 'Venta registrada',
                 }[order.status] || order.status;
@@ -1651,7 +1651,7 @@ function App() {
                     <td className="sale-actions">
                       <button className="button secondary small" onClick={() => setModal({ kind: 'webOrderDetail', order })}>Ver</button>
                       {['pending', 'confirmed'].includes(order.status) && <>
-                        {order.status === 'pending' && <button className="button secondary small" onClick={() => updateWebOrder(order, 'confirmed')}>Confirmar</button>}
+                        {order.status === 'pending' && <button className="button secondary small" onClick={() => updateWebOrder(order, 'confirmed')}>Reservar</button>}
                         <button className="button primary small" onClick={() => setModal({ kind: 'completeWebOrder', order })}>Completar venta</button>
                         <button className="icon-button danger-text" aria-label="Cancelar pedido" title="Cancelar pedido y liberar stock" onClick={() => updateWebOrder(order, 'cancelled')}>×</button>
                       </>}
