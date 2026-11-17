@@ -484,6 +484,7 @@ function App() {
       batchId: product.batch_id || '',
       imagePath: product.image_path || '',
       benefits: (product.benefits || []).join('\n'),
+      healthConcerns: (product.health_concerns || []).join(', '),
       composition: (product.composition || []).join('\n'),
       usageInstructions: product.usage_instructions || '',
       active: product.active,
@@ -494,6 +495,7 @@ function App() {
       batchId: '',
       imagePath: '',
       benefits: '',
+      healthConcerns: '',
       composition: '',
       usageInstructions: '',
       active: true,
@@ -515,6 +517,7 @@ function App() {
         batch_id: webProductDraft.batchId || null,
         image_path: uploadedPath || webProductDraft.imagePath || null,
         benefits: webProductDraft.benefits.split('\n').map((item) => item.trim()).filter(Boolean),
+        health_concerns: webProductDraft.healthConcerns.split(/[,\n]/).map((item) => item.trim()).filter(Boolean),
         composition: webProductDraft.composition.split('\n').map((item) => item.trim()).filter(Boolean),
         usage_instructions: webProductDraft.usageInstructions.trim(),
         active: webProductDraft.active,
@@ -1965,6 +1968,7 @@ function App() {
             </div>
             {webProductDraft.imagePath && !webProductFile && <p className="form-note">Ya hay una imagen guardada. Sube otra para reemplazarla.</p>}
             <Field label="Beneficios (un beneficio por línea)"><textarea rows="4" value={webProductDraft.benefits} onChange={(event) => setWebProductDraft({ ...webProductDraft, benefits: event.target.value })} placeholder={'Suaviza la piel\nElaborado artesanalmente'} /></Field>
+            <Field label="Afecciones que ayuda a tratar (separadas por comas)"><textarea rows="2" value={webProductDraft.healthConcerns} onChange={(event) => setWebProductDraft({ ...webProductDraft, healthConcerns: event.target.value })} placeholder="Acné, resequedad, piel sensible" /></Field>
             <Field label="Composición y unidades (un ingrediente por línea)"><textarea rows="4" value={webProductDraft.composition} onChange={(event) => setWebProductDraft({ ...webProductDraft, composition: event.target.value })} placeholder={'Base de glicerina: 90 g\nAceite de coco: 5 ml'} /></Field>
             <Field label="Modo de uso"><textarea rows="3" maxLength="1000" value={webProductDraft.usageInstructions} onChange={(event) => setWebProductDraft({ ...webProductDraft, usageInstructions: event.target.value })} /></Field>
             <label className="checkbox-field"><input type="checkbox" checked={webProductDraft.active} onChange={(event) => setWebProductDraft({ ...webProductDraft, active: event.target.checked })} /> Producto visible en la tienda</label>

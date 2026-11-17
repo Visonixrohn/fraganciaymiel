@@ -188,6 +188,7 @@ create table if not exists public.web_products (
   batch_id uuid references public.batches(id) on delete restrict,
   image_path text,
   benefits text[] not null default '{}',
+  health_concerns text[] not null default '{}',
   composition text[] not null default '{}',
   usage_instructions text not null default '',
   active boolean not null default true,
@@ -195,6 +196,9 @@ create table if not exists public.web_products (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+
+alter table public.web_products
+  add column if not exists health_concerns text[] not null default '{}';
 
 create sequence if not exists public.sales_invoice_number_seq;
 create sequence if not exists public.purchases_number_seq;
@@ -1385,6 +1389,7 @@ as $$
           'name', wp.name,
           'image_path', wp.image_path,
           'benefits', wp.benefits,
+          'health_concerns', wp.health_concerns,
           'composition', wp.composition,
           'usage_instructions', wp.usage_instructions,
           'available', public.web_available_batch_stock(b.id),

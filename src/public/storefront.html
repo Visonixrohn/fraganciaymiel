@@ -49,6 +49,33 @@
     img { max-width: 100%; display: block; }
     [hidden] { display: none !important; }
     body.modal-open { overflow: hidden; }
+    .honey-edge {
+      position: fixed;
+      top: 0;
+      bottom: 0;
+      z-index: 45;
+      width: 18px;
+      overflow: hidden;
+      pointer-events: none;
+    }
+    .honey-edge.left { left: 0; }
+    .honey-edge.right { right: 0; }
+    .honey-edge span {
+      position: absolute;
+      top: 0;
+      width: 7px;
+      border-radius: 0 0 999px 999px;
+      background: linear-gradient(90deg, #d69420, #f8cc62 55%, #e7aa32);
+      box-shadow: 0 2px 6px rgba(153, 99, 14, 0.18);
+      transform-origin: top;
+      animation: honey-drip 5s ease-in-out infinite alternate;
+    }
+    .honey-edge span:nth-child(1) { left: 2px; height: 110px; }
+    .honey-edge span:nth-child(2) { left: 11px; height: 62px; animation-delay: -2s; }
+    .honey-edge span:nth-child(3) { left: 6px; height: 34px; animation-delay: -3.5s; }
+    .honey-edge.right span { right: 2px; left: auto; }
+    .honey-edge.right span:nth-child(2) { right: 11px; }
+    .honey-edge.right span:nth-child(3) { right: 6px; }
 
     /* ——— Header ——— */
     .top {
@@ -189,34 +216,39 @@
       background: #f7f1e4;
       border-color: #ddd0b0;
     }
-    .button.whatsapp { background: #2d6a45; }
-    .button.whatsapp:hover:not(:disabled) { background: #245638; }
+    .button.honey,
+    .button.whatsapp {
+      background: linear-gradient(135deg, #ffdc72, #f3ad28);
+      color: #4a3212;
+      box-shadow: 0 5px 16px rgba(153, 99, 14, 0.26);
+    }
+    .button.honey:hover:not(:disabled),
+    .button.whatsapp:hover:not(:disabled) {
+      background: linear-gradient(135deg, #ffe99b, #ffc144);
+      box-shadow: 0 7px 20px rgba(153, 99, 14, 0.32);
+    }
 
     /* ——— Hero ——— */
     .hero {
       position: relative;
+      display: grid;
+      min-height: clamp(420px, 56vh, 620px);
+      align-items: center;
       overflow: hidden;
-      padding: clamp(72px, 12vw, 140px) 24px;
+      padding: clamp(80px, 8vw, 120px) 24px 110px;
       text-align: center;
-      background:
-        radial-gradient(ellipse 80% 60% at 50% 100%, #f4dda1 0%, transparent 55%),
-        radial-gradient(ellipse 60% 40% at 80% 20%, #f8e8b8 0%, transparent 50%),
-        linear-gradient(180deg, #fffaf0 0%, #faf3e0 100%);
+      background: url("hero.jpeg") center 52% / cover no-repeat;
     }
-    .hero::before,
     .hero::after {
       position: absolute;
+      right: 0;
+      bottom: 0;
+      left: 0;
+      height: 80px;
       content: "";
-      width: 70px;
-      height: 95px;
-      border-radius: 58% 42% 65% 35%;
-      background: linear-gradient(145deg, #ffe28a, #c78322);
-      box-shadow: inset -10px -8px 18px rgba(132, 84, 17, 0.12), 0 15px 25px rgba(154, 107, 28, 0.12);
-      opacity: 0.55;
+      background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1440 120' preserveAspectRatio='none'%3E%3Cpath fill='%23fffaf0' d='M0 64C180 100 360 110 540 82S900 18 1080 34s270 56 360 38v48H0z'/%3E%3C/svg%3E") center / 100% 100% no-repeat;
       pointer-events: none;
     }
-    .hero::before { top: 14%; left: 6%; transform: rotate(-18deg); }
-    .hero::after { right: 7%; bottom: 8%; transform: rotate(22deg); }
     .hero-inner {
       position: relative;
       z-index: 1;
@@ -233,16 +265,22 @@
     }
     .hero h1 {
       margin: 16px 0 18px;
-      color: var(--green);
+      color: #fff;
       font: 700 clamp(40px, 7.5vw, 64px)/1.08 var(--serif);
       letter-spacing: -0.02em;
+      text-shadow: 0 2px 10px rgba(48, 28, 8, 0.55);
     }
     .hero p {
       max-width: 520px;
-      margin: 0 auto 28px;
-      color: var(--ink-soft);
+      margin: 0 auto;
+      color: #fff;
       font-size: 16px;
       line-height: 1.75;
+      text-shadow: 0 2px 8px rgba(48, 28, 8, 0.65);
+    }
+    .hero .eyebrow {
+      color: #fff;
+      text-shadow: 0 2px 8px rgba(48, 28, 8, 0.65);
     }
 
     /* ——— Sections ——— */
@@ -272,68 +310,89 @@
     /* ——— Products ——— */
     .products {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(min(100%, 260px), 1fr));
-      gap: 22px;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+      gap: 28px;
       margin-top: 40px;
       align-items: stretch;
     }
     .product {
+      position: relative;
       display: flex;
       flex-direction: column;
+      aspect-ratio: 4 / 5;
+      min-height: 400px;
       min-width: 0;
       overflow: hidden;
       border: 1px solid var(--line);
       border-radius: 18px;
       background: var(--white);
       box-shadow: var(--shadow-sm);
-      transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.3s, border-color 0.2s;
+      cursor: pointer;
+      transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.3s, border-color 0.3s;
+    }
+    .product::before {
+      position: absolute;
+      z-index: 1;
+      top: 0;
+      right: 18%;
+      left: 18%;
+      height: 3px;
+      content: "";
+      border-radius: 0 0 999px 999px;
+      background: linear-gradient(90deg, transparent, var(--gold-soft), transparent);
+      opacity: 0;
+      transition: opacity 0.3s;
     }
     .product:hover {
       transform: translateY(-6px);
-      border-color: #e0c98a;
-      box-shadow: var(--shadow-lg);
+      border-color: var(--gold);
+      box-shadow: 0 14px 34px rgba(153, 105, 29, 0.16), 0 0 0 3px rgba(201, 146, 42, 0.09);
+    }
+    .product:hover::before,
+    .product:focus-visible::before { opacity: 1; }
+    .product:focus-visible {
+      outline: 3px solid rgba(201, 146, 42, 0.55);
+      outline-offset: 3px;
     }
     .product.is-selected {
       border-color: var(--gold);
       box-shadow: 0 0 0 3px rgba(201, 146, 42, 0.18), var(--shadow-md);
     }
     .product-image {
-      position: relative;
-      aspect-ratio: 5 / 4;
+      position: absolute;
+      inset: 0;
       display: grid;
       place-items: center;
-      padding: 18px;
+      padding: 0;
       background: radial-gradient(circle at 30% 20%, #fffdf7, #f1e4c9 82%);
       overflow: hidden;
     }
     .product-image img {
+      position: relative;
+      z-index: 1;
       width: 100%;
       height: 100%;
-      object-fit: contain;
-      padding: 6px;
-      filter: drop-shadow(0 10px 14px rgba(61, 42, 20, 0.12));
-      transition: transform 0.5s cubic-bezier(0.2, 0.8, 0.2, 1);
+      object-fit: cover;
+      transition: transform 0.6s cubic-bezier(0.2, 0.8, 0.2, 1);
     }
-    .product:hover .product-image img { transform: scale(1.04); }
-    .product-image::after {
-      content: "";
-      position: absolute;
-      inset: auto 0 0;
-      height: 20%;
-      background: linear-gradient(transparent, rgba(26, 51, 34, 0.04));
-      pointer-events: none;
-    }
+    .product:hover .product-image img,
+    .product:focus-visible .product-image img { transform: scale(1.06); }
     .product-body {
+      position: relative;
+      z-index: 2;
       display: flex;
       flex: 1;
       flex-direction: column;
+      justify-content: flex-end;
       padding: 18px 20px 20px;
+      background: linear-gradient(180deg, transparent 30%, rgba(42, 27, 10, 0.48) 56%, rgba(42, 27, 10, 0.92) 100%);
     }
     .product-body h3 {
       margin: 0;
       min-height: 2.5em;
-      color: var(--green);
+      color: #fff;
       font: 700 20px/1.25 var(--serif);
+      text-shadow: 0 2px 8px rgba(32, 20, 8, 0.55);
       display: -webkit-box;
       -webkit-box-orient: vertical;
       -webkit-line-clamp: 2;
@@ -344,7 +403,11 @@
       align-items: center;
       justify-content: space-between;
       gap: 10px;
-      margin: 10px 0 12px;
+      margin: 10px 0 0;
+    }
+    .product .price {
+      color: #ffda67;
+      text-shadow: 0 1px 5px rgba(32, 20, 8, 0.5);
     }
     .price {
       color: var(--gold);
@@ -377,45 +440,21 @@
     }
     .availability.none::before { background: var(--danger); }
 
-    .product-details {
-      margin-top: 4px;
-      border-top: 1px solid var(--line);
-      padding-top: 10px;
+    .product .button,
+    .product-detail-info > .button {
+      background: #ffd34f;
+      color: #4a3212;
+      box-shadow: 0 4px 14px rgba(38, 24, 8, 0.22);
     }
-    .product-details summary {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 10px;
-      color: var(--ink-soft);
-      font-size: 11px;
-      font-weight: 700;
-      cursor: pointer;
-      list-style: none;
-      user-select: none;
-    }
-    .product-details summary::-webkit-details-marker { display: none; }
-    .product-details summary::after {
-      content: "+";
-      display: grid;
-      width: 22px;
-      height: 22px;
-      flex: 0 0 22px;
-      place-items: center;
-      border: 1px solid var(--line);
-      border-radius: 50%;
-      color: var(--gold);
-      font-size: 15px;
-      transition: transform 0.2s, background 0.2s;
-    }
-    .product-details[open] summary::after {
-      transform: rotate(45deg);
-      background: #f5f0e4;
+    .product .button:hover:not(:disabled),
+    .product-detail-info > .button:hover:not(:disabled) {
+      background: #ffe17c;
+      box-shadow: 0 6px 18px rgba(38, 24, 8, 0.28);
     }
     .product-detail-content {
       display: grid;
       gap: 12px;
-      padding: 12px 0 4px;
+      padding: 0;
       animation: fade-in 0.2s ease;
     }
     .product-detail-content h4 {
@@ -462,9 +501,9 @@
       width: 72px;
       height: 42px;
       padding: 0 8px;
-      border: 1px solid var(--line);
+      border: 1px solid rgba(255, 255, 255, 0.65);
       border-radius: 10px;
-      background: #fcfbf7;
+      background: rgba(255, 252, 247, 0.94);
       text-align: center;
       font-size: 14px;
       font-weight: 600;
@@ -492,6 +531,97 @@
       color: var(--muted);
       font-size: 14px;
     }
+    .catalog-filter-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 12px;
+      margin-top: 24px;
+    }
+    .catalog-filter-status {
+      margin: 0;
+      color: var(--ink-soft);
+      font-size: 13px;
+    }
+    .catalog-filter-reset {
+      padding: 6px 12px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: var(--white);
+      color: var(--green);
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .concern-search-trigger {
+      position: fixed;
+      right: 22px;
+      bottom: 76px;
+      z-index: 70;
+      min-height: 52px;
+      padding: 0 20px;
+      border: 1px solid rgba(255, 255, 255, 0.6);
+      border-radius: 999px;
+      background: var(--green);
+      color: white;
+      font-size: 13px;
+      font-weight: 700;
+      box-shadow: 0 8px 24px rgba(61, 42, 20, 0.28);
+      cursor: pointer;
+      transition: transform 0.2s, background 0.2s;
+    }
+    .concern-search-trigger:hover {
+      transform: translateY(-2px);
+      background: var(--green-deep);
+    }
+    .concern-search-modal {
+      position: relative;
+      width: min(100%, 520px);
+      max-height: min(88vh, 680px);
+      overflow: auto;
+      border: 1px solid #ebe3d0;
+      border-radius: 22px;
+      background: #fbfaf6;
+      box-shadow: 0 32px 80px rgba(30, 22, 12, 0.28);
+    }
+    .concern-search-form { padding: 22px 26px 26px; }
+    .concern-search-hint {
+      margin: 0 0 16px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.6;
+    }
+    .concern-options { display: grid; gap: 9px; }
+    .concern-option {
+      display: flex;
+      align-items: center;
+      gap: 11px;
+      padding: 12px 14px;
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      background: white;
+      color: var(--ink-soft);
+      font-size: 14px;
+      cursor: pointer;
+    }
+    .concern-option input {
+      width: 18px;
+      height: 18px;
+      accent-color: var(--green);
+    }
+    .concern-search-error {
+      margin: 12px 0 0;
+      color: var(--danger);
+      font-size: 12px;
+    }
+    .concern-search-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 10px;
+      margin-top: 20px;
+    }
+    .concern-search-actions .button { border-radius: 10px; }
 
     /* ——— About ——— */
     .about {
@@ -501,17 +631,18 @@
       align-items: center;
       padding: 48px;
       border-radius: 20px;
-      background: linear-gradient(135deg, #fff1ce 0%, #f8e6b8 50%, #f5e9d1 100%);
-      border: 1px solid #ecd99a;
+      background: linear-gradient(135deg, #fff1bf 0%, #f8d775 50%, #efb947 100%);
+      border: 1px solid #e6bd55;
     }
     .about h2 {
       margin: 8px 0 14px;
-      color: var(--green);
+      color: #59370e;
       font: 700 30px/1.2 var(--serif);
     }
+    .about .eyebrow { color: #80500f; }
     .about p {
       margin: 0;
-      color: var(--ink-soft);
+      color: #5d4728;
       font-size: 14px;
       line-height: 1.8;
     }
@@ -521,117 +652,14 @@
       overflow: hidden;
       border-radius: 14px;
       border: 1px solid #e7cc8e;
-      background: radial-gradient(circle at 70% 10%, #fff8dd, #f3dfa9 80%);
+      background: radial-gradient(circle at 70% 10%, #fff4bf, #eab746 80%);
     }
-    .workshop-carousel {
-      position: relative;
-      width: 100%;
-      height: 100%;
-      min-height: 280px;
-    }
-    .workshop-carousel-track { position: absolute; inset: 0; }
-    .workshop-slide {
+    .workshop-video {
       position: absolute;
       inset: 0;
-      display: grid;
-      place-items: center;
-      opacity: 0;
-      transition: opacity 0.5s ease;
-    }
-    .workshop-slide.active { opacity: 1; }
-    .workshop-slide img {
       width: 100%;
       height: 100%;
-      padding: 24px;
-      object-fit: contain;
-      filter: drop-shadow(0 12px 16px rgba(99, 69, 25, 0.18));
-    }
-    .workshop-slide figcaption {
-      position: absolute;
-      right: 14px;
-      bottom: 14px;
-      left: 14px;
-      padding: 8px 14px;
-      border-radius: 999px;
-      background: rgba(255, 250, 240, 0.9);
-      border: 1px solid rgba(255, 255, 255, 0.6);
-      color: #654817;
-      font-size: 12px;
-      font-weight: 700;
-      text-align: center;
-      backdrop-filter: blur(8px);
-    }
-    .workshop-empty {
-      display: grid;
-      height: 100%;
-      min-height: 280px;
-      place-items: center;
-      padding: 28px;
-      color: #946d2c;
-      font: 600 16px var(--serif);
-      text-align: center;
-    }
-    .carousel-control {
-      position: absolute;
-      top: 50%;
-      z-index: 2;
-      display: grid;
-      width: 36px;
-      height: 36px;
-      place-items: center;
-      border: 1px solid rgba(255, 255, 255, 0.7);
-      border-radius: 50%;
-      background: rgba(255, 250, 240, 0.9);
-      color: #694b1e;
-      font-size: 22px;
-      line-height: 1;
-      cursor: pointer;
-      box-shadow: 0 4px 12px rgba(88, 58, 24, 0.12);
-      transform: translateY(-50%);
-      transition: background 0.2s, transform 0.2s;
-    }
-    .carousel-control:hover {
-      background: white;
-      transform: translateY(-50%) scale(1.06);
-    }
-    .carousel-prev { left: 12px; }
-    .carousel-next { right: 12px; }
-    .carousel-dots {
-      position: absolute;
-      right: 0;
-      bottom: 52px;
-      left: 0;
-      z-index: 2;
-      display: flex;
-      justify-content: center;
-      gap: 7px;
-    }
-    .carousel-dot {
-      width: 8px;
-      height: 8px;
-      padding: 0;
-      border: 1px solid white;
-      border-radius: 50%;
-      background: rgba(255, 255, 255, 0.6);
-      cursor: pointer;
-      transition: width 0.2s, background 0.2s;
-    }
-    .carousel-dot.active {
-      width: 22px;
-      border-radius: 8px;
-      background: #bd8429;
-    }
-    .carousel-caption {
-      position: absolute;
-      right: 0;
-      bottom: 12px;
-      left: 0;
-      color: #7a591f;
-      font-size: 9px;
-      font-weight: 700;
-      letter-spacing: 1.4px;
-      text-align: center;
-      text-transform: uppercase;
+      object-fit: cover;
     }
 
     /* ——— Order invitation ——— */
@@ -659,6 +687,7 @@
       color: #9e8051;
       font-size: 24px;
     }
+    .order-invitation img.flower { object-fit: contain; padding: 8px; }
     .order-invitation h3 {
       margin: 0 0 10px;
       color: var(--green);
@@ -669,6 +698,30 @@
       color: var(--muted);
       font-size: 14px;
       line-height: 1.7;
+    }
+    .order-video-frame {
+      position: relative;
+      width: 100%;
+      aspect-ratio: 16 / 9;
+      margin: 0 auto 22px;
+      overflow: hidden;
+      border: 1px solid rgba(201, 146, 42, 0.45);
+      border-radius: 28px 28px 42px 28px;
+      background: #f0ead8;
+      box-shadow: 0 8px 20px rgba(89, 55, 14, 0.12);
+    }
+    .order-video {
+      display: block;
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+    }
+    .order-video-waves {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      pointer-events: none;
     }
 
     /* ——— Reseller ——— */
@@ -715,7 +768,17 @@
       background: rgba(30, 22, 12, 0.55);
       backdrop-filter: blur(8px);
       -webkit-backdrop-filter: blur(8px);
-      animation: fade-in 0.2s ease;
+      animation: fade-in 0.5s ease;
+    }
+    .modal-backdrop > [role="dialog"] {
+      animation: modal-enter 0.75s cubic-bezier(0.2, 0.8, 0.2, 1) both;
+    }
+    .modal-backdrop.is-closing {
+      pointer-events: none;
+      animation: backdrop-exit 0.5s ease both;
+    }
+    .modal-backdrop.is-closing > [role="dialog"] {
+      animation: modal-exit 0.5s cubic-bezier(0.4, 0, 1, 1) both;
     }
     .shopping-modal {
       position: relative;
@@ -726,7 +789,72 @@
       border-radius: 22px;
       background: #fbfaf6;
       box-shadow: 0 32px 80px rgba(30, 22, 12, 0.28);
-      animation: modal-rise 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+    .product-detail-modal {
+      position: relative;
+      width: min(100%, 860px);
+      max-height: min(92vh, 760px);
+      overflow: auto;
+      border: 1px solid #ebe3d0;
+      border-radius: 22px;
+      background: #fbfaf6;
+      box-shadow: 0 32px 80px rgba(30, 22, 12, 0.28);
+    }
+    .product-detail-layout {
+      display: grid;
+      min-height: 420px;
+      grid-template-columns: 1fr 1fr;
+    }
+    .product-detail-image {
+      display: grid;
+      min-height: 420px;
+      place-items: center;
+      overflow: hidden;
+      background:
+        radial-gradient(circle at 30% 20%, #fffdf7, #f1e4c9 82%),
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='96' height='84' viewBox='0 0 96 84'%3E%3Cpath d='M24 2 44 14v24L24 50 4 38V14Zm48 24 20 12v24L72 74 52 62V38Z' fill='none' stroke='%23c9922a' stroke-opacity='.15' stroke-width='1.5'/%3E%3C/svg%3E") center / 96px 84px repeat;
+    }
+    .product-detail-image img {
+      width: 100%;
+      height: 100%;
+      min-height: 420px;
+      padding: 28px;
+      object-fit: contain;
+      filter: drop-shadow(0 10px 14px rgba(61, 42, 20, 0.12));
+    }
+    .product-detail-image > span {
+      color: #b29b6c;
+      font-size: 54px;
+    }
+    .product-detail-info {
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      padding: 42px 36px;
+    }
+    .product-detail-close {
+      position: absolute;
+      top: 14px;
+      right: 14px;
+      z-index: 1;
+    }
+    .product-detail-info h2 {
+      margin: 10px 42px 14px 0;
+      color: var(--green);
+      font: 700 clamp(24px, 4vw, 34px)/1.15 var(--serif);
+    }
+    .product-detail-price-row {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-bottom: 24px;
+    }
+    .product-detail-price-row .price { margin: 0; }
+    .product-detail-info .product-detail-content { gap: 18px; }
+    .product-detail-info > .button {
+      align-self: flex-start;
+      margin-top: 24px;
     }
     .modal-heading {
       position: sticky;
@@ -995,7 +1123,6 @@
       background: #fbfaf6;
       box-shadow: 0 32px 80px rgba(30, 22, 12, 0.28);
       text-align: center;
-      animation: modal-rise 0.28s cubic-bezier(0.2, 0.8, 0.2, 1);
     }
     .result-modal .modal-close {
       position: absolute;
@@ -1095,18 +1222,32 @@
       filter: drop-shadow(0 2px 2px rgba(79, 57, 27, 0.2));
       will-change: transform;
     }
-    .bee-one { top: 14vh; animation: bee-flight-one 30s linear infinite; }
-    .bee-two { top: 48vh; animation: bee-flight-two 35s linear -14s infinite; }
-    .bee-three { top: 76vh; animation: bee-flight-three 32s linear -22s infinite; }
+    .bee-one { top: 14vh; animation: bee-flight-one 6s linear infinite; }
+    .bee-two { top: 48vh; animation: bee-flight-two 8s linear -7s infinite; }
+    .bee-three { top: 76vh; animation: bee-flight-three 10s linear -12s infinite; }
+    .bee-four { top: 30vh; animation: bee-flight-two 4s linear -4s infinite; }
+    .bee-five { top: 61vh; animation: bee-flight-one 5s linear -10s infinite; }
+    .bee-six { top: 89vh; animation: bee-flight-three 1s linear -6s infinite; }
 
     /* Animations */
     @keyframes fade-in {
       from { opacity: 0; }
       to { opacity: 1; }
     }
-    @keyframes modal-rise {
-      from { opacity: 0; transform: translateY(16px) scale(0.985); }
-      to { opacity: 1; transform: translateY(0) scale(1); }
+    @keyframes modal-enter {
+      0% { opacity: 0; transform: translateY(28px) scale(0.82); }
+      72% { opacity: 1; transform: translateY(-3px) scale(1.02); }
+      100% { opacity: 1; transform: translateY(0) scale(1); }
+    }
+    @keyframes modal-exit {
+      to { opacity: 0; transform: translateY(18px) scale(0.9); }
+    }
+    @keyframes backdrop-exit {
+      to { opacity: 0; }
+    }
+    @keyframes honey-drip {
+      from { transform: scaleY(0.88); }
+      to { transform: scaleY(1.08); }
     }
     @keyframes badge-pop {
       0% { transform: scale(0.75); }
@@ -1161,24 +1302,23 @@
         padding: 32px;
         gap: 28px;
       }
-      .about-art, .workshop-carousel, .workshop-empty { min-height: 240px; }
+      .about-art { min-height: 240px; }
       .modal-body { grid-template-columns: 1fr; }
     }
     @media (max-width: 640px) {
       .top { padding: 12px 5%; }
       .top nav > a:not(.cart-link) { display: none; }
       .brand strong { font-size: 16px; }
-      .hero { padding: 64px 20px 80px; }
-      .hero::before { left: -30px; }
-      .hero::after { right: -34px; }
+      .hero {
+        min-height: 0;
+        padding: 64px 20px 80px;
+      }
       .section { padding: 52px 0; }
       .products { grid-template-columns: 1fr; gap: 16px; }
-      .product-image { aspect-ratio: 16 / 10; padding: 14px; }
       .product-body { padding: 16px; }
       .product-body h3 { min-height: 0; }
       .about { padding: 24px; }
-      .about-art, .workshop-carousel, .workshop-empty { min-height: 200px; }
-      .workshop-slide img { padding: 16px; }
+      .about-art { min-height: 200px; }
       .order-invitation { padding: 28px 22px; }
       .reseller h2 { font-size: 26px; }
       .modal-backdrop { align-items: end; padding: 0; }
@@ -1186,8 +1326,20 @@
         width: 100%;
         max-height: 94dvh;
         border-radius: 20px 20px 0 0;
-        animation: modal-sheet 0.3s ease;
       }
+      .product-detail-modal {
+        width: 100%;
+        max-height: 94dvh;
+        border-radius: 20px 20px 0 0;
+      }
+      .product-detail-layout { min-height: 0; grid-template-columns: 1fr; }
+      .product-detail-image,
+      .product-detail-image img {
+        min-height: 220px;
+        max-height: 32vh;
+      }
+      .product-detail-info { padding: 24px; }
+      .product-detail-info > .button { width: 100%; }
       .modal-heading { padding: 16px 18px; }
       .modal-heading h2 { font-size: 20px; }
       .modal-body { gap: 12px; padding: 14px; }
@@ -1200,6 +1352,20 @@
       .cart-item img, .cart-item-art { width: 52px; height: 52px; }
       .modal-actions { padding: 0 14px 16px; }
       .modal-actions .button { flex: 1; }
+      .concern-search-trigger {
+        right: 12px;
+        bottom: 72px;
+        min-height: 46px;
+        padding: 0 16px;
+        font-size: 12px;
+      }
+      .concern-search-modal {
+        width: 100%;
+        max-height: 88dvh;
+        margin: auto;
+        border-radius: 20px;
+      }
+      .concern-search-form { padding: 18px; }
       .result-modal {
         width: calc(100% - 28px);
         margin: auto;
@@ -1208,10 +1374,6 @@
       }
       .site-toast { right: 12px; bottom: 12px; }
       .flying-bee { font-size: 13px; }
-      @keyframes modal-sheet {
-        from { transform: translateY(28px); opacity: 0.6; }
-        to { transform: translateY(0); opacity: 1; }
-      }
     }
     @media (prefers-reduced-motion: reduce) {
       *, *::before, *::after {
@@ -1221,11 +1383,12 @@
         transition-duration: 0.01ms !important;
       }
       .bee-flight { display: none; }
-      .workshop-slide { transition: none; }
     }
   </style>
 </head>
 <body>
+  <div class="honey-edge left" aria-hidden="true"><span></span><span></span><span></span></div>
+  <div class="honey-edge right" aria-hidden="true"><span></span><span></span><span></span></div>
   <header class="top">
     <a class="brand" href="#inicio">
       <span id="brand-mark" class="brand-mark">✿</span>
@@ -1247,9 +1410,8 @@
     <section class="hero" id="inicio">
       <div class="hero-inner">
         <span class="eyebrow">Hecho a mano, con intención</span>
-        <h1 id="hero-title">Pequeños rituales,<br>piel feliz.</h1>
-        <p id="hero-tagline">Jabones artesanales elaborados con ingredientes seleccionados y mucho cariño.</p>
-        <a class="button" href="#productos">Descubrir jabones</a>
+        <h1 id="hero-title">Fragancia y Miel<br></h1>
+        <p id="hero-tagline">Jabones artesanales hechos con cuidado</p>
       </div>
     </section>
 
@@ -1257,10 +1419,21 @@
       <div class="section-title">
         <span class="eyebrow">Nuestra colección</span>
         <h2>Un jabón para cada momento</h2>
-        <p>Elaborados en pequeños lotes. Consulta la disponibilidad de cada producto antes de realizar tu pedido.</p>
+        <p>Regálale a tu piel un momento especial. ✨
+
+Descubre nuestra colección de jabones artesanales, elaborados con ingredientes seleccionados, aromas encantadores y el cuidado que cada detalle merece.
+
+🌿 Encuentra tu favorito y convierte tu rutina diaria en un momento de bienestar.
+
+¡Elige el tuyo y haz tu pedido hoy! 💛</p>
       </div>
       <div id="catalog-status" class="loading">Cargando catálogo artesanal…</div>
+      <div class="catalog-filter-row">
+        <p id="catalog-filter-status" class="catalog-filter-status" aria-live="polite" hidden></p>
+        <button id="clear-concern-filter" class="catalog-filter-reset" type="button" hidden>Quitar filtro</button>
+      </div>
       <div id="products" class="products"></div>
+      <div id="no-concern-results" class="empty" hidden>No encontramos productos para las afecciones seleccionadas.</div>
     </section>
 
     <section class="section content" id="historia">
@@ -1271,15 +1444,10 @@
           <p id="about-text">Cada jabón nace de una producción cuidada en nuestro taller. Elegimos cada ingrediente y preparamos lotes pequeños para ofrecer una experiencia sencilla y especial.</p>
         </div>
         <div class="about-art">
-          <div class="workshop-carousel" id="workshop-carousel" aria-label="Carrusel de imágenes de nuestros productos">
-            <div class="workshop-carousel-track" id="workshop-carousel-track" aria-live="polite">
-              <div class="workshop-empty">Descubre nuestros jabones artesanales</div>
-            </div>
-            <button class="carousel-control carousel-prev" type="button" aria-label="Imagen anterior">‹</button>
-            <button class="carousel-control carousel-next" type="button" aria-label="Imagen siguiente">›</button>
-            <div class="carousel-dots" id="workshop-carousel-dots" aria-label="Seleccionar imagen"></div>
-            <span class="carousel-caption">Hechos con cariño, para ti</span>
-          </div>
+          <video class="workshop-video" autoplay muted loop playsinline preload="metadata" aria-label="Video de nuestro taller">
+            <source src="1e.mp4" type="video/mp4">
+            Tu navegador no admite la reproducción de video.
+          </video>
         </div>
       </div>
     </section>
@@ -1292,10 +1460,20 @@
       </div>
       <div class="order-section">
         <div class="order-invitation">
-          <span class="flower">✿</span>
+          <span id="order-logo" class="flower">✿</span>
           <h3>Tu pedido te espera</h3>
           <p>Revisa tus jabones favoritos, elige cantidades y envíanos tu pedido. Te confirmaremos disponibilidad y coordinaremos la entrega.</p>
-          <button class="button" type="button" data-open-cart>Ver mi carrito <span aria-hidden="true">→</span></button>
+          <div class="order-video-frame">
+            <video class="order-video" autoplay muted loop playsinline preload="metadata" aria-label="Video de nuestros productos">
+              <source src="1ee.mp4" type="video/mp4">
+              Tu navegador no admite la reproducción de video.
+            </video>
+            <svg class="order-video-waves" viewBox="0 0 580 326" preserveAspectRatio="none" aria-hidden="true">
+              <path d="M-12 72 C 68 38, 104 104, 183 70 S 304 38, 381 73 S 499 105, 592 60" fill="none" stroke="rgba(255,255,255,.72)" stroke-width="2.5"/>
+              <path d="M-10 267 C 77 229, 113 294, 201 258 S 331 228, 407 263 S 520 293, 592 249" fill="none" stroke="rgba(239,185,71,.82)" stroke-width="3"/>
+            </svg>
+          </div>
+          <button class="button honey" type="button" data-open-cart>Ver mi carrito <span aria-hidden="true">→</span></button>
         </div>
       </div>
     </section>
@@ -1304,7 +1482,7 @@
       <span class="eyebrow">Para tiendas y proyectos</span>
       <h2>¿Te interesa revender?</h2>
       <p>Conversemos sobre nuestros jabones artesanales, disponibilidad y opciones para tu negocio.</p>
-      <a id="reseller-link" class="button whatsapp" href="#" target="_blank" rel="noreferrer">Escríbenos por WhatsApp</a>
+      <a id="reseller-link" class="button honey whatsapp" href="#" target="_blank" rel="noreferrer">Escríbenos por WhatsApp</a>
     </section>
   </main>
 
@@ -1313,6 +1491,49 @@
     <p id="footer-contact"></p>
     <p>Jabones artesanales · Hechos con cuidado</p>
   </footer>
+
+  <button id="open-concern-search" class="concern-search-trigger" type="button" aria-haspopup="dialog" aria-controls="concern-search-modal" hidden>✿ Buscar por afección</button>
+
+  <div id="concern-search-modal" class="modal-backdrop" hidden>
+    <section class="concern-search-modal" role="dialog" aria-modal="true" aria-labelledby="concern-search-title">
+      <header class="modal-heading">
+        <div>
+          <h2 id="concern-search-title">¿Qué afección quieres ayudar a tratar?</h2>
+          <p>Selecciona una o varias opciones.</p>
+        </div>
+        <button id="close-concern-search" class="modal-close" type="button" aria-label="Cerrar búsqueda">×</button>
+      </header>
+      <form id="concern-search-form" class="concern-search-form">
+        <p class="concern-search-hint">Te mostraremos los productos asociados con cualquiera de tus selecciones.</p>
+        <div id="concern-options" class="concern-options"></div>
+        <p id="concern-search-error" class="concern-search-error" role="alert" hidden>Selecciona al menos una afección para buscar.</p>
+        <div class="concern-search-actions">
+          <button id="cancel-concern-search" class="button secondary" type="button">Cancelar</button>
+          <button class="button" type="submit">Buscar productos</button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <!-- Product details modal -->
+  <div id="product-modal" class="modal-backdrop" hidden>
+    <section class="product-detail-modal" role="dialog" aria-modal="true" aria-labelledby="product-modal-title">
+      <button id="close-product-modal" class="modal-close product-detail-close" type="button" aria-label="Cerrar detalles">×</button>
+      <div class="product-detail-layout">
+        <div id="product-modal-image" class="product-detail-image"></div>
+        <div class="product-detail-info">
+          <span class="eyebrow">Detalles del jabón</span>
+          <h2 id="product-modal-title"></h2>
+          <div class="product-detail-price-row">
+            <p id="product-modal-price" class="price"></p>
+            <span id="product-modal-availability" class="availability"></span>
+          </div>
+          <div id="product-modal-content" class="product-detail-content"></div>
+          <button id="product-modal-add" class="button" type="button">Agregar al carrito</button>
+        </div>
+      </div>
+    </section>
+  </div>
 
   <!-- Cart modal -->
   <div id="cart-modal" class="modal-backdrop" hidden>
@@ -1384,6 +1605,9 @@
     <span class="flying-bee bee-one">🐝</span>
     <span class="flying-bee bee-two">🐝</span>
     <span class="flying-bee bee-three">🐝</span>
+    <span class="flying-bee bee-four">🐝</span>
+    <span class="flying-bee bee-five">🐝</span>
+    <span class="flying-bee bee-six">🐝</span>
   </div>
 
   <script type="module">
@@ -1395,18 +1619,84 @@
     const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_bHXZOe0puNVzekZFFxdm0g_qDQ1Aawo';
     const currency = new Intl.NumberFormat('es-HN', { style: 'currency', currency: 'HNL' });
     const cart = new Map();
+    const modalClosures = new WeakMap();
+    let databasePromise;
     let products = [];
+    let concernOptions = [];
+    let selectedConcerns = new Set();
     let client;
+    let detailProduct = null;
     let returnFocus = null;
+    let concernSearchReturnFocus = null;
     let toastTimer;
-    let workshopSlides = [];
-    let workshopIndex = 0;
-    let workshopTimer;
 
     const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
       '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
     })[character]);
+    const normalizeConcern = (value) => String(value ?? '').trim().toLocaleLowerCase('es');
     const imageUrl = (path) => path ? client.storage.from('jabon').getPublicUrl(path).data.publicUrl : '';
+    const getDatabase = () => {
+      if (!databasePromise) {
+        databasePromise = new Promise((resolve, reject) => {
+          if (!window.indexedDB) {
+            reject(new Error('Este navegador no permite guardar datos localmente.'));
+            return;
+          }
+          const request = window.indexedDB.open('fragancia-miel', 1);
+          request.onupgradeneeded = () => {
+            const database = request.result;
+            database.createObjectStore('cart', { keyPath: 'id' });
+            database.createObjectStore('orders', { keyPath: 'id', autoIncrement: true });
+          };
+          request.onsuccess = () => {
+            request.result.onversionchange = () => request.result.close();
+            resolve(request.result);
+          };
+          request.onerror = () => reject(request.error || new Error('No se pudo abrir la base local.'));
+        });
+      }
+      return databasePromise;
+    };
+    const waitForTransaction = (transaction) => new Promise((resolve, reject) => {
+      transaction.addEventListener('complete', resolve, { once: true });
+      transaction.addEventListener('error', () => {
+        reject(transaction.error || new Error('Falló una operación de almacenamiento local.'));
+      }, { once: true });
+      transaction.addEventListener('abort', () => {
+        reject(transaction.error || new Error('Se canceló una operación de almacenamiento local.'));
+      }, { once: true });
+    });
+    const readSavedCart = async () => {
+      const database = await getDatabase();
+      const transaction = database.transaction('cart', 'readonly');
+      const request = transaction.objectStore('cart').get('current');
+      const requestResult = new Promise((resolve, reject) => {
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error || new Error('No se pudo leer el carrito guardado.'));
+      });
+      const [savedCart] = await Promise.all([requestResult, waitForTransaction(transaction)]);
+      return Array.isArray(savedCart?.items) ? savedCart.items : [];
+    };
+    const saveCart = async () => {
+      const items = [...cart.entries()];
+      const database = await getDatabase();
+      const transaction = database.transaction('cart', 'readwrite');
+      transaction.objectStore('cart').put({ id: 'current', items });
+      await waitForTransaction(transaction);
+    };
+    const saveOrder = async (order) => {
+      const database = await getDatabase();
+      const transaction = database.transaction('orders', 'readwrite');
+      transaction.objectStore('orders').add(order);
+      await waitForTransaction(transaction);
+    };
+    const renderProductDetails = (product) => {
+      const list = (title, values) => values?.length
+        ? `<div><h4>${title}</h4><ul>${values.map((entry) => `<li>${escapeHtml(entry)}</li>`).join('')}</ul></div>` : '';
+      return `${list('Beneficios', product.benefits)}${list('Ayuda con', product.health_concerns)}${list('Composición', product.composition)}
+        ${product.usage_instructions ? `<div><h4>Modo de uso</h4><p class="usage">${escapeHtml(product.usage_instructions)}</p></div>` : ''}
+        <p class="usage">Peso aproximado: ${escapeHtml(product.soap_weight || '—')} g</p>`;
+    };
     const showCartFeedback = (message) => {
       document.getElementById('cart-feedback-message').textContent = message;
       const feedback = document.getElementById('cart-feedback');
@@ -1417,6 +1707,39 @@
     const hideCartFeedback = () => {
       document.getElementById('cart-feedback').hidden = true;
       document.getElementById('cart-feedback').classList.remove('feedback-shake');
+    };
+    const persistCartWithNotice = async () => {
+      try {
+        await saveCart();
+      } catch (error) {
+        showToast(`No se pudo guardar el carrito en este dispositivo: ${error.message}`);
+      }
+    };
+    const hideModal = (backdrop) => {
+      if (backdrop.hidden) return Promise.resolve();
+      const currentClose = modalClosures.get(backdrop);
+      if (currentClose) return currentClose;
+
+      const closing = new Promise((resolve) => {
+        let fallbackTimer;
+        const finish = () => {
+          clearTimeout(fallbackTimer);
+          backdrop.removeEventListener('animationend', handleAnimationEnd);
+          backdrop.hidden = true;
+          backdrop.classList.remove('is-closing');
+          modalClosures.delete(backdrop);
+          resolve();
+        };
+        const handleAnimationEnd = (event) => {
+          if (event.target === backdrop && event.animationName === 'backdrop-exit') finish();
+        };
+
+        backdrop.classList.add('is-closing');
+        backdrop.addEventListener('animationend', handleAnimationEnd);
+        fallbackTimer = setTimeout(finish, 600);
+      });
+      modalClosures.set(backdrop, closing);
+      return closing;
     };
     const showToast = (message) => {
       const toast = document.getElementById('site-toast');
@@ -1435,6 +1758,61 @@
         requestAnimationFrame(() => button.classList.add('cart-pop'));
       }
     };
+    const addProductToCart = (product, quantity, button, quantityInput) => {
+      if (!Number.isInteger(quantity) || quantity < 1 || quantity > Number(product.available)) {
+        showToast('Elige una cantidad disponible para este jabón.');
+        quantityInput?.focus();
+        return;
+      }
+      const existing = cart.get(product.id) || 0;
+      const remaining = Math.max(0, Number(product.available) - existing);
+      const addedQuantity = Math.min(quantity, remaining);
+      if (addedQuantity === 0) {
+        showToast('Ya tienes todas las unidades disponibles de este jabón en tu carrito.');
+        return;
+      }
+      cart.set(product.id, existing + addedQuantity);
+      void persistCartWithNotice();
+      renderCart();
+      updateCartBadge();
+      hideCartFeedback();
+      button.classList.add('added');
+      button.textContent = '✓ Agregado';
+      button.closest('.product')?.classList.add('is-selected');
+      showToast(addedQuantity < quantity
+        ? `Agregamos ${addedQuantity} unidad${addedQuantity === 1 ? '' : 'es'} de ${product.name}; es lo disponible.`
+        : `${quantity} ${product.name} se agregó${quantity === 1 ? '' : 'n'} a tu carrito.`);
+      const originalLabel = button === document.getElementById('product-modal-add')
+        ? 'Agregar al carrito' : 'Agregar al pedido';
+      setTimeout(() => {
+        button.classList.remove('added');
+        button.textContent = originalLabel;
+      }, 1400);
+    };
+    const openProductDetails = (product, trigger) => {
+      returnFocus = trigger || document.activeElement;
+      detailProduct = product;
+      const photo = imageUrl(product.image_path);
+      document.getElementById('product-modal-image').innerHTML = photo
+        ? `<img src="${escapeHtml(photo)}" alt="${escapeHtml(product.name)}">`
+        : '<span aria-hidden="true">✿</span>';
+      document.getElementById('product-modal-title').textContent = product.name || 'Jabón artesanal';
+      document.getElementById('product-modal-price').textContent = currency.format(Number(product.price || 0));
+      const available = Math.max(0, Number(product.available || 0));
+      const availability = document.getElementById('product-modal-availability');
+      availability.textContent = available > 0 ? `${available} disponibles` : 'Agotado';
+      availability.classList.toggle('none', available < 1);
+      document.getElementById('product-modal-content').innerHTML = renderProductDetails(product);
+      document.getElementById('product-modal-add').disabled = available < 1;
+      document.getElementById('product-modal').hidden = false;
+      document.body.classList.add('modal-open');
+      document.getElementById('close-product-modal').focus();
+    };
+    const closeProductDetails = async () => {
+      await hideModal(document.getElementById('product-modal'));
+      document.body.classList.remove('modal-open');
+      returnFocus?.focus?.();
+    };
     const openCart = (trigger) => {
       returnFocus = trigger || document.activeElement;
       hideCartFeedback();
@@ -1443,8 +1821,8 @@
       document.body.classList.add('modal-open');
       document.querySelector('#cart-modal input[name="name"]').focus();
     };
-    const closeCart = () => {
-      document.getElementById('cart-modal').hidden = true;
+    const closeCart = async () => {
+      await hideModal(document.getElementById('cart-modal'));
       document.body.classList.remove('modal-open');
       returnFocus?.focus?.();
     };
@@ -1465,84 +1843,12 @@
       document.getElementById('close-result').focus();
     };
 
-    function showWorkshopSlide(index) {
-      if (!workshopSlides.length) return;
-      workshopIndex = (index + workshopSlides.length) % workshopSlides.length;
-      document.querySelectorAll('.workshop-slide').forEach((slide, slideIndex) => {
-        const active = slideIndex === workshopIndex;
-        slide.classList.toggle('active', active);
-        slide.setAttribute('aria-hidden', String(!active));
-      });
-      document.querySelectorAll('.carousel-dot').forEach((dot, dotIndex) => {
-        const active = dotIndex === workshopIndex;
-        dot.classList.toggle('active', active);
-        dot.setAttribute('aria-pressed', String(active));
-      });
-    }
-
-    function stopWorkshopAutoplay() {
-      clearInterval(workshopTimer);
-      workshopTimer = undefined;
-    }
-
-    function startWorkshopAutoplay() {
-      stopWorkshopAutoplay();
-      if (workshopSlides.length < 2 || window.matchMedia('(prefers-reduced-motion: reduce)').matches || document.hidden) return;
-      workshopTimer = setInterval(() => showWorkshopSlide(workshopIndex + 1), 5000);
-    }
-
-    function renderWorkshopCarousel(items) {
-      const carousel = document.getElementById('workshop-carousel');
-      const track = document.getElementById('workshop-carousel-track');
-      const dots = document.getElementById('workshop-carousel-dots');
-      workshopSlides = (items || []).filter((product) => product.image_path)
-        .map((product) => ({ name: String(product.name || 'Jabón artesanal'), url: imageUrl(product.image_path) }))
-        .filter((product) => product.url);
-      workshopIndex = 0;
-      stopWorkshopAutoplay();
-      if (!workshopSlides.length) {
-        track.innerHTML = '<div class="workshop-empty">Pronto compartiremos imágenes de nuestros jabones</div>';
-        dots.innerHTML = '';
-        dots.hidden = true;
-        carousel.querySelectorAll('.carousel-control').forEach((control) => { control.hidden = true; });
-        return;
-      }
-      track.innerHTML = workshopSlides.map((product, index) => `
-        <figure class="workshop-slide${index === 0 ? ' active' : ''}" role="group" aria-roledescription="diapositiva" aria-label="${index + 1} de ${workshopSlides.length}" aria-hidden="${index !== 0}">
-          <img src="${escapeHtml(product.url)}" alt="${escapeHtml(product.name)}" loading="${index === 0 ? 'eager' : 'lazy'}">
-          <figcaption>${escapeHtml(product.name)}</figcaption>
-        </figure>`).join('');
-      dots.innerHTML = workshopSlides.map((product, index) => `
-        <button class="carousel-dot${index === 0 ? ' active' : ''}" type="button" data-slide="${index}" aria-label="Mostrar ${escapeHtml(product.name)}" aria-pressed="${index === 0}"></button>`).join('');
-      carousel.querySelectorAll('.carousel-control').forEach((control) => { control.hidden = workshopSlides.length < 2; });
-      dots.hidden = workshopSlides.length < 2;
-      startWorkshopAutoplay();
-    }
-
-    const workshopCarousel = document.getElementById('workshop-carousel');
-    workshopCarousel.addEventListener('click', (event) => {
-      const dot = event.target.closest('[data-slide]');
-      if (dot) showWorkshopSlide(Number(dot.dataset.slide));
-      else if (event.target.closest('.carousel-prev')) showWorkshopSlide(workshopIndex - 1);
-      else if (event.target.closest('.carousel-next')) showWorkshopSlide(workshopIndex + 1);
-    });
-    workshopCarousel.addEventListener('mouseenter', stopWorkshopAutoplay);
-    workshopCarousel.addEventListener('mouseleave', startWorkshopAutoplay);
-    workshopCarousel.addEventListener('focusin', stopWorkshopAutoplay);
-    workshopCarousel.addEventListener('focusout', (event) => {
-      if (!workshopCarousel.contains(event.relatedTarget)) startWorkshopAutoplay();
-    });
-    document.addEventListener('visibilitychange', () => {
-      if (document.hidden) stopWorkshopAutoplay();
-      else startWorkshopAutoplay();
-    });
-
     function renderCatalog(settings, items) {
       const businessName = settings?.business_name || 'Fragancia y Miel';
       document.title = `Jabones artesanales | ${businessName}`;
       document.getElementById('brand-name').textContent = businessName;
       document.getElementById('footer-name').textContent = businessName;
-      document.getElementById('hero-tagline').textContent = settings?.tagline || 'Jabones artesanales elaborados con ingredientes seleccionados y mucho cariño.';
+      document.getElementById('hero-tagline').textContent = settings?.tagline || 'Jabones artesanales hechos con cuidado';
       document.getElementById('about-text').textContent = settings?.about_text || 'Cada jabón nace de una producción cuidada en nuestro taller. Elegimos cada ingrediente y preparamos lotes pequeños para ofrecer una experiencia sencilla y especial.';
       if (settings?.logo_path) {
         const logo = document.createElement('img');
@@ -1551,6 +1857,13 @@
         logo.src = imageUrl(settings.logo_path);
         logo.alt = `Logo de ${businessName}`;
         document.getElementById('brand-mark')?.replaceWith(logo);
+
+        const orderLogo = document.createElement('img');
+        orderLogo.id = 'order-logo';
+        orderLogo.className = 'flower';
+        orderLogo.src = imageUrl(settings.logo_path);
+        orderLogo.alt = `Logo de ${businessName}`;
+        document.getElementById('order-logo')?.replaceWith(orderLogo);
       }
       const contacts = [settings?.phone, settings?.email, settings?.address].filter(Boolean);
       document.getElementById('footer-contact').textContent = contacts.join(' · ');
@@ -1562,7 +1875,19 @@
         document.getElementById('reseller-link').hidden = true;
       }
       products = items || [];
-      renderWorkshopCarousel(products);
+      const concerns = new Map();
+      products.forEach((product) => (product.health_concerns || []).forEach((concern) => {
+        if (typeof concern === 'string' && concern.trim()) {
+          const normalized = normalizeConcern(concern);
+          if (!concerns.has(normalized)) concerns.set(normalized, concern.trim());
+        }
+      }));
+      concernOptions = [...concerns.entries()].map(([value, label]) => ({ value, label }));
+      document.getElementById('open-concern-search').hidden = concernOptions.length === 0;
+      document.getElementById('concern-options').innerHTML = concernOptions.map(({ value, label }) => `
+        <label class="concern-option"><input type="checkbox" name="concern" value="${escapeHtml(value)}"><span>${escapeHtml(label)}</span></label>
+      `).join('');
+      selectedConcerns = new Set();
       document.getElementById('catalog-status').hidden = true;
       const container = document.getElementById('products');
       if (!products.length) {
@@ -1572,20 +1897,14 @@
       container.innerHTML = products.map((product) => {
         const available = Math.max(0, Number(product.available || 0));
         const photo = imageUrl(product.image_path);
-        const list = (title, values) => values?.length
-          ? `<div><h4>${title}</h4><ul>${values.map((entry) => `<li>${escapeHtml(entry)}</li>`).join('')}</ul></div>` : '';
-        return `<article class="product">
+        return `<article class="product" tabindex="0" data-open-product="${escapeHtml(product.id)}" aria-haspopup="dialog" aria-label="Ver detalles de ${escapeHtml(product.name)}">
           <div class="product-image">${photo ? `<img loading="lazy" src="${escapeHtml(photo)}" alt="${escapeHtml(product.name)}">` : '<span aria-hidden="true">✿</span>'}</div>
           <div class="product-body"><h3>${escapeHtml(product.name)}</h3>
-          <div class="product-meta"><span class="price">${currency.format(Number(product.price || 0))}</span><span class="availability${available < 1 ? ' none' : ''}">${available > 0 ? `${available} disponibles` : 'Agotado'}</span></div>
-          <details class="product-details"><summary>Beneficios, composición y uso</summary>
-            <div class="product-detail-content">${list('Beneficios', product.benefits)}${list('Composición', product.composition)}
-              ${product.usage_instructions ? `<div><h4>Modo de uso</h4><p class="usage">${escapeHtml(product.usage_instructions)}</p></div>` : ''}
-              <p class="usage">Peso aproximado: ${escapeHtml(product.soap_weight || '—')} g</p>
-            </div>
-          </details><div class="buy-row"><input aria-label="Cantidad de ${escapeHtml(product.name)}" id="quantity-${escapeHtml(product.id)}" type="number" min="1" max="${available}" value="1" ${available < 1 ? 'disabled' : ''}><button class="button" type="button" data-add="${escapeHtml(product.id)}" ${available < 1 ? 'disabled' : ''}>Agregar al pedido</button></div></div>
+          <div class="buy-row"><input aria-label="Cantidad de ${escapeHtml(product.name)}" id="quantity-${escapeHtml(product.id)}" type="number" min="1" max="${available}" value="1" ${available < 1 ? 'disabled' : ''}><button class="button" type="button" data-add="${escapeHtml(product.id)}" ${available < 1 ? 'disabled' : ''}>Agregar al pedido</button></div>
+          <div class="product-meta"><span class="price">${currency.format(Number(product.price || 0))}</span><span class="availability${available < 1 ? ' none' : ''}">${available > 9 ? '9+ disponibles' : available > 0 ? `${available} disponibles` : 'Agotado'}</span></div></div>
         </article>`;
       }).join('');
+      applyConcernFilter();
       container.querySelectorAll('.product input[type="number"]').forEach((input) => {
         input.addEventListener('input', () => {
           input.closest('.product').classList.toggle('is-selected', Number(input.value) > 0);
@@ -1594,35 +1913,42 @@
       container.querySelectorAll('[data-add]').forEach((button) => button.addEventListener('click', () => {
         const product = products.find((item) => item.id === button.dataset.add);
         const quantityInput = document.getElementById(`quantity-${product.id}`);
-        const quantity = Number(quantityInput.value);
-        if (!Number.isInteger(quantity) || quantity < 1 || quantity > Number(product.available)) {
-          showToast('Elige una cantidad disponible para este jabón.');
-          quantityInput.focus();
-          return;
-        }
-        const existing = cart.get(product.id) || 0;
-        const remaining = Math.max(0, Number(product.available) - existing);
-        const addedQuantity = Math.min(quantity, remaining);
-        if (addedQuantity === 0) {
-          showToast('Ya tienes todas las unidades disponibles de este jabón en tu carrito.');
-          return;
-        }
-        cart.set(product.id, existing + addedQuantity);
-        renderCart();
-        updateCartBadge();
-        hideCartFeedback();
-        button.classList.add('added');
-        button.textContent = '✓ Agregado';
-        button.closest('.product').classList.add('is-selected');
-        showToast(addedQuantity < quantity
-          ? `Agregamos ${addedQuantity} unidad${addedQuantity === 1 ? '' : 'es'} de ${product.name}; es lo disponible.`
-          : `${quantity} ${product.name} se agregó${quantity === 1 ? '' : 'n'} a tu carrito.`);
-        setTimeout(() => {
-          button.classList.remove('added');
-          button.textContent = 'Agregar al pedido';
-        }, 1400);
+        addProductToCart(product, Number(quantityInput.value), button, quantityInput);
       }));
     }
+
+    function applyConcernFilter() {
+      const visibleProducts = products.filter((product) => {
+        const productConcerns = (product.health_concerns || []).map(normalizeConcern);
+        return selectedConcerns.size === 0 || productConcerns.some((concern) => selectedConcerns.has(concern));
+      });
+      document.querySelectorAll('#products [data-open-product]').forEach((card) => {
+        card.hidden = !visibleProducts.some((product) => product.id === card.dataset.openProduct);
+      });
+      document.getElementById('no-concern-results').hidden = selectedConcerns.size === 0 || visibleProducts.length > 0;
+      const status = document.getElementById('catalog-filter-status');
+      status.hidden = selectedConcerns.size === 0;
+      status.textContent = selectedConcerns.size
+        ? `${visibleProducts.length} producto${visibleProducts.length === 1 ? '' : 's'} para: ${concernOptions.filter(({ value }) => selectedConcerns.has(value)).map(({ label }) => label).join(', ')}`
+        : '';
+      document.getElementById('clear-concern-filter').hidden = selectedConcerns.size === 0;
+    }
+
+    const openConcernSearch = (trigger) => {
+      concernSearchReturnFocus = trigger || document.activeElement;
+      document.querySelectorAll('#concern-options input[name="concern"]').forEach((checkbox) => {
+        checkbox.checked = selectedConcerns.has(checkbox.value);
+      });
+      document.getElementById('concern-search-error').hidden = true;
+      document.getElementById('concern-search-modal').hidden = false;
+      document.body.classList.add('modal-open');
+      document.getElementById('close-concern-search').focus();
+    };
+    const closeConcernSearch = async () => {
+      await hideModal(document.getElementById('concern-search-modal'));
+      document.body.classList.remove('modal-open');
+      concernSearchReturnFocus?.focus?.();
+    };
 
     function renderCart() {
       const lines = document.getElementById('cart-lines');
@@ -1666,8 +1992,26 @@
           else cart.set(id, Math.min(next, Number(product.available)));
         }
         renderCart();
+        void persistCartWithNotice();
         updateCartBadge();
       }));
+    }
+
+    function restoreCart(savedItems) {
+      for (const entry of savedItems) {
+        if (!Array.isArray(entry) || entry.length !== 2) continue;
+        const [id, storedQuantity] = entry;
+        const product = products.find((item) => item.id === id);
+        const quantity = Number(storedQuantity);
+        if (!product || !Number.isInteger(quantity) || quantity < 1) continue;
+        const available = Math.max(0, Number(product.available || 0));
+        if (available > 0) cart.set(id, Math.min(quantity, available));
+      }
+      if (JSON.stringify([...cart.entries()]) !== JSON.stringify(savedItems)) {
+        void persistCartWithNotice();
+      }
+      renderCart();
+      updateCartBadge();
     }
 
     document.getElementById('order-form').addEventListener('submit', async (event) => {
@@ -1705,7 +2049,33 @@
         showCartFeedback(error.message || 'No se pudo enviar el pedido. Comprueba la disponibilidad e inténtalo de nuevo.');
         return;
       }
+      let storageWarning = '';
+      try {
+        const orderItems = entries.map(([productId, quantity]) => {
+          const product = products.find((item) => item.id === productId);
+          return {
+            productId,
+            name: product?.name || String(productId),
+            quantity,
+            unitPrice: Number(product?.price || 0),
+          };
+        });
+        await saveOrder({
+          orderNumber: data,
+          createdAt: new Date().toISOString(),
+          status: 'received',
+          items: orderItems,
+          total: orderItems.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0),
+        });
+      } catch (storageError) {
+        storageWarning = `El pedido sí quedó registrado, pero no se pudo guardar su copia en este dispositivo: ${storageError.message}`;
+      }
       cart.clear();
+      try {
+        await saveCart();
+      } catch (storageError) {
+        storageWarning = [storageWarning, `No se pudo actualizar el carrito guardado: ${storageError.message}`].filter(Boolean).join(' ');
+      }
       formElement.reset();
       updateCartBadge();
       renderCart();
@@ -1717,15 +2087,44 @@
       } catch (refreshError) {
         refreshWarning = refreshError.message || 'No se pudo actualizar la disponibilidad en pantalla.';
       }
-      closeCart();
+      await closeCart();
       showOrderResult({
         success: true,
         orderNumber: data,
-        warning: refreshWarning ? `Tu pedido sí quedó registrado. No se pudo actualizar la disponibilidad en pantalla: ${refreshWarning}` : '',
+        warning: [
+          storageWarning,
+          refreshWarning ? `Tu pedido sí quedó registrado. No se pudo actualizar la disponibilidad en pantalla: ${refreshWarning}` : '',
+        ].filter(Boolean).join(' '),
         message: 'Fragancia y Miel se contactará contigo para coordinar tu pedido.',
       });
     });
 
+    const productContainer = document.getElementById('products');
+    productContainer.addEventListener('click', (event) => {
+      const card = event.target.closest('[data-open-product]');
+      if (!card || !productContainer.contains(card)) return;
+      if (event.target.closest('button, input, select, textarea, a')) return;
+      const product = products.find((item) => item.id === card.dataset.openProduct);
+      if (product) openProductDetails(product, card);
+    });
+    productContainer.addEventListener('keydown', (event) => {
+      const card = event.target.closest('[data-open-product]');
+      if (!card || event.target !== card) return;
+      if (event.key === 'Enter') {
+        event.preventDefault();
+        const product = products.find((item) => item.id === card.dataset.openProduct);
+        if (product) openProductDetails(product, card);
+      } else if (event.key === ' ') {
+        event.preventDefault();
+      }
+    });
+    productContainer.addEventListener('keyup', (event) => {
+      const card = event.target.closest('[data-open-product]');
+      if (event.key !== ' ' || !card || event.target !== card) return;
+      event.preventDefault();
+      const product = products.find((item) => item.id === card.dataset.openProduct);
+      if (product) openProductDetails(product, card);
+    });
     document.getElementById('open-cart').addEventListener('click', (event) => openCart(event.currentTarget));
     document.querySelectorAll('[data-open-cart]').forEach((button) => {
       button.addEventListener('click', (event) => openCart(event.currentTarget));
@@ -1735,8 +2134,37 @@
     document.getElementById('cart-modal').addEventListener('click', (event) => {
       if (event.target === event.currentTarget) closeCart();
     });
-    const closeResult = () => {
-      document.getElementById('result-backdrop').hidden = true;
+    document.getElementById('close-product-modal').addEventListener('click', closeProductDetails);
+    document.getElementById('open-concern-search').addEventListener('click', (event) => openConcernSearch(event.currentTarget));
+    document.getElementById('close-concern-search').addEventListener('click', closeConcernSearch);
+    document.getElementById('cancel-concern-search').addEventListener('click', closeConcernSearch);
+    document.getElementById('concern-search-modal').addEventListener('click', (event) => {
+      if (event.target === event.currentTarget) closeConcernSearch();
+    });
+    document.getElementById('concern-search-form').addEventListener('submit', (event) => {
+      event.preventDefault();
+      const checked = [...document.querySelectorAll('#concern-options input[name="concern"]:checked')];
+      if (!checked.length) {
+        document.getElementById('concern-search-error').hidden = false;
+        return;
+      }
+      selectedConcerns = new Set(checked.map((checkbox) => checkbox.value));
+      applyConcernFilter();
+      void closeConcernSearch();
+      document.getElementById('productos').scrollIntoView({ behavior: 'smooth' });
+    });
+    document.getElementById('clear-concern-filter').addEventListener('click', () => {
+      selectedConcerns.clear();
+      applyConcernFilter();
+    });
+    document.getElementById('product-modal-add').addEventListener('click', () => {
+      if (detailProduct) addProductToCart(detailProduct, 1, document.getElementById('product-modal-add'));
+    });
+    document.getElementById('product-modal').addEventListener('click', (event) => {
+      if (event.target === event.currentTarget) closeProductDetails();
+    });
+    const closeResult = async () => {
+      await hideModal(document.getElementById('result-backdrop'));
       document.body.classList.remove('modal-open');
       document.getElementById('open-cart').focus();
     };
@@ -1749,6 +2177,8 @@
       if (event.key !== 'Escape') return;
       if (!document.getElementById('result-backdrop').hidden) closeResult();
       else if (!document.getElementById('cart-modal').hidden) closeCart();
+      else if (!document.getElementById('product-modal').hidden) closeProductDetails();
+      else if (!document.getElementById('concern-search-modal').hidden) closeConcernSearch();
     });
 
     async function init() {
@@ -1759,12 +2189,18 @@
       client = createClient(SUPABASE_URL, SUPABASE_PUBLISHABLE_KEY, {
         auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false },
       });
+      const savedCartPromise = readSavedCart().catch((storageError) => {
+        showToast(`No se pudo recuperar el carrito guardado: ${storageError.message}`);
+        return [];
+      });
       const { data, error } = await client.rpc('get_web_catalog');
       if (error) {
         document.getElementById('catalog-status').textContent = `No se pudo cargar el catálogo: ${error.message}`;
         return;
       }
+      const savedCart = await savedCartPromise;
       renderCatalog(data?.settings || {}, data?.products || []);
+      restoreCart(savedCart);
     }
     init().catch((error) => {
       document.getElementById('catalog-status').textContent = `No se pudo cargar el catálogo: ${error.message}`;

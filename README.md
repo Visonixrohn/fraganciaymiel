@@ -34,7 +34,7 @@ En **Settings → Pages → Build and deployment**, selecciona **GitHub Actions*
 - Catálogo público independiente en `storefront.html`, con tarjetas interactivas, carrito de compras modal, disponibilidad por lote, beneficios, composición y modo de uso.
 - Pedidos web: las órdenes pendientes no descuentan existencias; al reservarlas, el sistema valida y aparta unidades de forma atómica. Cancelar libera la reserva y completar convierte el pedido en una venta facturada. El panel muestra un contador de pedidos activos y notifica nuevas órdenes en tiempo real.
 - Configuración de nombre, logo, contacto, WhatsApp y presentación del negocio desde el panel. Las imágenes se guardan en el bucket público `jabon`; solo usuarios autenticados pueden subirlas o editarlas.
-- Administración de productos web vinculados a un lote producido. La tienda solo publica productos activos con precio definido y muestra existencias actualizadas.
+- Administración de productos web vinculados a un lote producido, con beneficios, afecciones asociadas, composición y modo de uso. La tienda solo publica productos activos con precio definido y muestra existencias actualizadas.
 - Control de cobros, pagos y gastos, con estado de resultados por período y balance general de gestión.
 - Exportación de los datos visibles a JSON.
 - Acceso a la interfaz mediante un código y sesión anónima de Supabase; las sesiones anónimas comparten el inventario.
@@ -49,7 +49,7 @@ Al registrar una compra, ingresa el costo de una unidad por artículo; el sistem
 
 1. Vuelve a ejecutar el esquema actualizado `supabase/schema.sql` desde **Supabase → SQL Editor**. Esto crea las vistas de catálogo y pedidos, los procedimientos de reserva/venta y el bucket público `jabon`.
 2. En la aplicación, abre **Configuración web** y guarda la identidad y los datos de contacto. Para WhatsApp, usa el número internacional con código de país (por ejemplo, `504...`).
-3. En **Productos web**, crea cada producto y, si ya está disponible, asígnale un lote de producción. Puedes guardar productos sin lote y asignarlo más adelante; solo se mostrarán en la tienda cuando tengan lote y precio. Completa beneficios, composición con unidades y modo de uso; sube una imagen JPG, PNG o WebP de hasta 8 MB.
+3. En **Productos web**, crea cada producto y, si ya está disponible, asígnale un lote de producción. Puedes guardar productos sin lote y asignarlo más adelante; solo se mostrarán en la tienda cuando tengan lote y precio. Completa beneficios, afecciones que ayuda a tratar (separadas por comas), composición con unidades y modo de uso; sube una imagen JPG, PNG o WebP de hasta 8 MB. En la tienda, el botón flotante permite filtrar productos por una o varias afecciones.
 4. Publica el archivo [`src/public/storefront.html`](./src/public/storefront.html) junto a la aplicación. En ese HTML reemplaza `SUPABASE_URL` y `SUPABASE_PUBLISHABLE_KEY` con la URL del proyecto y su clave **publicable**. Nunca pegues una clave `service_role` o secreta; la tienda necesita únicamente la RPC pública de catálogo y envío de pedidos.
 5. El despliegue existente de GitHub Pages incluye la tienda en `storefront.html`. Desde **Pedidos web**, reserva, cancela o completa cada pedido. Solo los pedidos reservados afectan el stock; los pendientes no descuentan existencias. Al completar, el sistema crea la venta y factura con los datos del pedido.
 
