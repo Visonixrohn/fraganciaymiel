@@ -1,4 +1,4 @@
-import { Children, cloneElement, isValidElement, useCallback, useEffect, useMemo, useState } from 'react';
+import { Children, isValidElement, useCallback, useEffect, useMemo, useState } from 'react';
 import { isSupabaseConfigured, supabase } from './supabase.js';
 
 const navigationGroups = [
@@ -305,7 +305,7 @@ function App() {
     .filter((order) => ['pending', 'confirmed'].includes(order.status)).length;
 
   function openMobileForm(formId) {
-    if (window.matchMedia('(max-width: 620px)').matches) setMobileFormOpen(formId);
+    if (window.matchMedia('(max-width: 900px)').matches) setMobileFormOpen(formId);
   }
 
   const soapStockRows = useMemo(() => data.webProducts.map((product) => {
@@ -2110,7 +2110,7 @@ function App() {
             <span>{icon}</span><small>{label}</small>
           </button>
         ))}
-        <button type="button" className={`mobile-bottom-item${mobileNavOpen ? ' active' : ''}`} aria-haspopup="dialog" aria-expanded={mobileNavOpen} aria-controls="mobile-navigation-menu" onClick={() => setMobileNavOpen(!mobileNavOpen)}>
+        <button type="button" className={`mobile-bottom-item${mobileNavOpen || !mobileQuickNavigation.some(([id]) => id === tab) ? ' active' : ''}`} aria-haspopup="dialog" aria-expanded={mobileNavOpen} aria-controls="mobile-navigation-menu" onClick={() => setMobileNavOpen(!mobileNavOpen)}>
           <span>☰</span><small>Menú</small>
         </button>
       </nav>
@@ -2405,10 +2405,10 @@ function App() {
               <thead><tr><th>Producto</th><th>Precio</th><th>Cant.</th><th>Importe</th></tr></thead>
               <tbody>{(modal.sale.sale_items || []).map((item) => (
                 <tr key={item.id}>
-                  <td>{item.recipe_name}<small>{priceTypes.find(([value]) => value === item.price_type)?.[1]}</small></td>
-                  <td>{money(item.unit_price)}</td>
-                  <td>{item.quantity}</td>
-                  <td>{money(item.line_total)}</td>
+                  <td data-label="Producto">{item.recipe_name}<small>{priceTypes.find(([value]) => value === item.price_type)?.[1]}</small></td>
+                  <td data-label="Precio">{money(item.unit_price)}</td>
+                  <td data-label="Cantidad">{item.quantity}</td>
+                  <td data-label="Importe">{money(item.line_total)}</td>
                 </tr>
               ))}</tbody>
             </table>
@@ -2493,21 +2493,66 @@ function Section({ title, subtitle, action, onAction, className = '', children }
   return <section className={`panel ${className}`}><div className="section-heading"><div><h2>{title}</h2>{subtitle && <p>{subtitle}</p>}</div>{action && <button className="button primary small" onClick={onAction}>{action}</button>}</div>{children}</section>;
 }
 function Table({ headers, children }) {
-  const empty = Children.count(children) === 0;
-  const rows = Children.map(children, (row) => {
-    if (!isValidElement(row) || row.type !== 'tr') return row;
-    let cellIndex = 0;
-    const cells = Children.map(row.props.children, (cell) => {
-      if (!isValidElement(cell) || cell.type !== 'td') return cell;
-      const label = headers[cellIndex++] || '';
-      return cloneElement(cell, { 'data-label': label || undefined });
+  const rows = Children.toArray(children).filter((row) => isValidElement(row) && row.type === 'tr');
+  const cards = rows.map((row, rowIndex) => {
+    const fields = [];
+    const actions = [];
+    let columnIndex = 0;
+    Children.forEach(row.props.children, (cell) => {
+      if (!isValidElement(cell)) return;
+      if (cell.type === Actions) {
+        actions.push(<ActionButtons key={`actions-${rowIndex}`} {...cell.props} />);
+        return;
+      }
+      if (cell.type !== 'td') return;
+      const label = headers[columnIndex++] || '';
+      const classNames = String(cell.props.className || '').split(/\s+/);
+      if (classNames.includes('actions-cell') || classNames.includes('sale-actions')) {
+        actions.push(cell.props.children);
+        return;
+      }
+      fields.push({
+        label,
+        className: cell.props.className || '',
+        content: cell.props.children,
+      });
     });
-    return cloneElement(row, {}, cells);
+    const [title, ...details] = fields;
+    return (
+      <article className="mobile-table-card" key={row.key || rowIndex}>
+        {title && <div className="mobile-table-card-title"><span>{title.label}</span><div className={title.className}>{title.content}</div></div>}
+        <div className="mobile-table-card-fields">
+          {details.map((field, index) => (
+            <div className={`mobile-table-card-field${['Productos', 'Descripción'].includes(field.label) ? ' wide' : ''}`} key={`${field.label}-${index}`}>
+              <span>{field.label}</span>
+              <div className={field.className}>{field.content}</div>
+            </div>
+          ))}
+        </div>
+        {actions.length > 0 && <div className="mobile-table-card-actions">{actions}</div>}
+      </article>
+    );
   });
-  return <div className="table-wrap"><table><thead><tr>{headers.map((header, index) => <th key={`${header}-${index}`}>{header}</th>)}</tr></thead><tbody>{rows}{empty && <tr className="empty-row"><td colSpan={headers.length}><Empty text="Todavía no hay registros." /></td></tr>}</tbody></table></div>;
+  const empty = rows.length === 0;
+  return (
+    <>
+      <div className="table-wrap">
+        <table>
+          <thead><tr>{headers.map((header, index) => <th key={`${header}-${index}`}>{header}</th>)}</tr></thead>
+          <tbody>{children}{empty && <tr><td colSpan={headers.length}><Empty text="Todavía no hay registros." /></td></tr>}</tbody>
+        </table>
+      </div>
+      <div className="mobile-table-cards">
+        {empty ? <div className="mobile-table-empty"><Empty text="Todavía no hay registros." /></div> : cards}
+      </div>
+    </>
+  );
 }
 function Actions({ onEdit, onDelete }) {
-  return <td className="actions-cell">{onEdit && <button className="icon-button" aria-label="Editar" title="Editar" onClick={onEdit}>✎</button>}{onDelete && <button className="icon-button danger-text" aria-label="Eliminar" title="Eliminar" onClick={onDelete}>×</button>}</td>;
+  return <td className="actions-cell"><ActionButtons onEdit={onEdit} onDelete={onDelete} /></td>;
+}
+function ActionButtons({ onEdit, onDelete }) {
+  return <>{onEdit && <button className="icon-button" aria-label="Editar" title="Editar" onClick={onEdit}>✎</button>}{onDelete && <button className="icon-button danger-text" aria-label="Eliminar" title="Eliminar" onClick={onDelete}>×</button>}</>;
 }
 function CostLine({ label, value, strong = false }) {
   return <div className={strong ? 'cost-line cost-total' : 'cost-line'}><span>{label}</span><strong>{money(value)}</strong></div>;
