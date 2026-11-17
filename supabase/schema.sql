@@ -178,14 +178,12 @@ create table if not exists public.web_settings (
   updated_at timestamptz not null default now()
 );
 
-alter table public.web_products alter column batch_id drop not null;
-
 insert into public.web_settings (id) values (1) on conflict (id) do nothing;
 
 create table if not exists public.web_products (
   id uuid primary key default gen_random_uuid(),
   name text not null,
-  batch_id uuid references public.batches(id) on delete restrict,
+  batch_id uuid references public.batches(id) on delete set null,
   image_path text,
   benefits text[] not null default '{}',
   health_concerns text[] not null default '{}',
@@ -265,7 +263,7 @@ create table if not exists public.web_order_items (
   id uuid primary key default gen_random_uuid(),
   web_order_id uuid not null references public.web_orders(id) on delete cascade,
   web_product_id uuid not null references public.web_products(id) on delete restrict,
-  batch_id uuid not null references public.batches(id) on delete restrict,
+  batch_id uuid references public.batches(id) on delete set null,
   recipe_id uuid not null references public.recipes(id) on delete restrict,
   product_name text not null,
   quantity integer not null check (quantity > 0),
@@ -273,6 +271,18 @@ create table if not exists public.web_order_items (
   line_total numeric(14, 2) not null check (line_total >= 0),
   created_at timestamptz not null default now()
 );
+
+alter table public.web_products alter column batch_id drop not null;
+alter table public.web_products drop constraint if exists web_products_batch_id_fkey;
+alter table public.web_products
+  add constraint web_products_batch_id_fkey foreign key (batch_id)
+  references public.batches(id) on delete set null;
+
+alter table public.web_order_items alter column batch_id drop not null;
+alter table public.web_order_items drop constraint if exists web_order_items_batch_id_fkey;
+alter table public.web_order_items
+  add constraint web_order_items_batch_id_fkey foreign key (batch_id)
+  references public.batches(id) on delete set null;
 
 update public.sales
 set paid_at = coalesce(issued_at, created_at)
@@ -1083,6 +1093,35 @@ begin
 end;
 $$;
 
+create or replace function public.record_purchase(
+  p_supplier_name text,
+  p_purchase_date date,
+  p_payment_method text,
+  p_items jsonb
+)
+returns public.purchases
+language sql
+set search_path = ''
+as $$
+  select public.record_purchase(
+    p_supplier_name, p_purchase_date, 'paid', p_payment_method, p_items
+  );
+$$;
+
+create or replace function public.record_purchase(
+  p_supplier_name text,
+  p_purchase_date date,
+  p_items jsonb
+)
+returns public.purchases
+language sql
+set search_path = ''
+as $$
+  select public.record_purchase(
+    p_supplier_name, p_purchase_date, 'paid', 'cash', p_items
+  );
+$$;
+
 create or replace function public.update_purchase(
   p_purchase_id uuid,
   p_supplier_name text,
@@ -1548,6 +1587,13 @@ begin
   end loop;
 
   if p_status = 'confirmed' and v_order.status = 'pending' then
+    if exists (
+      select 1 from public.web_order_items
+      where web_order_id = p_order_id and batch_id is null
+    ) then
+      raise exception 'No se puede reservar este pedido porque uno de sus lotes fue eliminado.';
+    end if;
+
     for v_item in
       select batch_id, sum(quantity)::integer as quantity
       from public.web_order_items
@@ -1566,6 +1612,37 @@ begin
   update public.web_orders
   set status = p_status, updated_at = now()
   where id = p_order_id;
+end;
+$$;
+
+create or replace function public.delete_batch(p_batch_id uuid)
+returns integer
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_cancelled_orders integer;
+begin
+  if auth.uid() is null then
+    raise exception 'Debes iniciar sesión para eliminar lotes.';
+  end if;
+
+  update public.web_orders wo
+  set status = 'cancelled', updated_at = now()
+  where wo.status in ('pending', 'confirmed')
+    and exists (
+      select 1 from public.web_order_items woi
+      where woi.web_order_id = wo.id and woi.batch_id = p_batch_id
+    );
+  get diagnostics v_cancelled_orders = row_count;
+
+  delete from public.batches where id = p_batch_id;
+  if not found then
+    raise exception 'No se encontró el lote.';
+  end if;
+
+  return v_cancelled_orders;
 end;
 $$;
 
@@ -1687,18 +1764,26 @@ revoke all on function public.produce_batch(uuid, text, integer) from public;
 revoke all on function public.save_sales_order(uuid, text, text, text, text, jsonb) from public;
 revoke all on function public.issue_sales_order(uuid) from public;
 revoke all on function public.record_purchase(text, date, text, text, jsonb) from public;
+revoke all on function public.record_purchase(text, date, text, jsonb) from public;
+revoke all on function public.record_purchase(text, date, jsonb) from public;
 revoke all on function public.mark_purchase_paid(uuid, text) from public;
 revoke all on function public.update_purchase(uuid, text, date, text, text, jsonb, boolean) from public;
 revoke all on function public.mark_sale_paid(uuid, text) from public;
 revoke all on function public.record_expense(text, text, numeric, date, text, text) from public;
 revoke all on function public.mark_expense_paid(uuid, text) from public;
+revoke all on function public.delete_batch(uuid) from public;
 grant execute on function public.save_recipe(uuid, text, integer, numeric, numeric, numeric, numeric, numeric, jsonb, jsonb, jsonb) to authenticated;
 grant execute on function public.produce_batch(uuid, text, integer) to authenticated;
 grant execute on function public.save_sales_order(uuid, text, text, text, text, jsonb) to authenticated;
 grant execute on function public.issue_sales_order(uuid) to authenticated;
 grant execute on function public.record_purchase(text, date, text, text, jsonb) to authenticated;
+grant execute on function public.record_purchase(text, date, text, jsonb) to authenticated;
+grant execute on function public.record_purchase(text, date, jsonb) to authenticated;
 grant execute on function public.mark_purchase_paid(uuid, text) to authenticated;
 grant execute on function public.update_purchase(uuid, text, date, text, text, jsonb, boolean) to authenticated;
 grant execute on function public.mark_sale_paid(uuid, text) to authenticated;
 grant execute on function public.record_expense(text, text, numeric, date, text, text) to authenticated;
 grant execute on function public.mark_expense_paid(uuid, text) to authenticated;
+grant execute on function public.delete_batch(uuid) to authenticated;
+
+notify pgrst, 'reload schema';

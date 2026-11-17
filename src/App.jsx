@@ -5,6 +5,7 @@ const navigationGroups = [
   {
     label: 'Inventario',
     items: [
+      ['soapStock', 'Stock de jabones', '▦'],
       ['materials', 'Materia prima', '◈'],
       ['indirects', 'Insumos indirectos', '✳'],
       ['utensils', 'Utensilios', '⌑'],
@@ -292,6 +293,21 @@ function App() {
   }), [data]);
   const activeWebOrderCount = data.webOrders
     .filter((order) => ['pending', 'confirmed'].includes(order.status)).length;
+
+  const soapStockRows = useMemo(() => data.webProducts.map((product) => {
+    const batch = data.batches.find((item) => item.id === product.batch_id);
+    return {
+      product,
+      batch,
+      available: batch ? availableWebBatchStock(batch) : 0,
+    };
+  }), [data]);
+  const soapStockTotal = useMemo(() => {
+    const batches = new Map(
+      soapStockRows.filter((row) => row.batch).map((row) => [row.batch.id, row.batch]),
+    );
+    return [...batches.values()].reduce((total, batch) => total + availableWebBatchStock(batch), 0);
+  }, [data, soapStockRows]);
 
   const visibleMaterials = useMemo(() => {
     const query = materialSearch.trim().toLocaleLowerCase('es');
@@ -762,6 +778,20 @@ function App() {
       return;
     }
     toast('Registro eliminado');
+    await loadData();
+  }
+
+  async function deleteBatch(batch) {
+    if (!window.confirm(`¿Eliminar el lote ${batch.code}? Los pedidos activos relacionados se cancelarán; el historial se conservará y los productos web quedarán sin lote asignado.`)) return;
+    const { data: cancelledOrders, error: deleteError } = await supabase.rpc('delete_batch', {
+      p_batch_id: batch.id,
+    });
+    if (deleteError) {
+      toast(deleteError.message, 'error');
+      return;
+    }
+    const count = Number(cancelledOrders || 0);
+    toast(`Lote eliminado; ${count} pedido${count === 1 ? '' : 's'} activo${count === 1 ? '' : 's'} cancelado${count === 1 ? '' : 's'}. El historial se conservó.`);
     await loadData();
   }
 
@@ -1464,6 +1494,27 @@ function App() {
         </section>
 
         {loading && <div className="loading-inline">Sincronizando datos con Supabase…</div>}
+        {tab === 'soapStock' && (
+          <Section title="Stock de jabones" subtitle="Existencias disponibles por nombre de producto web, con detalle por lote">
+            <div className="stock-total">
+              <span>Total disponible en productos web <small>(cada lote se cuenta una sola vez)</small></span>
+              <strong>{soapStockTotal} jabones</strong>
+            </div>
+            <Table headers={['Producto web', 'Receta', 'Lote', 'Fecha de producción', 'Producidos', 'Disponibles', 'Estado']}>
+              {soapStockRows.map(({ product, batch, available }) => (
+                <tr key={product.id}>
+                  <td className="strong">{product.name}</td>
+                  <td>{batch?.recipe_name || '—'}</td>
+                  <td><code>{batch?.code || 'Sin lote'}</code></td>
+                  <td>{batch ? new Date(`${batch.batch_date}T12:00:00`).toLocaleDateString('es-HN') : '—'}</td>
+                  <td>{batch?.quantity ?? 0}</td>
+                  <td className="green">{available}</td>
+                  <td><span className={`pill ${batch ? 'good' : 'warning'}`}>{batch ? 'Con lote' : 'Sin lote asignado'}</span></td>
+                </tr>
+              ))}
+            </Table>
+          </Section>
+        )}
         {tab === 'materials' && (
           <Section title="Inventario de materia prima directa" subtitle="Controla existencias, compras y alertas de reposición" action="＋ Nueva materia prima" onAction={() => openEntity('materials')}>
             <div className="inventory-toolbar">
@@ -1646,7 +1697,7 @@ function App() {
                 <td>{new Date(`${batch.batch_date}T12:00:00`).toLocaleDateString('es-HN')}</td>
                 <td><code>{batch.code}</code></td><td className="strong">{batch.recipe_name}</td><td>{batch.quantity} jabones</td>
                 <td>{money(batch.total_cost)}</td><td className="green">{money(batch.unit_cost)}</td>
-                <Actions onDelete={() => deleteRow('batches', batch.id, 'este lote')} />
+                <Actions onDelete={() => deleteBatch(batch)} />
               </tr>)}
             </Table>
           </Section>

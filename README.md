@@ -11,7 +11,7 @@ Aplicación React para administrar materias primas, insumos indirectos, utensili
 
 1. Instala dependencias con `npm install`.
 2. Copia `.env.example` a `.env` y configura `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`.
-3. En Supabase, abre **SQL Editor**, ejecuta el contenido de [`supabase/schema.sql`](./supabase/schema.sql) y confirma que terminó sin errores. Vuelve a ejecutar el esquema actualizado cuando incorpores cambios de base de datos.
+3. En Supabase, abre **SQL Editor**, ejecuta el contenido de [`supabase/schema.sql`](./supabase/schema.sql) y confirma que terminó sin errores. Vuelve a ejecutar el esquema actualizado cuando incorpores cambios de base de datos. Si aparece `Could not find the function public.record_purchase(...) in the schema cache`, ejecuta de nuevo el esquema completo para instalar la función compatible y recargar la caché de Supabase.
 4. En Supabase, habilita **Anonymous Sign-Ins** en la configuración de proveedores de autenticación.
 5. Inicia el servidor de desarrollo con `npm run dev`.
 
@@ -29,6 +29,8 @@ En **Settings → Pages → Build and deployment**, selecciona **GitHub Actions*
 - Creación de recetas con varias materias primas, insumos indirectos y utensilios; las cantidades de materia prima se ingresan por jabón, se multiplican por el tamaño del lote y se muestra el costo por barra.
 - Precios editables al detalle, por mayor y para eventos; calcula ganancia por barra y margen bruto (`(precio - costo) / precio`).
 - Registro transaccional de producción: verifica existencias y descuenta materias primas.
+- Vista **Stock de jabones** con existencias disponibles por nombre de producto web, detalle de lote y total sin duplicar lotes compartidos.
+- Al eliminar un lote, los productos web quedan sin lote, se cancelan los pedidos activos relacionados y se conserva el historial de pedidos.
 - Ventas en borrador y comprobantes internos numerados; al emitirlos valida las existencias de jabones terminados (producción menos ventas), registra la venta y permite imprimir o reimprimir la factura.
 - Registro de compras por materia prima, insumo indirecto o utensilio, con proveedor, costo unitario y forma de pago; las compras acumulan stock/costo y rendimiento o vida útil según el tipo.
 - Catálogo público independiente en `storefront.html`, con tarjetas interactivas, carrito de compras modal, disponibilidad por lote, beneficios, composición y modo de uso.
