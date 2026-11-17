@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Children, cloneElement, isValidElement, useCallback, useEffect, useMemo, useState } from 'react';
 import { isSupabaseConfigured, supabase } from './supabase.js';
 
 const navigationGroups = [
@@ -25,6 +25,7 @@ const navigationGroups = [
       ['sales', 'Facturación', '▧'],
       ['purchases', 'Compras', '＋'],
       ['webOrders', 'Pedidos web', '🛍'],
+      ['customOrders', 'Pedidos a crear', '✎'],
     ],
   },
   {
@@ -128,6 +129,7 @@ function App() {
     webSettings: null,
     webProducts: [],
     webOrders: [],
+    customOrders: [],
   });
   const [modal, setModal] = useState(null);
   const [saleDraft, setSaleDraft] = useState(null);
@@ -211,6 +213,7 @@ function App() {
       supabase.from('web_settings').select('*').eq('id', 1).maybeSingle(),
       supabase.from('web_products').select('*, batches(*)').order('sort_order').order('name'),
       supabase.from('web_orders').select('*, web_order_items(*)').order('created_at', { ascending: false }),
+      supabase.from('custom_orders').select('*').order('created_at', { ascending: false }),
     ]);
     const failed = queries.find(({ error: queryError }) => queryError);
     if (failed) {
@@ -218,7 +221,7 @@ function App() {
     } else {
       const [
         materials, indirects, utensils, recipes, batches, sales, purchases, expenses, financeSettings,
-        webSettings, webProducts, webOrders,
+        webSettings, webProducts, webOrders, customOrders,
       ] = queries.map((result) => result.data);
       setData({
         materials: materials.map(fromMaterial),
@@ -233,6 +236,7 @@ function App() {
         webSettings,
         webProducts,
         webOrders,
+        customOrders,
       });
       setWebSettingsDraft(webSettings || {
         id: 1,
@@ -557,6 +561,32 @@ function App() {
     } catch (uploadError) {
       toast(uploadError.message || 'No se pudo subir la imagen.', 'error');
     }
+  }
+
+  async function saveCustomOrder(event) {
+    event.preventDefault();
+    const values = modal?.values;
+    if (!values) return;
+    if (![values.customerName, values.customerPhone, values.design, values.fragrance, values.color]
+      .every((value) => value.trim()) || !Number.isInteger(number(values.quantity)) || number(values.quantity) < 1) {
+      toast('Completa todos los campos y verifica que la cantidad sea un entero positivo.', 'error');
+      return;
+    }
+    const { error: saveError } = await supabase.from('custom_orders').insert({
+      customer_name: values.customerName.trim(),
+      customer_phone: values.customerPhone.trim(),
+      design: values.design.trim(),
+      fragrance: values.fragrance.trim(),
+      color: values.color.trim(),
+      quantity: number(values.quantity),
+    });
+    if (saveError) {
+      toast(saveError.message, 'error');
+      return;
+    }
+    setModal(null);
+    toast('Pedido agregado');
+    await loadData();
   }
 
   async function deleteWebProduct(product) {
@@ -1138,7 +1168,7 @@ function App() {
     try {
       const backup = JSON.parse(await file.text());
       const categories = ['materials', 'indirects', 'utensils', 'recipes', 'batches'];
-      const optionalCategories = ['sales', 'purchases', 'expenses'];
+      const optionalCategories = ['sales', 'purchases', 'expenses', 'customOrders'];
       if (!backup || categories.some((category) => !Array.isArray(backup[category]))
         || optionalCategories.some((category) => backup[category] !== undefined && !Array.isArray(backup[category]))) {
         throw new Error('El archivo no contiene un respaldo válido de Fragancia y Miel.');
@@ -1387,6 +1417,21 @@ function App() {
           created_at: expense.created_at,
         }, { onConflict: 'id' });
         if (expenseError) throw expenseError;
+      }
+
+      for (const order of backup.customOrders || []) {
+        const { error: orderError } = await supabase.from('custom_orders').upsert({
+          id: order.id,
+          owner_id: session.user.id,
+          customer_name: order.customer_name,
+          customer_phone: order.customer_phone,
+          design: order.design,
+          fragrance: order.fragrance,
+          color: order.color,
+          quantity: number(order.quantity),
+          created_at: order.created_at,
+        }, { onConflict: 'id' });
+        if (orderError) throw orderError;
       }
 
       if (backup.financeSettings) {
@@ -1800,6 +1845,32 @@ function App() {
             </Table>
           </Section>
         )}
+        {tab === 'customOrders' && (
+          <Section
+            title="Pedidos a crear"
+            subtitle="Organiza los pedidos personalizados pendientes de producción"
+            action="＋ Nuevo pedido"
+            onAction={() => setModal({
+              kind: 'customOrder',
+              values: { customerName: '', customerPhone: '', design: '', fragrance: '', color: '', quantity: '1' },
+            })}
+          >
+            <Table headers={['Cliente', 'Celular', 'Diseño', 'Fragancia', 'Color', 'Cantidad', 'Fecha', '']}>
+              {data.customOrders.map((order) => (
+                <tr key={order.id}>
+                  <td className="strong">{order.customer_name}</td>
+                  <td>{order.customer_phone}</td>
+                  <td>{order.design}</td>
+                  <td>{order.fragrance}</td>
+                  <td>{order.color}</td>
+                  <td className="green">{order.quantity}</td>
+                  <td>{new Date(order.created_at).toLocaleDateString('es-HN')}</td>
+                  <Actions onDelete={() => deleteRow('custom_orders', order.id, `el pedido de ${order.customer_name}`)} />
+                </tr>
+              ))}
+            </Table>
+          </Section>
+        )}
         {tab === 'webProducts' && (
           <div className="web-admin-layout">
             <Section
@@ -1950,7 +2021,7 @@ function App() {
       </main>
       </div>
 
-      {modal && !['production', 'sale', 'purchase', 'purchaseDetail', 'invoice', 'completeWebOrder', 'webOrderDetail', 'webProduct'].includes(modal.kind) && (
+      {modal && !['production', 'sale', 'purchase', 'purchaseDetail', 'invoice', 'completeWebOrder', 'webOrderDetail', 'webProduct', 'customOrder'].includes(modal.kind) && (
         <Dialog title={`${modal.item ? 'Editar' : 'Registrar'} ${modal.kind === 'materials' ? 'materia prima' : modal.kind === 'indirects' ? 'insumo indirecto' : 'utensilio'}`} onClose={() => setModal(null)}>
           <form className="stack-form" onSubmit={saveEntity}>
             <Field label="Código"><input required value={modal.values.code} onChange={(e) => setModal({ ...modal, values: { ...modal.values, code: e.target.value } })} /></Field>
@@ -2026,6 +2097,38 @@ function App() {
             <div className="dialog-actions">
               <button type="button" className="button secondary" onClick={() => { setModal(null); setWebProductDraft(null); setWebProductFile(null); }}>Cancelar</button>
               <button className="button primary">{webProductDraft.id ? 'Guardar cambios' : 'Crear producto'}</button>
+            </div>
+          </form>
+        </Dialog>
+      )}
+      {modal?.kind === 'customOrder' && (
+        <Dialog className="custom-order-dialog" title="Crear pedido personalizado" onClose={() => setModal(null)}>
+          <form className="stack-form" onSubmit={saveCustomOrder}>
+            <Field label="Nombre del cliente">
+              <input required maxLength="120" autoComplete="name" value={modal.values.customerName} onChange={(event) => setModal({ ...modal, values: { ...modal.values, customerName: event.target.value } })} />
+            </Field>
+            <Field label="Celular">
+              <input required type="tel" maxLength="30" autoComplete="tel" value={modal.values.customerPhone} onChange={(event) => setModal({ ...modal, values: { ...modal.values, customerPhone: event.target.value } })} />
+            </Field>
+            <div className="form-grid">
+              <Field label="Diseño">
+                <input required maxLength="120" value={modal.values.design} onChange={(event) => setModal({ ...modal, values: { ...modal.values, design: event.target.value } })} />
+              </Field>
+              <Field label="Fragancia">
+                <input required maxLength="120" value={modal.values.fragrance} onChange={(event) => setModal({ ...modal, values: { ...modal.values, fragrance: event.target.value } })} />
+              </Field>
+            </div>
+            <div className="form-grid">
+              <Field label="Color">
+                <input required maxLength="80" value={modal.values.color} onChange={(event) => setModal({ ...modal, values: { ...modal.values, color: event.target.value } })} />
+              </Field>
+              <Field label="Cantidad">
+                <input required type="number" min="1" step="1" value={modal.values.quantity} onChange={(event) => setModal({ ...modal, values: { ...modal.values, quantity: event.target.value } })} />
+              </Field>
+            </div>
+            <div className="dialog-actions">
+              <button type="button" className="button secondary" onClick={() => setModal(null)}>Cancelar</button>
+              <button className="button primary">Guardar pedido</button>
             </div>
           </form>
         </Dialog>
@@ -2296,8 +2399,18 @@ function Section({ title, subtitle, action, onAction, className = '', children }
   return <section className={`panel ${className}`}><div className="section-heading"><div><h2>{title}</h2>{subtitle && <p>{subtitle}</p>}</div>{action && <button className="button primary small" onClick={onAction}>{action}</button>}</div>{children}</section>;
 }
 function Table({ headers, children }) {
-  const empty = !children || (Array.isArray(children) && children.length === 0);
-  return <div className="table-wrap"><table><thead><tr>{headers.map((header, index) => <th key={`${header}-${index}`}>{header}</th>)}</tr></thead><tbody>{children}{empty && <tr><td colSpan={headers.length}><Empty text="Todavía no hay registros." /></td></tr>}</tbody></table></div>;
+  const empty = Children.count(children) === 0;
+  const rows = Children.map(children, (row) => {
+    if (!isValidElement(row) || row.type !== 'tr') return row;
+    let cellIndex = 0;
+    const cells = Children.map(row.props.children, (cell) => {
+      if (!isValidElement(cell) || cell.type !== 'td') return cell;
+      const label = headers[cellIndex++] || '';
+      return cloneElement(cell, { 'data-label': label || undefined });
+    });
+    return cloneElement(row, {}, cells);
+  });
+  return <div className="table-wrap"><table><thead><tr>{headers.map((header, index) => <th key={`${header}-${index}`}>{header}</th>)}</tr></thead><tbody>{rows}{empty && <tr className="empty-row"><td colSpan={headers.length}><Empty text="Todavía no hay registros." /></td></tr>}</tbody></table></div>;
 }
 function Actions({ onEdit, onDelete }) {
   return <td className="actions-cell">{onEdit && <button className="icon-button" aria-label="Editar" title="Editar" onClick={onEdit}>✎</button>}{onDelete && <button className="icon-button danger-text" aria-label="Eliminar" title="Eliminar" onClick={onDelete}>×</button>}</td>;

@@ -272,6 +272,18 @@ create table if not exists public.web_order_items (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.custom_orders (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  customer_name text not null check (length(btrim(customer_name)) > 0),
+  customer_phone text not null check (length(btrim(customer_phone)) > 0),
+  design text not null check (length(btrim(design)) > 0),
+  fragrance text not null check (length(btrim(fragrance)) > 0),
+  color text not null check (length(btrim(color)) > 0),
+  quantity integer not null check (quantity > 0),
+  created_at timestamptz not null default now()
+);
+
 alter table public.web_products alter column batch_id drop not null;
 alter table public.web_products drop constraint if exists web_products_batch_id_fkey;
 alter table public.web_products
@@ -447,6 +459,7 @@ alter table public.web_settings enable row level security;
 alter table public.web_products enable row level security;
 alter table public.web_orders enable row level security;
 alter table public.web_order_items enable row level security;
+alter table public.custom_orders enable row level security;
 
 drop policy if exists "Owners manage their materials" on public.materials;
 drop policy if exists "Authenticated users manage shared materials" on public.materials;
@@ -526,6 +539,10 @@ drop policy if exists "Authenticated users view web order items" on public.web_o
 create policy "Authenticated users view web order items" on public.web_order_items
   for select to authenticated using (true);
 
+drop policy if exists "Authenticated users manage custom orders" on public.custom_orders;
+create policy "Authenticated users manage custom orders" on public.custom_orders
+  for all to authenticated using (true) with check (true);
+
 do $$
 begin
   if exists (select 1 from pg_publication where pubname = 'supabase_realtime')
@@ -542,6 +559,7 @@ $$;
 
 grant select, insert, update, delete on public.materials, public.indirects, public.utensils, public.recipes, public.recipe_items, public.recipe_indirects, public.recipe_utensils, public.batches, public.sales, public.sale_items, public.purchases, public.purchase_items, public.expenses, public.finance_settings, public.web_settings, public.web_products to authenticated;
 grant select on public.web_orders, public.web_order_items to authenticated;
+grant select, insert, update, delete on public.custom_orders to authenticated;
 grant usage, select on sequence public.sales_invoice_number_seq, public.purchases_number_seq, public.web_order_number_seq to authenticated;
 
 insert into storage.buckets (id, name, public)
