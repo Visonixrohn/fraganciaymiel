@@ -37,6 +37,11 @@ const navigationGroups = [
     ],
   },
 ];
+const mobileQuickNavigation = [
+  ['materials', 'Stock', '◈'],
+  ['recipes', 'Recetas', '⌗'],
+  ['customOrders', 'Pedidos', '✎'],
+];
 
 const money = (value) => `L ${Number(value || 0).toFixed(2)}`;
 const unitMoney = (value) => `L ${new Intl.NumberFormat('es-HN', { minimumFractionDigits: 2, maximumFractionDigits: 6 }).format(Number(value || 0))}`;
@@ -115,6 +120,7 @@ function App() {
   const [notice, setNotice] = useState(null);
   const [tab, setTab] = useState('materials');
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [mobileFormOpen, setMobileFormOpen] = useState(null);
   const [materialSearch, setMaterialSearch] = useState('');
   const [data, setData] = useState({
     materials: [],
@@ -297,6 +303,10 @@ function App() {
   }), [data]);
   const activeWebOrderCount = data.webOrders
     .filter((order) => ['pending', 'confirmed'].includes(order.status)).length;
+
+  function openMobileForm(formId) {
+    if (window.matchMedia('(max-width: 620px)').matches) setMobileFormOpen(formId);
+  }
 
   const soapStockRows = useMemo(() => data.webProducts.map((product) => {
     const batch = data.batches.find((item) => item.id === product.batch_id);
@@ -621,6 +631,7 @@ function App() {
         return;
       }
       setWebLogoFile(null);
+      setMobileFormOpen(null);
       toast('Configuración de la tienda guardada');
       await loadData();
     } catch (uploadError) {
@@ -838,6 +849,7 @@ function App() {
       items: item.items.length ? item.items.map((row) => ({ ...row })) : [{ materialId: '', qty: '' }],
     });
     setTab('recipes');
+    openMobileForm('recipe');
   }
 
   function duplicateRecipe(item) {
@@ -860,6 +872,7 @@ function App() {
       items: item.items.length ? item.items.map((row) => ({ ...row })) : [{ materialId: '', qty: '' }],
     });
     setTab('recipes');
+    openMobileForm('recipe');
   }
 
   function createRecipe() {
@@ -875,6 +888,7 @@ function App() {
       items: [{ materialId: '', qty: '' }],
     });
     setTab('recipes');
+    openMobileForm('recipe');
   }
 
   async function saveRecipe(event) {
@@ -912,6 +926,7 @@ function App() {
       prices: { detail: null, wholesale: null, event: null },
       items: [{ materialId: '', qty: '' }],
     });
+    setMobileFormOpen(null);
     toast('Receta guardada');
     await loadData();
   }
@@ -1077,6 +1092,7 @@ function App() {
       paymentStatus: 'paid',
       paymentMethod: 'cash',
     });
+    setMobileFormOpen(null);
     toast('Gasto registrado');
     await loadData();
   }
@@ -1096,6 +1112,7 @@ function App() {
       toast(settingsError.message, 'error');
       return;
     }
+    setMobileFormOpen(null);
     toast('Saldos iniciales guardados');
     await loadData();
   }
@@ -1619,7 +1636,14 @@ function App() {
         )}
         {tab === 'recipes' && (
           <div className="recipe-layout">
-            <Section title={recipe.id ? 'Editar ficha técnica' : 'Creador de receta'} subtitle="Define ingredientes, tamaño del lote y costos" className="recipe-editor">
+            <Section
+              title={recipe.id ? 'Editar ficha técnica' : 'Creador de receta'}
+              subtitle="Define ingredientes, tamaño del lote y costos"
+              className={`recipe-editor mobile-form-section${mobileFormOpen === 'recipe' ? ' mobile-form-open' : ''}`}
+              action={mobileFormOpen === 'recipe' ? 'Cerrar formulario' : undefined}
+              onAction={() => setMobileFormOpen(null)}
+            >
+              <button type="button" className="mobile-form-launcher" onClick={() => openMobileForm('recipe')}>＋ Abrir formulario de receta</button>
               <form className="stack-form" onSubmit={saveRecipe}>
                 <label>Nombre de la receta<input value={recipe.name} onChange={(event) => setRecipe({ ...recipe, name: event.target.value })} placeholder="Ej. Jabón de miel y avena" required /></label>
                 <div className="form-grid">
@@ -1915,7 +1939,14 @@ function App() {
           </div>
         )}
         {tab === 'webSettings' && (
-          <Section title="Configuración web" subtitle="Identidad y datos de contacto que aparecen en la tienda pública">
+          <Section
+            title="Configuración web"
+            subtitle="Identidad y datos de contacto que aparecen en la tienda pública"
+            className={`mobile-form-section${mobileFormOpen === 'webSettings' ? ' mobile-form-open' : ''}`}
+            action={mobileFormOpen === 'webSettings' ? 'Cerrar formulario' : undefined}
+            onAction={() => setMobileFormOpen(null)}
+          >
+            <button type="button" className="mobile-form-launcher" onClick={() => openMobileForm('webSettings')}>⚙ Editar configuración</button>
             <form className="web-editor stack-form" onSubmit={saveWebSettings}>
               <div className="form-grid">
                 <Field label="Nombre del negocio"><input required maxLength="120" value={webSettingsDraft?.business_name || ''} onChange={(event) => setWebSettingsDraft({ ...webSettingsDraft, business_name: event.target.value })} /></Field>
@@ -1980,7 +2011,14 @@ function App() {
               </div>
               <p className="form-note">Registra saldos iniciales como existían en la fecha de apertura. El patrimonio inicial debe incluir el valor de los activos menos las deudas de esa fecha; la diferencia indica movimientos aún no registrados.</p>
             </Section>
-            <Section title="Saldos iniciales" subtitle="Configura caja, cuentas por cobrar/pagar y capital a la fecha de inicio">
+            <Section
+              title="Saldos iniciales"
+              subtitle="Configura caja, cuentas por cobrar/pagar y capital a la fecha de inicio"
+              className={`mobile-form-section${mobileFormOpen === 'openingBalances' ? ' mobile-form-open' : ''}`}
+              action={mobileFormOpen === 'openingBalances' ? 'Cerrar formulario' : undefined}
+              onAction={() => setMobileFormOpen(null)}
+            >
+              <button type="button" className="mobile-form-launcher" onClick={() => openMobileForm('openingBalances')}>＋ Configurar saldos iniciales</button>
               <form className="opening-form" onSubmit={saveOpeningBalances}>
                 <label>Fecha de apertura<input type="date" required value={openingForm.opening_date} onChange={(event) => setOpeningForm({ ...openingForm, opening_date: event.target.value })} /></label>
                 <label>Efectivo y bancos (LPS)<input type="number" min="0" step="0.01" required value={openingForm.opening_cash} onChange={(event) => setOpeningForm({ ...openingForm, opening_cash: event.target.value })} /></label>
@@ -1991,7 +2029,14 @@ function App() {
                 <p className="form-note">Incluye en los saldos iniciales el efectivo, las cuentas pendientes y el valor de las existencias a la fecha de apertura.</p>
               </form>
             </Section>
-            <Section title="Registrar gasto" subtitle="Los gastos reducen la utilidad; los pendientes se suman a cuentas por pagar">
+            <Section
+              title="Registrar gasto"
+              subtitle="Los gastos reducen la utilidad; los pendientes se suman a cuentas por pagar"
+              className={`mobile-form-section${mobileFormOpen === 'expense' ? ' mobile-form-open' : ''}`}
+              action={mobileFormOpen === 'expense' ? 'Cerrar formulario' : undefined}
+              onAction={() => setMobileFormOpen(null)}
+            >
+              <button type="button" className="mobile-form-launcher" onClick={() => openMobileForm('expense')}>＋ Registrar un gasto</button>
               <form className="expense-form" onSubmit={saveExpense}>
                 <label>Descripción<input required value={expenseForm.description} onChange={(event) => setExpenseForm({ ...expenseForm, description: event.target.value })} placeholder="Ej. Transporte" /></label>
                 <label>Categoría<input required value={expenseForm.category} onChange={(event) => setExpenseForm({ ...expenseForm, category: event.target.value })} placeholder="Ej. Operación" /></label>
@@ -2020,6 +2065,55 @@ function App() {
         <footer className="footer">Fragancia & Miel <span>·</span> Control de costos e inventario</footer>
       </main>
       </div>
+
+      {mobileNavOpen && (
+        <div className="mobile-menu-layer">
+          <button type="button" className="mobile-menu-scrim" aria-label="Cerrar menú" onClick={() => setMobileNavOpen(false)} />
+          <nav id="mobile-navigation-menu" className="mobile-menu-sheet" role="dialog" aria-modal="true" aria-label="Menú principal">
+            <div className="mobile-menu-heading">
+              <div><p className="eyebrow">FRAGANCIA & MIEL</p><h2>Menú</h2></div>
+              <button type="button" className="icon-button" aria-label="Cerrar menú" onClick={() => setMobileNavOpen(false)}>×</button>
+            </div>
+            <div className="mobile-menu-groups">
+              {navigationGroups.map((group) => (
+                <section className="mobile-menu-group" key={group.label}>
+                  <h3>{group.label}</h3>
+                  <div className="mobile-menu-grid">
+                    {group.items.map(([id, title, icon]) => (
+                      <button
+                        type="button"
+                        key={id}
+                        className={`mobile-menu-item${tab === id ? ' active' : ''}`}
+                        aria-current={tab === id ? 'page' : undefined}
+                        onClick={() => { setTab(id); setMobileNavOpen(false); }}
+                      >
+                        <span className="mobile-menu-icon">{icon}</span>
+                        <span>{title}</span>
+                        {id === 'webOrders' && activeWebOrderCount > 0 && <span className="nav-badge">{activeWebOrderCount > 99 ? '99+' : activeWebOrderCount}</span>}
+                      </button>
+                    ))}
+                  </div>
+                </section>
+              ))}
+            </div>
+            <div className="mobile-menu-tools">
+              <button type="button" className="button secondary" onClick={exportData}>↓ Descargar respaldo</button>
+              <button type="button" className="button secondary" onClick={() => document.getElementById('import-backup').click()}>↑ Importar respaldo</button>
+              <button type="button" className="button ghost" onClick={lockApp}>Salir</button>
+            </div>
+          </nav>
+        </div>
+      )}
+      <nav className="mobile-bottom-bar" aria-label="Navegación rápida">
+        {mobileQuickNavigation.map(([id, label, icon]) => (
+          <button type="button" key={id} className={`mobile-bottom-item${tab === id ? ' active' : ''}`} aria-current={tab === id ? 'page' : undefined} onClick={() => setTab(id)}>
+            <span>{icon}</span><small>{label}</small>
+          </button>
+        ))}
+        <button type="button" className={`mobile-bottom-item${mobileNavOpen ? ' active' : ''}`} aria-haspopup="dialog" aria-expanded={mobileNavOpen} aria-controls="mobile-navigation-menu" onClick={() => setMobileNavOpen(!mobileNavOpen)}>
+          <span>☰</span><small>Menú</small>
+        </button>
+      </nav>
 
       {modal && !['production', 'sale', 'purchase', 'purchaseDetail', 'invoice', 'completeWebOrder', 'webOrderDetail', 'webProduct', 'customOrder'].includes(modal.kind) && (
         <Dialog title={`${modal.item ? 'Editar' : 'Registrar'} ${modal.kind === 'materials' ? 'materia prima' : modal.kind === 'indirects' ? 'insumo indirecto' : 'utensilio'}`} onClose={() => setModal(null)}>
