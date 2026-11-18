@@ -1859,12 +1859,19 @@ function App() {
             <Section
               title="Cobros pendientes"
               subtitle="Consulta y administra el estado de pago de las ventas facturadas"
-              action="＋ Registrar cobro pendiente"
-              onAction={() => { setTab('sales'); openSalesOrder(null, 'pending'); }}
             >
-              <div className="stock-total collection-total">
-                <span>Saldo pendiente de cobro</span>
-                <strong>{money(pendingCollectionsTotal)}</strong>
+              <div className="collection-toolbar">
+                <div className="stock-total collection-total">
+                  <span>Saldo pendiente de cobro</span>
+                  <strong>{money(pendingCollectionsTotal)}</strong>
+                </div>
+                <button
+                  type="button"
+                  className="button primary"
+                  onClick={() => { setTab('sales'); openSalesOrder(null, 'pending'); }}
+                >
+                  ＋ Registrar cobro pendiente
+                </button>
               </div>
               <div className="collection-filters" role="group" aria-label="Filtrar cobros por estado">
                 {collectionFilters.map(([status, label]) => (
