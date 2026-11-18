@@ -60,6 +60,16 @@ const mobileQuickNavigation = [
   ['recipes', 'Recetas', '⌗'],
   ['customOrders', 'Pedidos', '✎'],
 ];
+const navigationTabIds = new Set(navigationGroups.flatMap((group) => group.items.map(([id]) => id)));
+const activeTabStorageKey = 'fragancia-y-miel-active-tab';
+function getSavedTab() {
+  try {
+    const savedTab = window.localStorage.getItem(activeTabStorageKey);
+    return navigationTabIds.has(savedTab) ? savedTab : 'materials';
+  } catch {
+    return 'materials';
+  }
+}
 
 const money = (value) => `L ${Number(value || 0).toFixed(2)}`;
 const unitMoney = (value) => `L ${new Intl.NumberFormat('es-HN', { minimumFractionDigits: 2, maximumFractionDigits: 6 }).format(Number(value || 0))}`;
@@ -136,7 +146,8 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState(null);
-  const [tab, setTab] = useState('materials');
+  const [tab, setTab] = useState(getSavedTab);
+  const [installPrompt, setInstallPrompt] = useState(null);
   const [collectionFilter, setCollectionFilter] = useState('pending');
   const [webOrderFilter, setWebOrderFilter] = useState('pending');
   const [customOrderFilter, setCustomOrderFilter] = useState('pending');
@@ -228,6 +239,28 @@ function App() {
     setWebLogoPreview(previewUrl);
     return () => URL.revokeObjectURL(previewUrl);
   }, [webLogoFile]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(activeTabStorageKey, tab);
+    } catch (storageError) {
+      console.warn('No se pudo guardar la vista activa.', storageError);
+    }
+  }, [tab]);
+
+  useEffect(() => {
+    const handleInstallPrompt = (event) => {
+      event.preventDefault();
+      setInstallPrompt(event);
+    };
+    const handleInstalled = () => setInstallPrompt(null);
+    window.addEventListener('beforeinstallprompt', handleInstallPrompt);
+    window.addEventListener('appinstalled', handleInstalled);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleInstallPrompt);
+      window.removeEventListener('appinstalled', handleInstalled);
+    };
+  }, []);
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -1277,6 +1310,16 @@ function App() {
       toast(incomeError.message, 'error');
       return;
     }
+
+    async function installApp() {
+      if (!installPrompt) return;
+      try {
+        await installPrompt.prompt();
+        setInstallPrompt(null);
+      } catch (installError) {
+        toast(installError.message || 'No se pudo iniciar la instalación.', 'error');
+      }
+    }
     setAdditionalIncomeForm({
       concept: '',
       amount: '',
@@ -1783,7 +1826,10 @@ function App() {
       <main className="main-content">
         <div className="welcome-row">
           <div><p className="eyebrow">PANEL DE CONTROL</p><h1>Tu taller, en orden.</h1><p className="muted">Inventario, recetas y producción en un solo lugar.</p></div>
-          <button className="button primary" onClick={() => { setProductionRecipeSearch(''); setModal({ kind: 'production' }); }}>＋ Registrar producción</button>
+          <div className="welcome-actions">
+            {installPrompt && <button className="button secondary" onClick={installApp}>↓ Instalar aplicación</button>}
+            <button className="button primary" onClick={() => { setProductionRecipeSearch(''); setModal({ kind: 'production' }); }}>＋ Registrar producción</button>
+          </div>
         </div>
 
         {error && <Notice type="error">{error}</Notice>}

@@ -23,6 +23,7 @@ En **Settings → Pages → Build and deployment**, selecciona **GitHub Actions*
 
 ## Funciones
 
+- Aplicación web progresiva (PWA): instalable desde navegadores compatibles, con shell y recursos estáticos disponibles sin conexión. La información de negocio se sincroniza con Supabase y requiere conexión; la última vista se conserva en este navegador al recargar.
 - Navegación organizada por áreas, adaptable a escritorio y móvil; incluye vistas para recetas, ventas, recordatorios de cobro y reportes financieros.
 - Inventario de materias primas con alertas, existencias y costo unitario configurable por gramo, mililitro o pieza.
 - Control de insumos indirectos con unidad física (g/ml/pza), existencias, mínimo de reabastecimiento, consumo por jabón, rendimiento estimado y costo unitario; producción descuenta su consumo real. Control de depreciación de utensilios.

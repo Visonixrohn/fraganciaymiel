@@ -1,0 +1,21 @@
+{
+  "id": "./",
+  "name": "Fragancia y Miel | Control Pro",
+  "short_name": "Fragancia y Miel",
+  "description": "Control de inventario, producción, pedidos y finanzas.",
+  "lang": "es",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f7f8f5",
+  "theme_color": "#164e3b",
+  "icons": [
+    {
+      "src": "./icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -315,6 +315,7 @@ input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--green); 
   .report-period { padding: 12px 15px; border: 1px solid #e2e8e2; border-radius: 10px; background: #fff; }
 }
 
+.welcome-actions { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 9px; }
 .order-filters { border-top: 1px solid #eef0ed; }
 .reminder-form, .income-form {
   display: grid;
@@ -365,6 +366,7 @@ input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--green); 
 }
 @media (max-width: 620px) {
   .reminder-form, .income-form { grid-template-columns: minmax(0, 1fr); }
+  .welcome-actions { width: 100%; justify-content: flex-start; }
 }
 
 @page { size: A4; margin: 12mm; }
