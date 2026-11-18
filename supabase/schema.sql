@@ -240,6 +240,10 @@ create table if not exists public.sale_items (
 
 alter table public.sales add column if not exists payment_status text not null default 'paid' check (payment_status in ('paid', 'pending'));
 alter table public.sales add column if not exists paid_at timestamptz;
+alter table public.sales add column if not exists written_off_at timestamptz;
+alter table public.sales drop constraint if exists sales_payment_status_check;
+alter table public.sales add constraint sales_payment_status_check
+  check (payment_status in ('paid', 'pending', 'lost'));
 alter table public.sale_items add column if not exists unit_cost numeric(14, 4) not null default 0 check (unit_cost >= 0);
 alter table public.sale_items add column if not exists cost_total numeric(14, 2) not null default 0 check (cost_total >= 0);
 alter table public.sale_items add column if not exists cost_recorded boolean not null default false;
@@ -1308,6 +1312,24 @@ begin
 end;
 $$;
 
+create or replace function public.mark_sale_lost(p_sale_id uuid)
+returns void
+language plpgsql
+set search_path = ''
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'Debes iniciar sesión para registrar cuentas incobrables.';
+  end if;
+  update public.sales
+  set payment_status = 'lost', paid_at = null, written_off_at = now()
+  where id = p_sale_id and status = 'issued' and payment_status = 'pending';
+  if not found then
+    raise exception 'No se encontró una venta pendiente de cobro.';
+  end if;
+end;
+$$;
+
 create or replace function public.record_expense(
   p_description text,
   p_category text,
@@ -1787,6 +1809,7 @@ revoke all on function public.record_purchase(text, date, jsonb) from public;
 revoke all on function public.mark_purchase_paid(uuid, text) from public;
 revoke all on function public.update_purchase(uuid, text, date, text, text, jsonb, boolean) from public;
 revoke all on function public.mark_sale_paid(uuid, text) from public;
+revoke all on function public.mark_sale_lost(uuid) from public;
 revoke all on function public.record_expense(text, text, numeric, date, text, text) from public;
 revoke all on function public.mark_expense_paid(uuid, text) from public;
 revoke all on function public.delete_batch(uuid) from public;
@@ -1800,6 +1823,7 @@ grant execute on function public.record_purchase(text, date, jsonb) to authentic
 grant execute on function public.mark_purchase_paid(uuid, text) to authenticated;
 grant execute on function public.update_purchase(uuid, text, date, text, text, jsonb, boolean) to authenticated;
 grant execute on function public.mark_sale_paid(uuid, text) to authenticated;
+grant execute on function public.mark_sale_lost(uuid) to authenticated;
 grant execute on function public.record_expense(text, text, numeric, date, text, text) to authenticated;
 grant execute on function public.mark_expense_paid(uuid, text) to authenticated;
 grant execute on function public.delete_batch(uuid) to authenticated;

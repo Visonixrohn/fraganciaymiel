@@ -23,7 +23,7 @@ En **Settings → Pages → Build and deployment**, selecciona **GitHub Actions*
 
 ## Funciones
 
-- Navegación lateral adaptable a escritorio y móvil; incluye vistas separadas para crear recetas, consultar recetas guardadas y facturar/consultar ventas.
+- Navegación lateral adaptable a escritorio y móvil; incluye vistas separadas para crear recetas, consultar recetas guardadas, facturar ventas y filtrar cobros pendientes, pagados o perdidos.
 - Inventario de materias primas con alertas, existencias y costo unitario configurable por gramo, mililitro o pieza.
 - Control de insumos indirectos con unidad física (g/ml/pza), existencias, mínimo de reabastecimiento, consumo por jabón, rendimiento estimado y costo unitario; producción descuenta su consumo real. Control de depreciación de utensilios.
 - Creación de recetas con varias materias primas, insumos indirectos y utensilios; las cantidades de materia prima se ingresan por jabón, se multiplican por el tamaño del lote y se muestra el costo por barra.
@@ -38,7 +38,7 @@ En **Settings → Pages → Build and deployment**, selecciona **GitHub Actions*
 - Pedidos a crear: registra pedidos personalizados con nombre y celular del cliente, diseño, fragancia, color y cantidad; puedes consultar o eliminar los pedidos desde el panel.
 - Configuración de nombre, logo, contacto, WhatsApp y presentación del negocio desde el panel. Las imágenes se guardan en el bucket público `jabon`; solo usuarios autenticados pueden subirlas o editarlas.
 - Administración de productos web vinculados a un lote producido, con beneficios, afecciones asociadas, composición y modo de uso. La tienda solo publica productos activos con precio definido y muestra existencias actualizadas.
-- Control de cobros, pagos y gastos, con estado de resultados por período y balance general de gestión.
+- Control de cobros, pagos y gastos: permite marcar ventas pendientes como pagadas o incobrables, con estado de resultados por período y balance general de gestión.
 - Exportación de los datos visibles a JSON.
 - Acceso a la interfaz mediante un código y sesión anónima de Supabase; las sesiones anónimas comparten el inventario.
 

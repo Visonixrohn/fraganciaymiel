@@ -23,6 +23,7 @@ const navigationGroups = [
     label: 'Comercial',
     items: [
       ['sales', 'Facturación', '▧'],
+      ['collections', 'Cobros pendientes', '＄'],
       ['purchases', 'Compras', '＋'],
       ['webOrders', 'Pedidos web', '🛍'],
       ['customOrders', 'Pedidos a crear', '✎'],
@@ -36,6 +37,13 @@ const navigationGroups = [
       ['finance', 'Finanzas', '＄'],
     ],
   },
+];
+const paymentStatusLabels = { paid: 'Pagado', pending: 'Pendiente', lost: 'Perdida' };
+const collectionFilters = [
+  ['pending', 'Pendientes'],
+  ['paid', 'Pagados'],
+  ['lost', 'Perdidas'],
+  ['all', 'Todos'],
 ];
 const mobileQuickNavigation = [
   ['materials', 'Stock', '◈'],
@@ -119,6 +127,7 @@ function App() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState(null);
   const [tab, setTab] = useState('materials');
+  const [collectionFilter, setCollectionFilter] = useState('pending');
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [mobileFormOpen, setMobileFormOpen] = useState(null);
   const [materialSearch, setMaterialSearch] = useState('');
@@ -303,6 +312,23 @@ function App() {
   }), [data]);
   const activeWebOrderCount = data.webOrders
     .filter((order) => ['pending', 'confirmed'].includes(order.status)).length;
+  const collectionSales = useMemo(
+    () => data.sales.filter((sale) => sale.status === 'issued'),
+    [data.sales],
+  );
+  const collectionCounts = useMemo(() => ({
+    pending: collectionSales.filter((sale) => sale.payment_status === 'pending').length,
+    paid: collectionSales.filter((sale) => sale.payment_status === 'paid').length,
+    lost: collectionSales.filter((sale) => sale.payment_status === 'lost').length,
+    all: collectionSales.length,
+  }), [collectionSales]);
+  const collectionRows = useMemo(() => collectionSales
+    .filter((sale) => collectionFilter === 'all' || sale.payment_status === collectionFilter)
+    .flatMap((sale) => (sale.sale_items || []).map((item) => ({ sale, item }))),
+  [collectionFilter, collectionSales]);
+  const pendingCollectionsTotal = useMemo(() => collectionSales
+    .filter((sale) => sale.payment_status === 'pending')
+    .reduce((sum, sale) => sum + number(sale.total), 0), [collectionSales]);
 
   function openMobileForm(formId) {
     if (window.matchMedia('(max-width: 900px)').matches) setMobileFormOpen(formId);
@@ -380,6 +406,10 @@ function App() {
     const periodExpenses = data.expenses
       .filter((expense) => withinPeriod(expense.expense_date))
       .reduce((sum, expense) => sum + number(expense.amount), 0);
+    const periodBadDebt = data.sales
+      .filter((sale) => sale.status === 'issued' && sale.payment_status === 'lost'
+        && withinPeriod(sale.written_off_at?.slice(0, 10)))
+      .reduce((sum, sale) => sum + number(sale.total), 0);
     const openingDate = data.financeSettings?.opening_date || today;
     const afterOpening = (date) => Boolean(date && date >= openingDate);
     const rawInventory = data.materials.reduce((sum, material) => {
@@ -418,6 +448,9 @@ function App() {
       .filter((sale) => sale.status === 'issued' && afterOpening(sale.invoice_date))
       .reduce((sum, sale) => sum + number(sale.total)
         - (sale.sale_items || []).reduce((itemSum, item) => itemSum + number(item.cost_total), 0), 0)
+      - data.sales.filter((sale) => sale.status === 'issued' && sale.payment_status === 'lost'
+        && afterOpening(sale.written_off_at?.slice(0, 10)))
+        .reduce((sum, sale) => sum + number(sale.total), 0)
       - data.expenses.filter((expense) => afterOpening(expense.expense_date))
         .reduce((sum, expense) => sum + number(expense.amount), 0);
     const assets = cash + receivables + rawInventory + indirectInventory + finishedInventory;
@@ -427,7 +460,8 @@ function App() {
       cost: periodCost,
       grossProfit: periodRevenue - periodCost,
       expenses: periodExpenses,
-      netIncome: periodRevenue - periodCost - periodExpenses,
+      badDebt: periodBadDebt,
+      netIncome: periodRevenue - periodCost - periodExpenses - periodBadDebt,
       cash,
       receivables,
       rawInventory,
@@ -596,6 +630,17 @@ function App() {
     }
     setModal(null);
     toast('Pedido agregado');
+    await loadData();
+  }
+
+  async function markSaleAsLost(sale) {
+    if (!window.confirm(`¿Marcar como perdida la cuenta de ${sale.customer_name} por ${money(sale.total)}? Se registrará como cuenta incobrable.`)) return;
+    const { error: writeOffError } = await supabase.rpc('mark_sale_lost', { p_sale_id: sale.id });
+    if (writeOffError) {
+      toast(writeOffError.message, 'error');
+      return;
+    }
+    toast('Cuenta marcada como perdida');
     await loadData();
   }
 
@@ -1377,7 +1422,8 @@ function App() {
             customer_phone: sale.customer_phone || null,
             payment_method: sale.payment_method || 'cash',
             payment_status: sale.payment_status || 'paid',
-            paid_at: sale.paid_at || (status === 'issued' && sale.payment_status !== 'pending' ? sale.issued_at : null),
+            paid_at: sale.paid_at || (status === 'issued' && sale.payment_status === 'paid' ? sale.issued_at : null),
+            written_off_at: sale.written_off_at || null,
             subtotal: number(sale.subtotal),
             total: number(sale.total),
             created_at: sale.created_at,
@@ -1788,8 +1834,8 @@ function App() {
                     <td className="strong">{sale.customer_name}</td>
                     <td>{(sale.sale_items || []).reduce((sum, item) => sum + number(item.quantity), 0)}</td>
                     <td className="green">{money(sale.total)}</td>
-                    <td><span className={`pill ${sale.status === 'issued' && sale.payment_status === 'paid' ? 'good' : 'warning'}`}>
-                      {sale.status === 'draft' ? 'Borrador' : sale.payment_status === 'paid' ? 'Facturado · pagado' : 'Facturado · por cobrar'}
+                    <td><span className={`pill ${sale.status !== 'issued' ? 'warning' : sale.payment_status === 'paid' ? 'good' : sale.payment_status === 'lost' ? 'danger' : 'warning'}`}>
+                      {sale.status === 'draft' ? 'Borrador' : `Facturado · ${paymentStatusLabels[sale.payment_status] || sale.payment_status}`}
                     </span></td>
                     <td className="sale-actions">
                       {sale.status === 'draft'
@@ -1801,6 +1847,48 @@ function App() {
                           <button className="button secondary small" onClick={() => setModal({ kind: 'invoice', sale })}>Ver / imprimir</button>
                           {sale.payment_status === 'pending' && <button className="button primary small" onClick={() => markAsPaid('sales', sale)}>Marcar pagada</button>}
                         </>}
+                    </td>
+                  </tr>
+                ))}
+              </Table>
+            </Section>
+          </div>
+        )}
+        {tab === 'collections' && (
+          <div className="sales-page">
+            <Section title="Cobros pendientes" subtitle="Consulta y administra el estado de pago de las ventas facturadas">
+              <div className="stock-total collection-total">
+                <span>Saldo pendiente de cobro</span>
+                <strong>{money(pendingCollectionsTotal)}</strong>
+              </div>
+              <div className="collection-filters" role="group" aria-label="Filtrar cobros por estado">
+                {collectionFilters.map(([status, label]) => (
+                  <button
+                    type="button"
+                    key={status}
+                    className={`collection-filter${collectionFilter === status ? ' active' : ''}`}
+                    aria-pressed={collectionFilter === status}
+                    onClick={() => setCollectionFilter(status)}
+                  >
+                    {label}<span>{collectionCounts[status]}</span>
+                  </button>
+                ))}
+              </div>
+              <Table headers={['Cliente', 'Jabón', 'Cantidad', 'Valor pendiente', 'Estado', 'Acciones']}>
+                {collectionRows.map(({ sale, item }) => (
+                  <tr key={`${sale.id}-${item.id}`}>
+                    <td className="strong">{sale.customer_name}<small className="table-secondary">{sale.customer_phone || sale.invoice_number}</small></td>
+                    <td>{item.recipe_name}</td>
+                    <td>{item.quantity}</td>
+                    <td className="green">{money(sale.payment_status === 'pending' ? item.line_total : 0)}</td>
+                    <td><span className={`pill ${sale.payment_status === 'paid' ? 'good' : sale.payment_status === 'lost' ? 'danger' : 'warning'}`}>
+                      {paymentStatusLabels[sale.payment_status] || sale.payment_status}
+                    </span></td>
+                    <td className="sale-actions">
+                      {sale.payment_status === 'pending' && <>
+                        <button className="button primary small" onClick={() => markAsPaid('sales', sale)}>Marcar pagado</button>
+                        <button className="button secondary small" onClick={() => markSaleAsLost(sale)}>Marcar perdida</button>
+                      </>}
                     </td>
                   </tr>
                 ))}
@@ -1980,6 +2068,7 @@ function App() {
                 <div><span>Costo de productos vendidos</span><strong>− {money(reports.cost)}</strong></div>
                 <div className="statement-subtotal"><span>Utilidad bruta</span><strong>{money(reports.grossProfit)}</strong></div>
                 <div><span>Gastos operativos</span><strong>− {money(reports.expenses)}</strong></div>
+                <div><span>Cuentas incobrables</span><strong>− {money(reports.badDebt)}</strong></div>
                 <div className="statement-total"><span>Utilidad neta</span><strong>{money(reports.netIncome)}</strong></div>
               </div>
             </Section>
@@ -2399,7 +2488,7 @@ function App() {
               <p><span>Cliente</span><strong>{modal.sale.customer_name}</strong></p>
               {modal.sale.customer_phone && <p><span>Teléfono</span><strong>{modal.sale.customer_phone}</strong></p>}
               <p><span>Pago</span><strong>{paymentMethods.find(([value]) => value === modal.sale.payment_method)?.[1] || 'Otro'}</strong></p>
-              <p><span>Estado</span><strong>{modal.sale.payment_status === 'paid' ? 'Pagado' : 'Pendiente de cobro'}</strong></p>
+              <p><span>Estado</span><strong>{paymentStatusLabels[modal.sale.payment_status] || modal.sale.payment_status}</strong></p>
             </div>
             <table className="invoice-table">
               <thead><tr><th>Producto</th><th>Precio</th><th>Cant.</th><th>Importe</th></tr></thead>
