@@ -290,6 +290,83 @@ input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--green); 
   .opening-form, .expense-form { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 15px; }
 }
 
+@media (min-width: 901px) {
+  .sidebar {
+    flex-basis: 276px;
+    padding: 24px 15px;
+    border-right: 1px solid #dfe7df;
+    background: linear-gradient(180deg, #fff 0%, #f8faf8 100%);
+  }
+  .nav-group {
+    margin-bottom: 15px;
+    padding: 11px 9px 10px;
+    border: 1px solid #e8eee8;
+    border-radius: 12px;
+    background: #fff;
+    box-shadow: 0 4px 14px #253c2e07;
+  }
+  .nav-group + .nav-group { margin-top: 0; }
+  .nav-group h2 { margin: 0 8px 8px; color: #74857a; font-size: 10px; letter-spacing: 1.15px; }
+  .nav-item { min-height: 43px; gap: 12px; margin: 3px 0; padding: 0 10px; color: #536258; font-size: 12px; }
+  .nav-item.active { background: linear-gradient(90deg, #e8f3ea, #f3f8f3); box-shadow: inset 3px 0 #27754d; color: #164e3b; font-weight: 750; }
+  .nav-icon { width: 25px; height: 25px; border-radius: 7px; background: #f0f5f0; font-size: 15px; }
+  .nav-item.active .nav-icon { background: #fff; }
+  .finance-layout > .panel { box-shadow: 0 5px 18px #253c2e0a; }
+  .report-period { padding: 12px 15px; border: 1px solid #e2e8e2; border-radius: 10px; background: #fff; }
+}
+
+.order-filters { border-top: 1px solid #eef0ed; }
+.reminder-form, .income-form {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: end;
+  gap: 13px;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--line);
+  background: #fbfcfb;
+}
+.reminder-form label, .income-form label {
+  display: grid;
+  gap: 6px;
+  color: #536157;
+  font-size: 11px;
+  font-weight: 600;
+}
+.reminder-form .button, .income-form .button { justify-self: start; }
+.logo-preview-card {
+  display: flex;
+  min-height: 100px;
+  align-items: center;
+  gap: 15px;
+  padding: 13px;
+  border: 1px solid #e2e9e2;
+  border-radius: 10px;
+  background: linear-gradient(110deg, #f3f8f3, #fff);
+}
+.logo-preview-card img, .logo-preview-card > span {
+  display: grid;
+  width: 76px;
+  height: 76px;
+  flex: 0 0 76px;
+  place-items: center;
+  border: 1px solid #e5ebe5;
+  border-radius: 12px;
+  background: #fff;
+  color: #8ca993;
+  font-size: 25px;
+  object-fit: contain;
+}
+.logo-preview-card > div { display: grid; gap: 5px; }
+.logo-preview-card strong { color: #35473a; font-size: 12px; }
+.logo-preview-card small { color: #849087; font-size: 10px; }
+
+@media (max-width: 900px) {
+  .reminder-form, .income-form { grid-template-columns: repeat(2, minmax(0, 1fr)); padding: 15px; }
+}
+@media (max-width: 620px) {
+  .reminder-form, .income-form { grid-template-columns: minmax(0, 1fr); }
+}
+
 @page { size: A4; margin: 12mm; }
 @media print {
   body * { visibility: hidden !important; }

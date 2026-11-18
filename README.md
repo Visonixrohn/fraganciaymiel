@@ -23,7 +23,7 @@ En **Settings → Pages → Build and deployment**, selecciona **GitHub Actions*
 
 ## Funciones
 
-- Navegación lateral adaptable a escritorio y móvil; incluye vistas separadas para crear recetas, consultar recetas guardadas, facturar ventas y filtrar cobros pendientes, pagados o perdidos.
+- Navegación organizada por áreas, adaptable a escritorio y móvil; incluye vistas para recetas, ventas, recordatorios de cobro y reportes financieros.
 - Inventario de materias primas con alertas, existencias y costo unitario configurable por gramo, mililitro o pieza.
 - Control de insumos indirectos con unidad física (g/ml/pza), existencias, mínimo de reabastecimiento, consumo por jabón, rendimiento estimado y costo unitario; producción descuenta su consumo real. Control de depreciación de utensilios.
 - Creación de recetas con varias materias primas, insumos indirectos y utensilios; las cantidades de materia prima se ingresan por jabón, se multiplican por el tamaño del lote y se muestra el costo por barra.
@@ -34,11 +34,11 @@ En **Settings → Pages → Build and deployment**, selecciona **GitHub Actions*
 - Ventas en borrador y comprobantes internos numerados; al emitirlos valida las existencias de jabones terminados (producción menos ventas), registra la venta y permite imprimir o reimprimir la factura.
 - Registro de compras por materia prima, insumo indirecto o utensilio, con proveedor, costo unitario y forma de pago; las compras acumulan stock/costo y rendimiento o vida útil según el tipo.
 - Catálogo público independiente en `storefront.html`, con tarjetas interactivas, carrito de compras modal, disponibilidad por lote, beneficios, composición y modo de uso.
-- Pedidos web: las órdenes pendientes no descuentan existencias; al reservarlas, el sistema valida y aparta unidades de forma atómica. Cancelar libera la reserva y completar convierte el pedido en una venta facturada. El panel muestra un contador de pedidos activos y notifica nuevas órdenes en tiempo real.
-- Pedidos a crear: registra pedidos personalizados con nombre y celular del cliente, diseño, fragancia, color y cantidad; puedes consultar o eliminar los pedidos desde el panel.
+- Pedidos web: las órdenes pendientes no descuentan existencias; al reservarlas, el sistema valida y aparta unidades de forma atómica. Las pestañas separan pedidos, reservas, ventas y rechazados; entregar un pedido reservado lo convierte en una venta facturada. El contador y las notificaciones incluyen solo pedidos sin reservar.
+- Pedidos a crear: registra pedidos personalizados con nombre y celular del cliente, diseño, fragancia, color y cantidad; organízalos por estado pendiente, creado o rechazado.
 - Configuración de nombre, logo, contacto, WhatsApp y presentación del negocio desde el panel. Las imágenes se guardan en el bucket público `jabon`; solo usuarios autenticados pueden subirlas o editarlas.
 - Administración de productos web vinculados a un lote producido, con beneficios, afecciones asociadas, composición y modo de uso. La tienda solo publica productos activos con precio definido y muestra existencias actualizadas.
-- Control de cobros, pagos y gastos: permite marcar ventas pendientes como pagadas o incobrables, con estado de resultados por período y balance general de gestión.
+- Cobros pendientes es una lista independiente de recordatorios manuales y no está conectada a ventas. Finanzas incluye ingresos adicionales por concepto, reflejados en el estado de resultados y el balance general de gestión.
 - Exportación de los datos visibles a JSON.
 - Acceso a la interfaz mediante un código y sesión anónima de Supabase; las sesiones anónimas comparten el inventario.
 

@@ -288,6 +288,34 @@ create table if not exists public.custom_orders (
   created_at timestamptz not null default now()
 );
 
+alter table public.custom_orders
+  add column if not exists status text not null default 'pending';
+
+do $$
+begin
+  if not exists (
+    select 1 from pg_constraint
+    where conname = 'custom_orders_status_check'
+      and conrelid = 'public.custom_orders'::regclass
+  ) then
+    alter table public.custom_orders
+      add constraint custom_orders_status_check check (status in ('created', 'rejected', 'pending'));
+  end if;
+end;
+$$;
+
+create table if not exists public.collection_reminders (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  customer_name text not null check (length(btrim(customer_name)) > 0),
+  customer_phone text,
+  concept text not null check (length(btrim(concept)) > 0),
+  amount numeric(14, 2) not null check (amount > 0),
+  due_date date not null default current_date,
+  status text not null default 'pending' check (status in ('pending', 'done')),
+  created_at timestamptz not null default now()
+);
+
 alter table public.web_products alter column batch_id drop not null;
 alter table public.web_products drop constraint if exists web_products_batch_id_fkey;
 alter table public.web_products
@@ -412,6 +440,18 @@ create table if not exists public.expenses (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.additional_incomes (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  concept text not null check (length(btrim(concept)) > 0),
+  amount numeric(14, 2) not null check (amount > 0),
+  income_date date not null default current_date,
+  payment_status text not null default 'paid' check (payment_status in ('paid', 'pending')),
+  payment_method text not null default 'cash' check (payment_method in ('cash', 'transfer', 'card', 'other')),
+  paid_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
 create table if not exists public.finance_settings (
   id integer primary key default 1 check (id = 1),
   opening_date date not null default current_date,
@@ -438,6 +478,8 @@ create index if not exists sale_items_recipe_idx on public.sale_items(recipe_id)
 create index if not exists purchases_date_idx on public.purchases(purchase_date desc);
 create index if not exists purchase_items_purchase_idx on public.purchase_items(purchase_id);
 create index if not exists expenses_date_idx on public.expenses(expense_date desc);
+create index if not exists additional_incomes_date_idx on public.additional_incomes(income_date desc);
+create index if not exists collection_reminders_due_date_idx on public.collection_reminders(due_date);
 create index if not exists web_products_batch_idx on public.web_products(batch_id);
 create index if not exists web_products_active_sort_idx on public.web_products(active, sort_order, name);
 create index if not exists web_orders_created_at_idx on public.web_orders(created_at desc);
@@ -458,6 +500,8 @@ alter table public.sale_items enable row level security;
 alter table public.purchases enable row level security;
 alter table public.purchase_items enable row level security;
 alter table public.expenses enable row level security;
+alter table public.additional_incomes enable row level security;
+alter table public.collection_reminders enable row level security;
 alter table public.finance_settings enable row level security;
 alter table public.web_settings enable row level security;
 alter table public.web_products enable row level security;
@@ -523,6 +567,14 @@ drop policy if exists "Authenticated users manage shared expenses" on public.exp
 create policy "Authenticated users manage shared expenses" on public.expenses
   for all to authenticated using (true) with check (true);
 
+drop policy if exists "Authenticated users manage additional incomes" on public.additional_incomes;
+create policy "Authenticated users manage additional incomes" on public.additional_incomes
+  for all to authenticated using (true) with check (true);
+
+drop policy if exists "Authenticated users manage collection reminders" on public.collection_reminders;
+create policy "Authenticated users manage collection reminders" on public.collection_reminders
+  for all to authenticated using (true) with check (true);
+
 drop policy if exists "Authenticated users manage finance settings" on public.finance_settings;
 create policy "Authenticated users manage finance settings" on public.finance_settings
   for all to authenticated using (true) with check (true);
@@ -561,7 +613,7 @@ begin
 end;
 $$;
 
-grant select, insert, update, delete on public.materials, public.indirects, public.utensils, public.recipes, public.recipe_items, public.recipe_indirects, public.recipe_utensils, public.batches, public.sales, public.sale_items, public.purchases, public.purchase_items, public.expenses, public.finance_settings, public.web_settings, public.web_products to authenticated;
+grant select, insert, update, delete on public.materials, public.indirects, public.utensils, public.recipes, public.recipe_items, public.recipe_indirects, public.recipe_utensils, public.batches, public.sales, public.sale_items, public.purchases, public.purchase_items, public.expenses, public.additional_incomes, public.collection_reminders, public.finance_settings, public.web_settings, public.web_products to authenticated;
 grant select on public.web_orders, public.web_order_items to authenticated;
 grant select, insert, update, delete on public.custom_orders to authenticated;
 grant usage, select on sequence public.sales_invoice_number_seq, public.purchases_number_seq, public.web_order_number_seq to authenticated;

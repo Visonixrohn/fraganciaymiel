@@ -41,9 +41,19 @@ const navigationGroups = [
 const paymentStatusLabels = { paid: 'Pagado', pending: 'Pendiente', lost: 'Perdida' };
 const collectionFilters = [
   ['pending', 'Pendientes'],
-  ['paid', 'Pagados'],
-  ['lost', 'Perdidas'],
+  ['done', 'Atendidos'],
   ['all', 'Todos'],
+];
+const webOrderFilters = [
+  ['pending', 'Pedido'],
+  ['confirmed', 'Reservado'],
+  ['completed', 'Vendido'],
+  ['cancelled', 'Rechazado'],
+];
+const customOrderFilters = [
+  ['created', 'Creado'],
+  ['rejected', 'Rechazado'],
+  ['pending', 'Pendiente'],
 ];
 const mobileQuickNavigation = [
   ['materials', 'Stock', '◈'],
@@ -128,9 +138,13 @@ function App() {
   const [notice, setNotice] = useState(null);
   const [tab, setTab] = useState('materials');
   const [collectionFilter, setCollectionFilter] = useState('pending');
+  const [webOrderFilter, setWebOrderFilter] = useState('pending');
+  const [customOrderFilter, setCustomOrderFilter] = useState('pending');
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [mobileFormOpen, setMobileFormOpen] = useState(null);
   const [materialSearch, setMaterialSearch] = useState('');
+  const [webProductSearch, setWebProductSearch] = useState('');
+  const [productionRecipeSearch, setProductionRecipeSearch] = useState('');
   const [data, setData] = useState({
     materials: [],
     indirects: [],
@@ -140,6 +154,8 @@ function App() {
     sales: [],
     purchases: [],
     expenses: [],
+    additionalIncomes: [],
+    collectionReminders: [],
     financeSettings: null,
     webSettings: null,
     webProducts: [],
@@ -152,6 +168,7 @@ function App() {
   const [webProductDraft, setWebProductDraft] = useState(null);
   const [webProductFile, setWebProductFile] = useState(null);
   const [webLogoFile, setWebLogoFile] = useState(null);
+  const [webLogoPreview, setWebLogoPreview] = useState('');
   const [webSettingsDraft, setWebSettingsDraft] = useState(null);
   const [expenseForm, setExpenseForm] = useState({
     description: '',
@@ -160,6 +177,20 @@ function App() {
     expenseDate: today,
     paymentStatus: 'paid',
     paymentMethod: 'cash',
+  });
+  const [additionalIncomeForm, setAdditionalIncomeForm] = useState({
+    concept: '',
+    amount: '',
+    incomeDate: today,
+    paymentStatus: 'paid',
+    paymentMethod: 'cash',
+  });
+  const [collectionReminderForm, setCollectionReminderForm] = useState({
+    customerName: '',
+    customerPhone: '',
+    concept: '',
+    amount: '',
+    dueDate: today,
   });
   const [openingForm, setOpeningForm] = useState({
     opening_date: today,
@@ -187,6 +218,16 @@ function App() {
     setNotice({ message, type });
     window.setTimeout(() => setNotice(null), 4200);
   }, []);
+
+  useEffect(() => {
+    if (!webLogoFile) {
+      setWebLogoPreview('');
+      return undefined;
+    }
+    const previewUrl = URL.createObjectURL(webLogoFile);
+    setWebLogoPreview(previewUrl);
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [webLogoFile]);
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
@@ -224,6 +265,8 @@ function App() {
       supabase.from('sales').select('*, sale_items(*)').order('created_at', { ascending: false }),
       supabase.from('purchases').select('*, purchase_items(*)').order('purchase_date', { ascending: false }),
       supabase.from('expenses').select('*').order('expense_date', { ascending: false }),
+      supabase.from('additional_incomes').select('*').order('income_date', { ascending: false }),
+      supabase.from('collection_reminders').select('*').order('due_date', { ascending: true }),
       supabase.from('finance_settings').select('*').eq('id', 1).maybeSingle(),
       supabase.from('web_settings').select('*').eq('id', 1).maybeSingle(),
       supabase.from('web_products').select('*, batches(*)').order('sort_order').order('name'),
@@ -235,7 +278,8 @@ function App() {
       setError(failed.error.message);
     } else {
       const [
-        materials, indirects, utensils, recipes, batches, sales, purchases, expenses, financeSettings,
+        materials, indirects, utensils, recipes, batches, sales, purchases, expenses, additionalIncomes,
+        collectionReminders, financeSettings,
         webSettings, webProducts, webOrders, customOrders,
       ] = queries.map((result) => result.data);
       setData({
@@ -247,6 +291,8 @@ function App() {
         sales,
         purchases,
         expenses,
+        additionalIncomes,
+        collectionReminders,
         financeSettings,
         webSettings,
         webProducts,
@@ -290,7 +336,9 @@ function App() {
         schema: 'public',
         table: 'web_orders',
       }, (payload) => {
-        toast(`¡Nuevo pedido web${payload.new?.order_number ? ` ${payload.new.order_number}` : ''}!`);
+        if (payload.new?.status === 'pending') {
+          toast(`¡Nuevo pedido web${payload.new?.order_number ? ` ${payload.new.order_number}` : ''}!`);
+        }
         loadData();
       })
       .subscribe((status) => {
@@ -311,24 +359,30 @@ function App() {
     batches: data.batches.length,
   }), [data]);
   const activeWebOrderCount = data.webOrders
-    .filter((order) => ['pending', 'confirmed'].includes(order.status)).length;
-  const collectionSales = useMemo(
-    () => data.sales.filter((sale) => sale.status === 'issued'),
-    [data.sales],
-  );
+    .filter((order) => order.status === 'pending').length;
+  const webOrderCounts = useMemo(() => Object.fromEntries(webOrderFilters.map(([status]) => [
+    status,
+    data.webOrders.filter((order) => order.status === status).length,
+  ])), [data.webOrders]);
+  const visibleWebOrders = useMemo(() => data.webOrders
+    .filter((order) => order.status === webOrderFilter), [data.webOrders, webOrderFilter]);
+  const customOrderCounts = useMemo(() => Object.fromEntries(customOrderFilters.map(([status]) => [
+    status,
+    data.customOrders.filter((order) => order.status === status).length,
+  ])), [data.customOrders]);
+  const visibleCustomOrders = useMemo(() => data.customOrders
+    .filter((order) => order.status === customOrderFilter), [data.customOrders, customOrderFilter]);
   const collectionCounts = useMemo(() => ({
-    pending: collectionSales.filter((sale) => sale.payment_status === 'pending').length,
-    paid: collectionSales.filter((sale) => sale.payment_status === 'paid').length,
-    lost: collectionSales.filter((sale) => sale.payment_status === 'lost').length,
-    all: collectionSales.length,
-  }), [collectionSales]);
-  const collectionRows = useMemo(() => collectionSales
-    .filter((sale) => collectionFilter === 'all' || sale.payment_status === collectionFilter)
-    .flatMap((sale) => (sale.sale_items || []).map((item) => ({ sale, item }))),
-  [collectionFilter, collectionSales]);
-  const pendingCollectionsTotal = useMemo(() => collectionSales
-    .filter((sale) => sale.payment_status === 'pending')
-    .reduce((sum, sale) => sum + number(sale.total), 0), [collectionSales]);
+    pending: data.collectionReminders.filter((reminder) => reminder.status === 'pending').length,
+    done: data.collectionReminders.filter((reminder) => reminder.status === 'done').length,
+    all: data.collectionReminders.length,
+  }), [data.collectionReminders]);
+  const collectionRows = useMemo(() => data.collectionReminders
+    .filter((reminder) => collectionFilter === 'all' || reminder.status === collectionFilter),
+  [collectionFilter, data.collectionReminders]);
+  const pendingCollectionsTotal = useMemo(() => data.collectionReminders
+    .filter((reminder) => reminder.status === 'pending')
+    .reduce((sum, reminder) => sum + number(reminder.amount), 0), [data.collectionReminders]);
 
   function openMobileForm(formId) {
     if (window.matchMedia('(max-width: 900px)').matches) setMobileFormOpen(formId);
@@ -359,6 +413,14 @@ function App() {
         return stockDifference || a.name.localeCompare(b.name, 'es');
       });
   }, [data.materials, materialSearch]);
+  const visibleWebProducts = useMemo(() => {
+    const query = webProductSearch.trim().toLocaleLowerCase('es');
+    return data.webProducts.filter((product) => {
+      const batch = data.batches.find((item) => item.id === product.batch_id);
+      return !query || [product.name, batch?.code, batch?.recipe_name]
+        .some((value) => String(value || '').toLocaleLowerCase('es').includes(query));
+    });
+  }, [data.batches, data.webProducts, webProductSearch]);
 
   const costs = useMemo(() => {
     const batchSize = Math.max(1, number(recipe.batchSize));
@@ -406,6 +468,9 @@ function App() {
     const periodExpenses = data.expenses
       .filter((expense) => withinPeriod(expense.expense_date))
       .reduce((sum, expense) => sum + number(expense.amount), 0);
+    const periodAdditionalIncome = data.additionalIncomes
+      .filter((income) => withinPeriod(income.income_date))
+      .reduce((sum, income) => sum + number(income.amount), 0);
     const periodBadDebt = data.sales
       .filter((sale) => sale.status === 'issued' && sale.payment_status === 'lost'
         && withinPeriod(sale.written_off_at?.slice(0, 10)))
@@ -434,11 +499,17 @@ function App() {
         .reduce((sum, purchase) => sum + number(purchase.total), 0)
       - data.expenses.filter((expense) => expense.payment_status === 'paid'
         && afterOpening(expense.expense_date) && afterOpening(expense.paid_at?.slice(0, 10)))
-        .reduce((sum, expense) => sum + number(expense.amount), 0);
+        .reduce((sum, expense) => sum + number(expense.amount), 0)
+      + data.additionalIncomes.filter((income) => income.payment_status === 'paid'
+        && afterOpening(income.income_date) && afterOpening(income.paid_at?.slice(0, 10)))
+        .reduce((sum, income) => sum + number(income.amount), 0);
     const receivables = number(settings.opening_receivables)
       + data.sales.filter((sale) => sale.status === 'issued' && sale.payment_status === 'pending'
         && afterOpening(sale.invoice_date))
-        .reduce((sum, sale) => sum + number(sale.total), 0);
+        .reduce((sum, sale) => sum + number(sale.total), 0)
+      + data.additionalIncomes.filter((income) => income.payment_status === 'pending'
+        && afterOpening(income.income_date))
+        .reduce((sum, income) => sum + number(income.amount), 0);
     const payables = number(settings.opening_payables)
       + data.purchases.filter((purchase) => purchase.payment_status === 'pending' && afterOpening(purchase.purchase_date))
         .reduce((sum, purchase) => sum + number(purchase.total), 0)
@@ -448,6 +519,8 @@ function App() {
       .filter((sale) => sale.status === 'issued' && afterOpening(sale.invoice_date))
       .reduce((sum, sale) => sum + number(sale.total)
         - (sale.sale_items || []).reduce((itemSum, item) => itemSum + number(item.cost_total), 0), 0)
+      + data.additionalIncomes.filter((income) => afterOpening(income.income_date))
+      .reduce((sum, income) => sum + number(income.amount), 0)
       - data.sales.filter((sale) => sale.status === 'issued' && sale.payment_status === 'lost'
         && afterOpening(sale.written_off_at?.slice(0, 10)))
         .reduce((sum, sale) => sum + number(sale.total), 0)
@@ -457,11 +530,12 @@ function App() {
     const equity = number(settings.opening_equity) + retainedEarnings;
     return {
       revenue: periodRevenue,
+      additionalIncome: periodAdditionalIncome,
       cost: periodCost,
       grossProfit: periodRevenue - periodCost,
       expenses: periodExpenses,
       badDebt: periodBadDebt,
-      netIncome: periodRevenue - periodCost - periodExpenses - periodBadDebt,
+      netIncome: periodRevenue + periodAdditionalIncome - periodCost - periodExpenses - periodBadDebt,
       cash,
       receivables,
       rawInventory,
@@ -694,6 +768,34 @@ function App() {
       return;
     }
     toast(status === 'confirmed' ? 'Pedido reservado; el stock fue apartado.' : 'Pedido cancelado; el stock fue liberado.');
+    await loadData();
+  }
+
+  async function updateCustomOrder(order, status) {
+    const { error: orderError } = await supabase.from('custom_orders')
+      .update({ status })
+      .eq('id', order.id)
+      .select('id')
+      .single();
+    if (orderError) {
+      toast(orderError.message, 'error');
+      return;
+    }
+    toast('Estado del pedido personalizado actualizado');
+    await loadData();
+  }
+
+  async function updateCollectionReminder(reminder, status) {
+    const { error: reminderError } = await supabase.from('collection_reminders')
+      .update({ status })
+      .eq('id', reminder.id)
+      .select('id')
+      .single();
+    if (reminderError) {
+      toast(reminderError.message, 'error');
+      return;
+    }
+    toast(status === 'done' ? 'Recordatorio marcado como atendido' : 'Recordatorio reactivado');
     await loadData();
   }
 
@@ -1142,6 +1244,66 @@ function App() {
     await loadData();
   }
 
+  async function saveCollectionReminder(event) {
+    event.preventDefault();
+    const { error: reminderError } = await supabase.from('collection_reminders').insert({
+      customer_name: collectionReminderForm.customerName.trim(),
+      customer_phone: collectionReminderForm.customerPhone.trim() || null,
+      concept: collectionReminderForm.concept.trim(),
+      amount: number(collectionReminderForm.amount),
+      due_date: collectionReminderForm.dueDate,
+    });
+    if (reminderError) {
+      toast(reminderError.message, 'error');
+      return;
+    }
+    setCollectionReminderForm({ customerName: '', customerPhone: '', concept: '', amount: '', dueDate: today });
+    setMobileFormOpen(null);
+    toast('Recordatorio de cobro agregado');
+    await loadData();
+  }
+
+  async function saveAdditionalIncome(event) {
+    event.preventDefault();
+    const { error: incomeError } = await supabase.from('additional_incomes').insert({
+      concept: additionalIncomeForm.concept.trim(),
+      amount: number(additionalIncomeForm.amount),
+      income_date: additionalIncomeForm.incomeDate,
+      payment_status: additionalIncomeForm.paymentStatus,
+      payment_method: additionalIncomeForm.paymentMethod,
+      paid_at: additionalIncomeForm.paymentStatus === 'paid' ? new Date().toISOString() : null,
+    });
+    if (incomeError) {
+      toast(incomeError.message, 'error');
+      return;
+    }
+    setAdditionalIncomeForm({
+      concept: '',
+      amount: '',
+      incomeDate: today,
+      paymentStatus: 'paid',
+      paymentMethod: 'cash',
+    });
+    setMobileFormOpen(null);
+    toast('Ingreso adicional registrado');
+    await loadData();
+  }
+
+  async function markAdditionalIncomePaid(income) {
+    const { error: paymentError } = await supabase.from('additional_incomes')
+      .update({ payment_status: 'paid', paid_at: new Date().toISOString() })
+      .eq('id', income.id)
+      .eq('payment_status', 'pending')
+      .select('id')
+      .single();
+    if (paymentError) {
+      toast(paymentError.message, 'error');
+      return;
+    }
+    toast('Ingreso adicional cobrado');
+    await loadData();
+  }
+
   async function saveOpeningBalances(event) {
     event.preventDefault();
     const { error: settingsError } = await supabase.from('finance_settings').upsert({
@@ -1230,7 +1392,7 @@ function App() {
     try {
       const backup = JSON.parse(await file.text());
       const categories = ['materials', 'indirects', 'utensils', 'recipes', 'batches'];
-      const optionalCategories = ['sales', 'purchases', 'expenses', 'customOrders'];
+      const optionalCategories = ['sales', 'purchases', 'expenses', 'customOrders', 'additionalIncomes', 'collectionReminders'];
       if (!backup || categories.some((category) => !Array.isArray(backup[category]))
         || optionalCategories.some((category) => backup[category] !== undefined && !Array.isArray(backup[category]))) {
         throw new Error('El archivo no contiene un respaldo válido de Fragancia y Miel.');
@@ -1492,9 +1654,40 @@ function App() {
           fragrance: order.fragrance,
           color: order.color,
           quantity: number(order.quantity),
+          status: order.status || 'pending',
           created_at: order.created_at,
         }, { onConflict: 'id' });
         if (orderError) throw orderError;
+      }
+
+      for (const income of backup.additionalIncomes || []) {
+        const { error: incomeError } = await supabase.from('additional_incomes').upsert({
+          id: income.id,
+          owner_id: session.user.id,
+          concept: income.concept,
+          amount: number(income.amount),
+          income_date: income.income_date,
+          payment_status: income.payment_status,
+          payment_method: income.payment_method,
+          paid_at: income.paid_at,
+          created_at: income.created_at,
+        }, { onConflict: 'id' });
+        if (incomeError) throw incomeError;
+      }
+
+      for (const reminder of backup.collectionReminders || []) {
+        const { error: reminderError } = await supabase.from('collection_reminders').upsert({
+          id: reminder.id,
+          owner_id: session.user.id,
+          customer_name: reminder.customer_name,
+          customer_phone: reminder.customer_phone,
+          concept: reminder.concept,
+          amount: number(reminder.amount),
+          due_date: reminder.due_date,
+          status: reminder.status,
+          created_at: reminder.created_at,
+        }, { onConflict: 'id' });
+        if (reminderError) throw reminderError;
       }
 
       if (backup.financeSettings) {
@@ -1577,7 +1770,7 @@ function App() {
                 >
                   <span className="nav-icon">{icon}</span><span>{title}</span>
                   {id === 'webOrders' && activeWebOrderCount > 0 && (
-                    <span className="nav-badge" aria-label={`${activeWebOrderCount} pedidos por gestionar`} aria-live="polite">
+                    <span className="nav-badge" aria-label={`${activeWebOrderCount} pedidos sin reservar`} aria-live="polite">
                       {activeWebOrderCount > 99 ? '99+' : activeWebOrderCount}
                     </span>
                   )}
@@ -1590,7 +1783,7 @@ function App() {
       <main className="main-content">
         <div className="welcome-row">
           <div><p className="eyebrow">PANEL DE CONTROL</p><h1>Tu taller, en orden.</h1><p className="muted">Inventario, recetas y producción en un solo lugar.</p></div>
-          <button className="button primary" onClick={() => { setModal({ kind: 'production' }); }}>＋ Registrar producción</button>
+          <button className="button primary" onClick={() => { setProductionRecipeSearch(''); setModal({ kind: 'production' }); }}>＋ Registrar producción</button>
         </div>
 
         {error && <Notice type="error">{error}</Notice>}
@@ -1806,7 +1999,7 @@ function App() {
           </Section>
         )}
         {tab === 'production' && (
-          <Section title="Historial de producción" subtitle="Lotes registrados y costos reales" action="＋ Registrar producción" onAction={() => setModal({ kind: 'production' })}>
+          <Section title="Historial de producción" subtitle="Lotes registrados y costos reales" action="＋ Registrar producción" onAction={() => { setProductionRecipeSearch(''); setModal({ kind: 'production' }); }}>
             <Table headers={['Fecha', 'Código de lote', 'Receta', 'Cantidad', 'Costo total', 'Costo por barra', '']}>
               {data.batches.map((batch) => <tr key={batch.id}>
                 <td>{new Date(`${batch.batch_date}T12:00:00`).toLocaleDateString('es-HN')}</td>
@@ -1845,7 +2038,10 @@ function App() {
                         </>
                         : <>
                           <button className="button secondary small" onClick={() => setModal({ kind: 'invoice', sale })}>Ver / imprimir</button>
-                          {sale.payment_status === 'pending' && <button className="button primary small" onClick={() => markAsPaid('sales', sale)}>Marcar pagada</button>}
+                          {sale.payment_status === 'pending' && <>
+                            <button className="button primary small" onClick={() => markAsPaid('sales', sale)}>Marcar pagada</button>
+                            <button className="button secondary small" onClick={() => markSaleAsLost(sale)}>Marcar perdida</button>
+                          </>}
                         </>}
                     </td>
                   </tr>
@@ -1858,20 +2054,13 @@ function App() {
           <div className="sales-page">
             <Section
               title="Cobros pendientes"
-              subtitle="Consulta y administra el estado de pago de las ventas facturadas"
+              subtitle="Lista independiente de recordatorios; no crea ni modifica ventas"
             >
               <div className="collection-toolbar">
                 <div className="stock-total collection-total">
-                  <span>Saldo pendiente de cobro</span>
+                  <span>Total recordado pendiente</span>
                   <strong>{money(pendingCollectionsTotal)}</strong>
                 </div>
-                <button
-                  type="button"
-                  className="button primary"
-                  onClick={() => { setTab('sales'); openSalesOrder(null, 'pending'); }}
-                >
-                  ＋ Registrar cobro pendiente
-                </button>
               </div>
               <div className="collection-filters" role="group" aria-label="Filtrar cobros por estado">
                 {collectionFilters.map(([status, label]) => (
@@ -1886,21 +2075,26 @@ function App() {
                   </button>
                 ))}
               </div>
-              <Table headers={['Cliente', 'Jabón', 'Cantidad', 'Valor pendiente', 'Estado', 'Acciones']}>
-                {collectionRows.map(({ sale, item }) => (
-                  <tr key={`${sale.id}-${item.id}`}>
-                    <td className="strong">{sale.customer_name}<small className="table-secondary">{sale.customer_phone || sale.invoice_number}</small></td>
-                    <td>{item.recipe_name}</td>
-                    <td>{item.quantity}</td>
-                    <td className="green">{money(sale.payment_status === 'pending' ? item.line_total : 0)}</td>
-                    <td><span className={`pill ${sale.payment_status === 'paid' ? 'good' : sale.payment_status === 'lost' ? 'danger' : 'warning'}`}>
-                      {paymentStatusLabels[sale.payment_status] || sale.payment_status}
-                    </span></td>
+              <form className="reminder-form" onSubmit={saveCollectionReminder}>
+                <label>Cliente<input required maxLength="160" value={collectionReminderForm.customerName} onChange={(event) => setCollectionReminderForm({ ...collectionReminderForm, customerName: event.target.value })} /></label>
+                <label>Teléfono (opcional)<input type="tel" maxLength="40" value={collectionReminderForm.customerPhone} onChange={(event) => setCollectionReminderForm({ ...collectionReminderForm, customerPhone: event.target.value })} /></label>
+                <label>Concepto<input required maxLength="240" value={collectionReminderForm.concept} onChange={(event) => setCollectionReminderForm({ ...collectionReminderForm, concept: event.target.value })} placeholder="Ej. Pago acordado" /></label>
+                <label>Importe (LPS)<input type="number" min="0.01" step="0.01" required value={collectionReminderForm.amount} onChange={(event) => setCollectionReminderForm({ ...collectionReminderForm, amount: event.target.value })} /></label>
+                <label>Fecha de recordatorio<input type="date" required value={collectionReminderForm.dueDate} onChange={(event) => setCollectionReminderForm({ ...collectionReminderForm, dueDate: event.target.value })} /></label>
+                <button className="button primary">＋ Agregar recordatorio</button>
+              </form>
+              <Table headers={['Cliente', 'Concepto', 'Importe recordado', 'Fecha', 'Estado', 'Acciones']}>
+                {collectionRows.map((reminder) => (
+                  <tr key={reminder.id}>
+                    <td className="strong">{reminder.customer_name}<small className="table-secondary">{reminder.customer_phone || 'Sin teléfono'}</small></td>
+                    <td>{reminder.concept}</td>
+                    <td className="green">{money(reminder.amount)}</td>
+                    <td>{new Date(`${reminder.due_date}T12:00:00`).toLocaleDateString('es-HN')}</td>
+                    <td><span className={`pill ${reminder.status === 'done' ? 'good' : 'warning'}`}>{reminder.status === 'done' ? 'Atendido' : 'Pendiente'}</span></td>
                     <td className="sale-actions">
-                      {sale.payment_status === 'pending' && <>
-                        <button className="button primary small" onClick={() => markAsPaid('sales', sale)}>Marcar pagado</button>
-                        <button className="button secondary small" onClick={() => markSaleAsLost(sale)}>Marcar perdida</button>
-                      </>}
+                      <button className={`button ${reminder.status === 'pending' ? 'primary' : 'secondary'} small`} onClick={() => updateCollectionReminder(reminder, reminder.status === 'pending' ? 'done' : 'pending')}>
+                        {reminder.status === 'pending' ? 'Marcar atendido' : 'Reactivar'}
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -1932,12 +2126,20 @@ function App() {
         )}
         {tab === 'webOrders' && (
           <Section title="Pedidos web" subtitle="El stock se descuenta al reservar el pedido; los pedidos pendientes no afectan las existencias">
+            <div className="collection-filters order-filters" role="group" aria-label="Filtrar pedidos web por estado">
+              {webOrderFilters.map(([status, label]) => (
+                <button type="button" key={status} className={`collection-filter${webOrderFilter === status ? ' active' : ''}`}
+                  aria-pressed={webOrderFilter === status} onClick={() => setWebOrderFilter(status)}>
+                  {label}<span>{webOrderCounts[status]}</span>
+                </button>
+              ))}
+            </div>
             <Table headers={['Pedido', 'Fecha', 'Cliente', 'Productos', 'Total', 'Estado', 'Acciones']}>
-              {data.webOrders.map((order) => {
+              {visibleWebOrders.map((order) => {
                 const statusLabel = {
                   pending: 'Pendiente',
                   confirmed: 'Reservado',
-                  cancelled: 'Cancelado',
+                  cancelled: 'Rechazado',
                   completed: 'Venta registrada',
                 }[order.status] || order.status;
                 const statusTone = order.status === 'completed' ? 'good'
@@ -1954,7 +2156,7 @@ function App() {
                       <button className="button secondary small" onClick={() => setModal({ kind: 'webOrderDetail', order })}>Ver</button>
                       {['pending', 'confirmed'].includes(order.status) && <>
                         {order.status === 'pending' && <button className="button secondary small" onClick={() => updateWebOrder(order, 'confirmed')}>Reservar</button>}
-                        <button className="button primary small" onClick={() => setModal({ kind: 'completeWebOrder', order })}>Completar venta</button>
+                        {order.status === 'confirmed' && <button className="button primary small" onClick={() => setModal({ kind: 'completeWebOrder', order })}>Marcar entregado</button>}
                         <button className="icon-button danger-text" aria-label="Cancelar pedido" title="Cancelar pedido y liberar stock" onClick={() => updateWebOrder(order, 'cancelled')}>×</button>
                       </>}
                       <button className="icon-button danger-text" aria-label={`Eliminar pedido ${order.order_number}`} title="Eliminar pedido" onClick={() => deleteWebOrder(order)}>⌫</button>
@@ -1979,8 +2181,16 @@ function App() {
               values: { customerName: '', customerPhone: '', design: '', fragrance: '', color: '', quantity: '1' },
             })}
           >
-            <Table headers={['Cliente', 'Celular', 'Diseño', 'Fragancia', 'Color', 'Cantidad', 'Fecha', '']}>
-              {data.customOrders.map((order) => (
+            <div className="collection-filters order-filters" role="group" aria-label="Filtrar pedidos personalizados por estado">
+              {customOrderFilters.map(([status, label]) => (
+                <button type="button" key={status} className={`collection-filter${customOrderFilter === status ? ' active' : ''}`}
+                  aria-pressed={customOrderFilter === status} onClick={() => setCustomOrderFilter(status)}>
+                  {label}<span>{customOrderCounts[status]}</span>
+                </button>
+              ))}
+            </div>
+            <Table headers={['Cliente', 'Celular', 'Diseño', 'Fragancia', 'Color', 'Cantidad', 'Fecha', 'Estado', 'Acciones']}>
+              {visibleCustomOrders.map((order) => (
                 <tr key={order.id}>
                   <td className="strong">{order.customer_name}</td>
                   <td>{order.customer_phone}</td>
@@ -1989,7 +2199,15 @@ function App() {
                   <td>{order.color}</td>
                   <td className="green">{order.quantity}</td>
                   <td>{new Date(order.created_at).toLocaleDateString('es-HN')}</td>
-                  <Actions onDelete={() => deleteRow('custom_orders', order.id, `el pedido de ${order.customer_name}`)} />
+                  <td><span className={`pill ${order.status === 'created' ? 'good' : order.status === 'rejected' ? 'danger' : 'warning'}`}>
+                    {{ created: 'Creado', rejected: 'Rechazado', pending: 'Pendiente' }[order.status] || 'Pendiente'}
+                  </span></td>
+                  <td className="sale-actions">
+                    {customOrderFilters.filter(([status]) => status !== order.status).map(([status, label]) => (
+                      <button key={status} className="button secondary small" onClick={() => updateCustomOrder(order, status)}>Marcar {label.toLowerCase()}</button>
+                    ))}
+                    <button className="icon-button danger-text" aria-label={`Eliminar pedido de ${order.customer_name}`} onClick={() => deleteRow('custom_orders', order.id, `el pedido de ${order.customer_name}`)}>×</button>
+                  </td>
                 </tr>
               ))}
             </Table>
@@ -2003,8 +2221,15 @@ function App() {
               action="＋ Nuevo producto"
               onAction={() => openWebProduct()}
             >
+              <div className="inventory-toolbar">
+                <label className="inventory-search">
+                  <span>Buscar en el catálogo</span>
+                  <input type="search" value={webProductSearch} onChange={(event) => setWebProductSearch(event.target.value)} placeholder="Nombre del producto, receta o lote…" />
+                </label>
+                <span className="inventory-count">{visibleWebProducts.length} de {data.webProducts.length} productos</span>
+              </div>
               <div className="web-product-grid">
-                {data.webProducts.map((product) => {
+                {visibleWebProducts.map((product) => {
                   const batch = data.batches.find((item) => item.id === product.batch_id);
                   const recipeItem = data.recipes.find((item) => item.id === batch?.recipe_id);
                   const available = batch ? availableWebBatchStock(batch) : 0;
@@ -2032,7 +2257,7 @@ function App() {
                     </div>
                   </article>;
                 })}
-                {data.webProducts.length === 0 && <Empty text="Agrega tu primer producto para organizar el catálogo de la tienda." />}
+                {visibleWebProducts.length === 0 && <Empty text={data.webProducts.length === 0 ? 'Agrega tu primer producto para organizar el catálogo de la tienda.' : 'No hay productos que coincidan con la búsqueda.'} />}
               </div>
               <div className="web-store-link"><a className="button secondary small" href="./storefront.html" target="_blank" rel="noreferrer">Abrir tienda pública ↗</a></div>
             </Section>
@@ -2053,7 +2278,15 @@ function App() {
                 <Field label="Frase de marca"><input maxLength="180" value={webSettingsDraft?.tagline || ''} onChange={(event) => setWebSettingsDraft({ ...webSettingsDraft, tagline: event.target.value })} /></Field>
               </div>
               <Field label="Logo (JPG, PNG o WebP; máximo 8 MB)"><input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setWebLogoFile(event.target.files?.[0] || null)} /></Field>
-              {webSettingsDraft?.logo_path && !webLogoFile && <p className="form-note">Ya hay un logo guardado. Sube otro para reemplazarlo.</p>}
+              <div className="logo-preview-card">
+                {webLogoFile
+                  ? <img src={webLogoPreview} alt="Vista previa del logo seleccionado" />
+                  : webSettingsDraft?.logo_path
+                    ? <img src={supabase.storage.from('jabon').getPublicUrl(webSettingsDraft.logo_path).data.publicUrl} alt="Logo actual del negocio" />
+                    : <span aria-hidden="true">✦</span>}
+                <div><strong>{webLogoFile ? 'Nuevo logo' : webSettingsDraft?.logo_path ? 'Logo actual' : 'Identidad de tu tienda'}</strong>
+                  <small>{webLogoFile ? webLogoFile.name : webSettingsDraft?.logo_path ? 'Vista previa del logo publicado' : 'Elige una imagen para mostrar tu marca.'}</small></div>
+              </div>
               <div className="form-grid">
                 <Field label="Teléfono de contacto"><input type="tel" maxLength="40" value={webSettingsDraft?.phone || ''} onChange={(event) => setWebSettingsDraft({ ...webSettingsDraft, phone: event.target.value })} /></Field>
                 <Field label="WhatsApp para revendedores (con código de país)"><input type="tel" maxLength="40" value={webSettingsDraft?.whatsapp_phone || ''} onChange={(event) => setWebSettingsDraft({ ...webSettingsDraft, whatsapp_phone: event.target.value })} placeholder="50499999999" /></Field>
@@ -2077,12 +2310,43 @@ function App() {
             <Section title="Estado de resultados" subtitle="Ventas emitidas, costo de productos vendidos y gastos del período seleccionado">
               <div className="statement-lines">
                 <div><span>Ingresos por ventas</span><strong>{money(reports.revenue)}</strong></div>
+                <div><span>Ingresos adicionales</span><strong>{money(reports.additionalIncome)}</strong></div>
                 <div><span>Costo de productos vendidos</span><strong>− {money(reports.cost)}</strong></div>
                 <div className="statement-subtotal"><span>Utilidad bruta</span><strong>{money(reports.grossProfit)}</strong></div>
                 <div><span>Gastos operativos</span><strong>− {money(reports.expenses)}</strong></div>
                 <div><span>Cuentas incobrables</span><strong>− {money(reports.badDebt)}</strong></div>
                 <div className="statement-total"><span>Utilidad neta</span><strong>{money(reports.netIncome)}</strong></div>
               </div>
+            </Section>
+            <Section
+              title="Registrar ingreso adicional"
+              subtitle="Registra conceptos ajenos a ventas; se incluyen en resultados y en el balance"
+              className={`mobile-form-section${mobileFormOpen === 'additionalIncome' ? ' mobile-form-open' : ''}`}
+              action={mobileFormOpen === 'additionalIncome' ? 'Cerrar formulario' : undefined}
+              onAction={() => setMobileFormOpen(null)}
+            >
+              <button type="button" className="mobile-form-launcher" onClick={() => openMobileForm('additionalIncome')}>＋ Registrar ingreso adicional</button>
+              <form className="income-form" onSubmit={saveAdditionalIncome}>
+                <label>Concepto<input required maxLength="240" value={additionalIncomeForm.concept} onChange={(event) => setAdditionalIncomeForm({ ...additionalIncomeForm, concept: event.target.value })} placeholder="Ej. Interés recibido" /></label>
+                <label>Importe (LPS)<input type="number" min="0.01" step="0.01" required value={additionalIncomeForm.amount} onChange={(event) => setAdditionalIncomeForm({ ...additionalIncomeForm, amount: event.target.value })} /></label>
+                <label>Fecha<input type="date" required value={additionalIncomeForm.incomeDate} onChange={(event) => setAdditionalIncomeForm({ ...additionalIncomeForm, incomeDate: event.target.value })} /></label>
+                <label>Estado<select value={additionalIncomeForm.paymentStatus} onChange={(event) => setAdditionalIncomeForm({ ...additionalIncomeForm, paymentStatus: event.target.value })}><option value="paid">Cobrado</option><option value="pending">Pendiente de cobro</option></select></label>
+                <label>Método<select value={additionalIncomeForm.paymentMethod} onChange={(event) => setAdditionalIncomeForm({ ...additionalIncomeForm, paymentMethod: event.target.value })}>{paymentMethods.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
+                <button className="button primary">Guardar ingreso</button>
+              </form>
+            </Section>
+            <Section title="Ingresos adicionales registrados" subtitle={`${data.additionalIncomes.length} ingresos`}>
+              <Table headers={['Fecha', 'Concepto', 'Importe', 'Estado', 'Acciones']}>
+                {data.additionalIncomes.map((income) => (
+                  <tr key={income.id}>
+                    <td>{new Date(`${income.income_date}T12:00:00`).toLocaleDateString('es-HN')}</td>
+                    <td className="strong">{income.concept}</td>
+                    <td className="green">{money(income.amount)}</td>
+                    <td><span className={`pill ${income.payment_status === 'paid' ? 'good' : 'warning'}`}>{income.payment_status === 'paid' ? 'Cobrado' : 'Pendiente'}</span></td>
+                    <td className="sale-actions">{income.payment_status === 'pending' && <button className="button primary small" onClick={() => markAdditionalIncomePaid(income)}>Marcar cobrado</button>}</td>
+                  </tr>
+                ))}
+              </Table>
             </Section>
             <Section title="Balance general de gestión" subtitle={`Saldos actuales · base de apertura: ${data.financeSettings?.opening_date || today}`}>
               {!data.financeSettings && <Notice type="error">No se encontraron saldos iniciales. Vuelve a cargar el esquema de Supabase.</Notice>}
@@ -2523,7 +2787,7 @@ function App() {
         </Dialog>
       )}
       {modal?.kind === 'completeWebOrder' && (
-        <Dialog title={`Completar pedido ${modal.order.order_number}`} onClose={() => setModal(null)}>
+        <Dialog title={`Registrar entrega del pedido ${modal.order.order_number}`} onClose={() => setModal(null)}>
           <form className="stack-form" onSubmit={completeWebOrder}>
             <p className="form-note">Al completar, se creará una venta y se descontará el lote reservado del inventario de productos terminados.</p>
             <Field label="Método de pago">
@@ -2539,7 +2803,7 @@ function App() {
             <div className="sale-total"><span>Total del pedido</span><strong>{money(modal.order.total)}</strong></div>
             <div className="dialog-actions">
               <button type="button" className="button secondary" onClick={() => setModal(null)}>Volver</button>
-              <button className="button primary">Crear venta</button>
+              <button className="button primary">Confirmar entrega</button>
             </div>
           </form>
         </Dialog>
@@ -2572,8 +2836,9 @@ function App() {
           {data.recipes.length === 0
             ? <><p className="muted">Primero necesitas guardar una receta para registrar su producción.</p><div className="dialog-actions"><button className="button secondary" onClick={() => setModal(null)}>Cerrar</button><button className="button primary" onClick={() => { setModal(null); setTab('recipes'); }}>Crear receta</button></div></>
             : <form className="stack-form" onSubmit={produceBatch}>
+              <label>Buscar receta<input type="search" value={productionRecipeSearch} onChange={(event) => setProductionRecipeSearch(event.target.value)} placeholder="Escribe el nombre de la receta…" /></label>
               <label>Receta<select name="recipeId" required defaultValue="" onChange={(event) => { const selected = data.recipes.find((item) => item.id === event.target.value); const quantity = document.querySelector('[name="quantity"]'); if (selected && quantity) quantity.value = selected.batchSize; }}>
-                <option value="" disabled>Selecciona una receta</option>{data.recipes.map((item) => <option key={item.id} value={item.id}>{item.name} · lote de {item.batchSize}</option>)}
+                <option value="" disabled>Selecciona una receta</option>{data.recipes.filter((item) => item.name.toLocaleLowerCase('es').includes(productionRecipeSearch.trim().toLocaleLowerCase('es'))).map((item) => <option key={item.id} value={item.id}>{item.name} · lote de {item.batchSize}</option>)}
               </select></label>
               <label>Código / número de lote<input name="code" defaultValue={makeCode()} required /></label>
               <label>Cantidad de jabones<input name="quantity" type="number" min="1" defaultValue="" required /></label>
