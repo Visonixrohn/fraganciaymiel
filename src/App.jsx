@@ -993,7 +993,7 @@ function App() {
     await loadData();
   }
 
-  function openSalesOrder(sale = null) {
+  function openSalesOrder(sale = null, defaultPaymentStatus = 'paid') {
     setSaleDraft(sale
       ? {
         id: sale.id,
@@ -1012,7 +1012,7 @@ function App() {
         customerName: '',
         customerPhone: '',
         paymentMethod: 'cash',
-        paymentStatus: 'paid',
+        paymentStatus: defaultPaymentStatus,
         items: [{ recipeId: '', quantity: '1', priceType: 'detail' }],
       });
     setModal({ kind: 'sale' });
@@ -1856,7 +1856,12 @@ function App() {
         )}
         {tab === 'collections' && (
           <div className="sales-page">
-            <Section title="Cobros pendientes" subtitle="Consulta y administra el estado de pago de las ventas facturadas">
+            <Section
+              title="Cobros pendientes"
+              subtitle="Consulta y administra el estado de pago de las ventas facturadas"
+              action="＋ Registrar cobro pendiente"
+              onAction={() => { setTab('sales'); openSalesOrder(null, 'pending'); }}
+            >
               <div className="stock-total collection-total">
                 <span>Saldo pendiente de cobro</span>
                 <strong>{money(pendingCollectionsTotal)}</strong>
