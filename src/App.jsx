@@ -1311,15 +1311,6 @@ function App() {
       return;
     }
 
-    async function installApp() {
-      if (!installPrompt) return;
-      try {
-        await installPrompt.prompt();
-        setInstallPrompt(null);
-      } catch (installError) {
-        toast(installError.message || 'No se pudo iniciar la instalación.', 'error');
-      }
-    }
     setAdditionalIncomeForm({
       concept: '',
       amount: '',
@@ -1330,6 +1321,16 @@ function App() {
     setMobileFormOpen(null);
     toast('Ingreso adicional registrado');
     await loadData();
+  }
+
+  async function installApp() {
+    if (!installPrompt) return;
+    try {
+      await installPrompt.prompt();
+      setInstallPrompt(null);
+    } catch (installError) {
+      toast(installError.message || 'No se pudo iniciar la instalación.', 'error');
+    }
   }
 
   async function markAdditionalIncomePaid(income) {
@@ -1749,13 +1750,21 @@ function App() {
     }
   }
 
+  const brandLogoUrl = data.webSettings?.logo_path
+    ? supabase.storage.from('jabon').getPublicUrl(data.webSettings.logo_path).data.publicUrl
+    : null;
+
   if (authLoading) return <div className="loading-screen">Cargando Fragancia y Miel…</div>;
   if (!isSupabaseConfigured) return <div className="center-screen"><Notice type="error">{error}</Notice></div>;
   if (!unlocked || !session) {
     return (
       <div className="auth-page">
         <div className="auth-card">
-          <div className="brand-mark">✿</div>
+          <div className="brand-mark">
+            {brandLogoUrl
+              ? <img src={brandLogoUrl} alt={`Logo de ${data.webSettings?.business_name || 'Fragancia y Miel'}`} />
+              : '✿'}
+          </div>
           <p className="eyebrow">JABONERÍA ARTESANAL</p>
           <h1>Fragancia <span>&</span> Miel</h1>
           <p className="muted">Ingresa tu código para continuar.</p>
@@ -1774,7 +1783,9 @@ function App() {
     <div className="app-shell">
       <header className="topbar">
         <a className="brand" href="#" onClick={(event) => event.preventDefault()}>
-          <span className="brand-icon">✿</span>
+          {brandLogoUrl
+            ? <img className="brand-icon brand-logo" src={brandLogoUrl} alt={`Logo de ${data.webSettings?.business_name || 'Fragancia y Miel'}`} />
+            : <span className="brand-icon">✿</span>}
           <span>Fragancia <i>&</i> Miel<small>CONTROL DE PRODUCCIÓN</small></span>
         </a>
         <div className="top-actions">
