@@ -175,8 +175,15 @@ create table if not exists public.web_settings (
   email text,
   address text,
   about_text text,
+  tiktok_url text,
+  facebook_url text,
+  instagram_url text,
   updated_at timestamptz not null default now()
 );
+
+alter table public.web_settings add column if not exists tiktok_url text;
+alter table public.web_settings add column if not exists facebook_url text;
+alter table public.web_settings add column if not exists instagram_url text;
 
 insert into public.web_settings (id) values (1) on conflict (id) do nothing;
 
@@ -1565,7 +1572,10 @@ as $$
         'whatsapp_phone', whatsapp_phone,
         'email', email,
         'address', address,
-        'about_text', about_text
+        'about_text', about_text,
+        'tiktok_url', tiktok_url,
+        'facebook_url', facebook_url,
+        'instagram_url', instagram_url
       )
       from public.web_settings
       where id = 1

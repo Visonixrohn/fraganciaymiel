@@ -315,6 +315,52 @@
       margin-top: 40px;
       align-items: stretch;
     }
+    .social-section {
+      padding-top: 12px;
+      padding-bottom: 36px;
+    }
+    .social-links {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 18px;
+      margin-top: 24px;
+    }
+    .social-link {
+      display: grid;
+      width: 58px;
+      height: 58px;
+      place-items: center;
+      border: 1px solid rgba(92, 61, 30, 0.18);
+      border-radius: 50%;
+      background: var(--white);
+      color: var(--green);
+      box-shadow: var(--shadow-sm);
+      animation: social-float 3s ease-in-out infinite;
+      transition: transform 0.2s, color 0.2s, box-shadow 0.2s;
+    }
+    .social-link:nth-child(2) { animation-delay: -1s; }
+    .social-link:nth-child(3) { animation-delay: -2s; }
+    .social-link:hover {
+      color: var(--gold);
+      transform: translateY(-5px) scale(1.08);
+      box-shadow: var(--shadow-md);
+    }
+    .social-link:focus-visible {
+      outline: 3px solid var(--gold);
+      outline-offset: 4px;
+    }
+    .social-link svg {
+      width: 25px;
+      height: 25px;
+      fill: currentColor;
+    }
+    .social-link .instagram-icon {
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.8;
+    }
+    .social-link .instagram-icon .instagram-dot { fill: currentColor; stroke: none; }
     .product {
       position: relative;
       display: flex;
@@ -1259,6 +1305,10 @@
       70% { transform: rotate(4deg) scale(1.06); }
       100% { transform: none; }
     }
+    @keyframes social-float {
+      0%, 100% { translate: 0 0; }
+      50% { translate: 0 -5px; }
+    }
     @keyframes added-pop {
       50% { transform: scale(1.04); }
     }
@@ -1434,6 +1484,14 @@ Descubre nuestra colección de jabones artesanales, elaborados con ingredientes 
       </div>
       <div id="products" class="products"></div>
       <div id="no-concern-results" class="empty" hidden>No encontramos productos para las afecciones seleccionadas.</div>
+    </section>
+
+    <section id="social-section" class="section content social-section" aria-label="Redes sociales" hidden>
+      <div class="section-title">
+        <span class="eyebrow">Síguenos</span>
+        <h2>Estamos en redes sociales</h2>
+      </div>
+      <div id="social-links" class="social-links"></div>
     </section>
 
     <section class="section content" id="historia">
@@ -1867,6 +1925,46 @@ Descubre nuestra colección de jabones artesanales, elaborados con ingredientes 
       }
       const contacts = [settings?.phone, settings?.email, settings?.address].filter(Boolean);
       document.getElementById('footer-contact').textContent = contacts.join(' · ');
+      const socialNetworks = [
+        {
+          key: 'tiktok_url',
+          label: 'TikTok',
+          icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M19.6 7.1a6.7 6.7 0 0 1-4.1-1.4v8.5a6.2 6.2 0 1 1-5.3-6.1v3.4a2.8 2.8 0 1 0 1.9 2.7V2h3.4a6.7 6.7 0 0 0 4.1 3.2v1.9Z"/></svg>',
+        },
+        {
+          key: 'facebook_url',
+          label: 'Facebook',
+          icon: '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M13.5 21v-8h2.7l.4-3.1h-3.1v-2c0-.9.3-1.5 1.6-1.5h1.7V3.6c-.3 0-1.3-.1-2.5-.1-2.5 0-4.2 1.5-4.2 4.3v2.1H7.3V13h2.8v8h3.4Z"/></svg>',
+        },
+        {
+          key: 'instagram_url',
+          label: 'Instagram',
+          icon: '<svg class="instagram-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="5"/><circle cx="12" cy="12" r="4"/><circle class="instagram-dot" cx="17.5" cy="6.8" r="1"/></svg>',
+        },
+      ];
+      const socialLinks = document.getElementById('social-links');
+      socialLinks.replaceChildren();
+      socialNetworks.forEach(({ key, label, icon }) => {
+        const value = settings?.[key];
+        if (typeof value !== 'string' || !value.trim()) return;
+        let url;
+        try {
+          url = new URL(value.trim());
+        } catch {
+          return;
+        }
+        if (!['http:', 'https:'].includes(url.protocol)) return;
+        const link = document.createElement('a');
+        link.className = 'social-link';
+        link.href = url.href;
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.setAttribute('aria-label', `Visita nuestro perfil de ${label}`);
+        link.title = label;
+        link.innerHTML = icon;
+        socialLinks.append(link);
+      });
+      document.getElementById('social-section').hidden = socialLinks.childElementCount === 0;
       const whatsappNumber = String(settings?.whatsapp_phone || settings?.phone || '').replace(/\D/g, '');
       if (whatsappNumber) {
         const reseller = document.getElementById('reseller-link');

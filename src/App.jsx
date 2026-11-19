@@ -343,6 +343,9 @@ function App() {
         email: '',
         address: '',
         about_text: '',
+        tiktok_url: '',
+        facebook_url: '',
+        instagram_url: '',
       });
       if (financeSettings) {
         setOpeningForm({
@@ -2360,6 +2363,11 @@ function App() {
               <div className="form-grid">
                 <Field label="Correo electrónico"><input type="email" maxLength="254" value={webSettingsDraft?.email || ''} onChange={(event) => setWebSettingsDraft({ ...webSettingsDraft, email: event.target.value })} /></Field>
                 <Field label="Dirección / zona de entrega"><input maxLength="300" value={webSettingsDraft?.address || ''} onChange={(event) => setWebSettingsDraft({ ...webSettingsDraft, address: event.target.value })} /></Field>
+              </div>
+              <div className="form-grid">
+                <Field label="TikTok"><input type="url" maxLength="500" value={webSettingsDraft?.tiktok_url || ''} onChange={(event) => setWebSettingsDraft({ ...webSettingsDraft, tiktok_url: event.target.value })} placeholder="https://www.tiktok.com/@tu_cuenta" /></Field>
+                <Field label="Facebook"><input type="url" maxLength="500" value={webSettingsDraft?.facebook_url || ''} onChange={(event) => setWebSettingsDraft({ ...webSettingsDraft, facebook_url: event.target.value })} placeholder="https://www.facebook.com/tu_pagina" /></Field>
+                <Field label="Instagram"><input type="url" maxLength="500" value={webSettingsDraft?.instagram_url || ''} onChange={(event) => setWebSettingsDraft({ ...webSettingsDraft, instagram_url: event.target.value })} placeholder="https://www.instagram.com/tu_cuenta" /></Field>
               </div>
               <Field label="Presentación del negocio"><textarea rows="5" maxLength="2000" value={webSettingsDraft?.about_text || ''} onChange={(event) => setWebSettingsDraft({ ...webSettingsDraft, about_text: event.target.value })} placeholder="Cuenta brevemente la historia de tu taller y cómo elaboras tus jabones." /></Field>
               <p className="form-note">El enlace para revendedores abre WhatsApp con el número configurado. No se publican credenciales secretas en la tienda.</p>
