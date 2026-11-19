@@ -156,6 +156,7 @@ function App() {
   const [materialSearch, setMaterialSearch] = useState('');
   const [webProductSearch, setWebProductSearch] = useState('');
   const [productionRecipeSearch, setProductionRecipeSearch] = useState('');
+  const [productionRecipeId, setProductionRecipeId] = useState('');
   const [data, setData] = useState({
     materials: [],
     indirects: [],
@@ -1114,17 +1115,22 @@ function App() {
   async function produceBatch(event) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
+    const webProductId = String(form.get('webProductId') || '');
     const { error: produceError } = await supabase.rpc('produce_batch', {
       p_recipe_id: form.get('recipeId'),
       p_code: String(form.get('code')).trim(),
       p_quantity: number(form.get('quantity')),
+      p_web_product_id: webProductId || null,
     });
     if (produceError) {
       toast(produceError.message, 'error');
       return;
     }
     setModal(null);
-    toast('Lote registrado y existencias actualizadas');
+    const linkedProduct = data.webProducts.find((product) => product.id === webProductId);
+    toast(linkedProduct
+      ? `Lote registrado y asignado a ${linkedProduct.name}`
+      : 'Lote registrado y existencias actualizadas');
     await loadData();
   }
 
@@ -1839,7 +1845,7 @@ function App() {
           <div><p className="eyebrow">PANEL DE CONTROL</p><h1>Tu taller, en orden.</h1><p className="muted">Inventario, recetas y producción en un solo lugar.</p></div>
           <div className="welcome-actions">
             {installPrompt && <button className="button secondary" onClick={installApp}>↓ Instalar aplicación</button>}
-            <button className="button primary" onClick={() => { setProductionRecipeSearch(''); setModal({ kind: 'production' }); }}>＋ Registrar producción</button>
+            <button className="button primary" onClick={() => { setProductionRecipeSearch(''); setProductionRecipeId(''); setModal({ kind: 'production' }); }}>＋ Registrar producción</button>
           </div>
         </div>
 
@@ -2056,7 +2062,7 @@ function App() {
           </Section>
         )}
         {tab === 'production' && (
-          <Section title="Historial de producción" subtitle="Lotes registrados y costos reales" action="＋ Registrar producción" onAction={() => { setProductionRecipeSearch(''); setModal({ kind: 'production' }); }}>
+          <Section title="Historial de producción" subtitle="Lotes registrados y costos reales" action="＋ Registrar producción" onAction={() => { setProductionRecipeSearch(''); setProductionRecipeId(''); setModal({ kind: 'production' }); }}>
             <Table headers={['Fecha', 'Código de lote', 'Receta', 'Cantidad', 'Costo total', 'Costo por barra', '']}>
               {data.batches.map((batch) => <tr key={batch.id}>
                 <td>{new Date(`${batch.batch_date}T12:00:00`).toLocaleDateString('es-HN')}</td>
@@ -2894,12 +2900,19 @@ function App() {
             ? <><p className="muted">Primero necesitas guardar una receta para registrar su producción.</p><div className="dialog-actions"><button className="button secondary" onClick={() => setModal(null)}>Cerrar</button><button className="button primary" onClick={() => { setModal(null); setTab('recipes'); }}>Crear receta</button></div></>
             : <form className="stack-form" onSubmit={produceBatch}>
               <label>Buscar receta<input type="search" value={productionRecipeSearch} onChange={(event) => setProductionRecipeSearch(event.target.value)} placeholder="Escribe el nombre de la receta…" /></label>
-              <label>Receta<select name="recipeId" required defaultValue="" onChange={(event) => { const selected = data.recipes.find((item) => item.id === event.target.value); const quantity = document.querySelector('[name="quantity"]'); if (selected && quantity) quantity.value = selected.batchSize; }}>
-                <option value="" disabled>Selecciona una receta</option>{data.recipes.filter((item) => item.name.toLocaleLowerCase('es').includes(productionRecipeSearch.trim().toLocaleLowerCase('es'))).map((item) => <option key={item.id} value={item.id}>{item.name} · lote de {item.batchSize}</option>)}
+              <label>Receta<select name="recipeId" required value={productionRecipeId} onChange={(event) => { const selected = data.recipes.find((item) => item.id === event.target.value); setProductionRecipeId(event.target.value); const quantity = document.querySelector('[name="quantity"]'); if (selected && quantity) quantity.value = selected.batchSize; }}>
+                <option value="" disabled>Selecciona una receta</option>{data.recipes.filter((item) => item.id === productionRecipeId || item.name.toLocaleLowerCase('es').includes(productionRecipeSearch.trim().toLocaleLowerCase('es'))).map((item) => <option key={item.id} value={item.id}>{item.name} · lote de {item.batchSize}</option>)}
+              </select></label>
+              <label>Producto web que abastecer (opcional)<select name="webProductId" defaultValue="">
+                <option value="">No asignar a un producto web</option>
+                {productionRecipeId && data.webProducts.filter((product) => {
+                  const linkedBatch = data.batches.find((batch) => batch.id === product.batch_id);
+                  return !linkedBatch || linkedBatch.recipe_id === productionRecipeId;
+                }).map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
               </select></label>
               <label>Código / número de lote<input name="code" defaultValue={makeCode()} required /></label>
               <label>Cantidad de jabones<input name="quantity" type="number" min="1" defaultValue="" required /></label>
-              <p className="form-note">Al registrar la producción se descontarán las materias primas del inventario. Si no hay existencias suficientes, el lote no se guardará.</p>
+              <p className="form-note">Al elegir un producto web, este nuevo lote lo abastecerá automáticamente. Los pedidos ya reservados conservarán su lote. La producción descuenta las materias primas; si no hay existencias suficientes, no se guardará.</p>
               <div className="dialog-actions"><button type="button" className="button secondary" onClick={() => setModal(null)}>Cancelar</button><button className="button primary">Confirmar producción</button></div>
             </form>}
         </Dialog>

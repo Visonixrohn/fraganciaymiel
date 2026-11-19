@@ -738,7 +738,14 @@ begin
 end;
 $$;
 
-create or replace function public.produce_batch(p_recipe_id uuid, p_code text, p_quantity integer)
+drop function if exists public.produce_batch(uuid, text, integer);
+
+create or replace function public.produce_batch(
+  p_recipe_id uuid,
+  p_code text,
+  p_quantity integer,
+  p_web_product_id uuid default null
+)
 returns public.batches
 language plpgsql
 set search_path = ''
@@ -747,6 +754,8 @@ declare
   v_owner uuid := auth.uid();
   v_recipe public.recipes%rowtype;
   v_batch public.batches%rowtype;
+  v_web_product_batch_id uuid;
+  v_web_product_recipe_id uuid;
   v_item record;
   v_required numeric;
   v_unit_cost numeric;
@@ -767,6 +776,25 @@ begin
   for update;
   if not found then
     raise exception 'No se encontró la receta seleccionada.';
+  end if;
+
+  if p_web_product_id is not null then
+    select batch_id into v_web_product_batch_id
+    from public.web_products
+    where id = p_web_product_id
+    for update;
+    if not found then
+      raise exception 'No se encontró el producto web seleccionado.';
+    end if;
+
+    if v_web_product_batch_id is not null then
+      select recipe_id into v_web_product_recipe_id
+      from public.batches
+      where id = v_web_product_batch_id;
+      if v_web_product_recipe_id is distinct from v_recipe.id then
+        raise exception 'El producto web seleccionado está vinculado a otra receta.';
+      end if;
+    end if;
   end if;
 
   for v_item in
@@ -814,6 +842,11 @@ begin
   insert into public.batches (owner_id, recipe_id, recipe_name, code, quantity, total_cost, unit_cost)
   values (v_owner, v_recipe.id, v_recipe.name, trim(p_code), p_quantity, v_total, v_total / p_quantity)
   returning * into v_batch;
+  if p_web_product_id is not null then
+    update public.web_products
+    set batch_id = v_batch.id, updated_at = now()
+    where id = p_web_product_id;
+  end if;
   return v_batch;
 end;
 $$;
@@ -1852,7 +1885,7 @@ grant execute on function public.delete_web_order(uuid) to authenticated;
 grant execute on function public.complete_web_order(uuid, text, text) to authenticated;
 
 revoke all on function public.save_recipe(uuid, text, integer, numeric, numeric, numeric, numeric, numeric, jsonb, jsonb, jsonb) from public;
-revoke all on function public.produce_batch(uuid, text, integer) from public;
+revoke all on function public.produce_batch(uuid, text, integer, uuid) from public;
 revoke all on function public.save_sales_order(uuid, text, text, text, text, jsonb) from public;
 revoke all on function public.issue_sales_order(uuid) from public;
 revoke all on function public.record_purchase(text, date, text, text, jsonb) from public;
@@ -1866,7 +1899,7 @@ revoke all on function public.record_expense(text, text, numeric, date, text, te
 revoke all on function public.mark_expense_paid(uuid, text) from public;
 revoke all on function public.delete_batch(uuid) from public;
 grant execute on function public.save_recipe(uuid, text, integer, numeric, numeric, numeric, numeric, numeric, jsonb, jsonb, jsonb) to authenticated;
-grant execute on function public.produce_batch(uuid, text, integer) to authenticated;
+grant execute on function public.produce_batch(uuid, text, integer, uuid) to authenticated;
 grant execute on function public.save_sales_order(uuid, text, text, text, text, jsonb) to authenticated;
 grant execute on function public.issue_sales_order(uuid) to authenticated;
 grant execute on function public.record_purchase(text, date, text, text, jsonb) to authenticated;
