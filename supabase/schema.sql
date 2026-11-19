@@ -198,6 +198,19 @@ create table if not exists public.web_products (
 alter table public.web_products
   add column if not exists health_concerns text[] not null default '{}';
 
+create table if not exists public.web_product_batches (
+  web_product_id uuid not null references public.web_products(id) on delete cascade,
+  batch_id uuid not null references public.batches(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (web_product_id, batch_id)
+);
+
+create unique index if not exists web_product_batches_batch_uidx
+  on public.web_product_batches(batch_id);
+create index if not exists web_product_batches_product_idx
+  on public.web_product_batches(web_product_id);
+drop index if exists public.web_products_batch_idx;
+
 create sequence if not exists public.sales_invoice_number_seq;
 create sequence if not exists public.purchases_number_seq;
 create sequence if not exists public.web_order_number_seq;
@@ -321,6 +334,15 @@ alter table public.web_products drop constraint if exists web_products_batch_id_
 alter table public.web_products
   add constraint web_products_batch_id_fkey foreign key (batch_id)
   references public.batches(id) on delete set null;
+
+insert into public.web_product_batches (web_product_id, batch_id)
+select wp.id, wp.batch_id
+from public.web_products wp
+where wp.batch_id is not null
+order by wp.created_at, wp.id
+on conflict (batch_id) do nothing;
+
+update public.web_products set batch_id = null where batch_id is not null;
 
 alter table public.web_order_items alter column batch_id drop not null;
 alter table public.web_order_items drop constraint if exists web_order_items_batch_id_fkey;
@@ -480,7 +502,6 @@ create index if not exists purchase_items_purchase_idx on public.purchase_items(
 create index if not exists expenses_date_idx on public.expenses(expense_date desc);
 create index if not exists additional_incomes_date_idx on public.additional_incomes(income_date desc);
 create index if not exists collection_reminders_due_date_idx on public.collection_reminders(due_date);
-create index if not exists web_products_batch_idx on public.web_products(batch_id);
 create index if not exists web_products_active_sort_idx on public.web_products(active, sort_order, name);
 create index if not exists web_orders_created_at_idx on public.web_orders(created_at desc);
 create index if not exists web_orders_status_created_idx on public.web_orders(status, created_at desc);
@@ -505,6 +526,7 @@ alter table public.collection_reminders enable row level security;
 alter table public.finance_settings enable row level security;
 alter table public.web_settings enable row level security;
 alter table public.web_products enable row level security;
+alter table public.web_product_batches enable row level security;
 alter table public.web_orders enable row level security;
 alter table public.web_order_items enable row level security;
 alter table public.custom_orders enable row level security;
@@ -587,6 +609,10 @@ drop policy if exists "Authenticated users manage web products" on public.web_pr
 create policy "Authenticated users manage web products" on public.web_products
   for all to authenticated using (true) with check (true);
 
+drop policy if exists "Authenticated users manage web product batches" on public.web_product_batches;
+create policy "Authenticated users manage web product batches" on public.web_product_batches
+  for all to authenticated using (true) with check (true);
+
 drop policy if exists "Authenticated users view web orders" on public.web_orders;
 create policy "Authenticated users view web orders" on public.web_orders
   for select to authenticated using (true);
@@ -613,7 +639,7 @@ begin
 end;
 $$;
 
-grant select, insert, update, delete on public.materials, public.indirects, public.utensils, public.recipes, public.recipe_items, public.recipe_indirects, public.recipe_utensils, public.batches, public.sales, public.sale_items, public.purchases, public.purchase_items, public.expenses, public.additional_incomes, public.collection_reminders, public.finance_settings, public.web_settings, public.web_products to authenticated;
+grant select, insert, update, delete on public.materials, public.indirects, public.utensils, public.recipes, public.recipe_items, public.recipe_indirects, public.recipe_utensils, public.batches, public.sales, public.sale_items, public.purchases, public.purchase_items, public.expenses, public.additional_incomes, public.collection_reminders, public.finance_settings, public.web_settings, public.web_products, public.web_product_batches to authenticated;
 grant select on public.web_orders, public.web_order_items to authenticated;
 grant select, insert, update, delete on public.custom_orders to authenticated;
 grant usage, select on sequence public.sales_invoice_number_seq, public.purchases_number_seq, public.web_order_number_seq to authenticated;
@@ -754,8 +780,6 @@ declare
   v_owner uuid := auth.uid();
   v_recipe public.recipes%rowtype;
   v_batch public.batches%rowtype;
-  v_web_product_batch_id uuid;
-  v_web_product_recipe_id uuid;
   v_item record;
   v_required numeric;
   v_unit_cost numeric;
@@ -771,6 +795,13 @@ begin
     raise exception 'El código de lote y la cantidad deben ser válidos.';
   end if;
 
+  if p_web_product_id is not null then
+    perform 1 from public.web_products where id = p_web_product_id for update;
+    if not found then
+      raise exception 'No se encontró el producto web seleccionado.';
+    end if;
+  end if;
+
   select * into v_recipe from public.recipes
   where id = p_recipe_id
   for update;
@@ -779,21 +810,14 @@ begin
   end if;
 
   if p_web_product_id is not null then
-    select batch_id into v_web_product_batch_id
-    from public.web_products
-    where id = p_web_product_id
-    for update;
-    if not found then
-      raise exception 'No se encontró el producto web seleccionado.';
-    end if;
-
-    if v_web_product_batch_id is not null then
-      select recipe_id into v_web_product_recipe_id
-      from public.batches
-      where id = v_web_product_batch_id;
-      if v_web_product_recipe_id is distinct from v_recipe.id then
-        raise exception 'El producto web seleccionado está vinculado a otra receta.';
-      end if;
+    if exists (
+      select 1
+      from public.web_product_batches wpb
+      join public.batches b on b.id = wpb.batch_id
+      where wpb.web_product_id = p_web_product_id
+        and b.recipe_id is distinct from v_recipe.id
+    ) then
+      raise exception 'El producto web seleccionado está vinculado a otra receta.';
     end if;
   end if;
 
@@ -843,9 +867,9 @@ begin
   values (v_owner, v_recipe.id, v_recipe.name, trim(p_code), p_quantity, v_total, v_total / p_quantity)
   returning * into v_batch;
   if p_web_product_id is not null then
-    update public.web_products
-    set batch_id = v_batch.id, updated_at = now()
-    where id = p_web_product_id;
+    insert into public.web_product_batches (web_product_id, batch_id)
+    values (p_web_product_id, v_batch.id);
+    update public.web_products set updated_at = now() where id = p_web_product_id;
   end if;
   return v_batch;
 end;
@@ -1547,26 +1571,40 @@ as $$
       where id = 1
     ),
     'products', coalesce((
-      select jsonb_agg(
-        jsonb_build_object(
-          'id', wp.id,
-          'name', wp.name,
-          'image_path', wp.image_path,
-          'benefits', wp.benefits,
-          'health_concerns', wp.health_concerns,
-          'composition', wp.composition,
-          'usage_instructions', wp.usage_instructions,
-          'available', public.web_available_batch_stock(b.id),
-          'price', r.price_detail,
-          'soap_weight', r.soap_weight,
-          'batch_code', b.code
-        )
-        order by wp.sort_order, wp.name
-      )
-      from public.web_products wp
-      join public.batches b on b.id = wp.batch_id
-      join public.recipes r on r.id = b.recipe_id
-      where wp.active and r.price_detail is not null
+      select jsonb_agg(product_data order by sort_order, name)
+      from (
+        select
+          wp.sort_order,
+          wp.name,
+          jsonb_build_object(
+            'id', wp.id,
+            'name', wp.name,
+            'image_path', wp.image_path,
+            'benefits', wp.benefits,
+            'health_concerns', wp.health_concerns,
+            'composition', wp.composition,
+            'usage_instructions', wp.usage_instructions,
+            'available', coalesce((
+              select sum(public.web_available_batch_stock(b.id))
+              from public.web_product_batches wpb
+              join public.batches b on b.id = wpb.batch_id
+              where wpb.web_product_id = wp.id
+            ), 0),
+            'price', product_recipe.price_detail,
+            'soap_weight', product_recipe.soap_weight
+          ) as product_data
+        from public.web_products wp
+        join lateral (
+          select r.price_detail, r.soap_weight
+          from public.web_product_batches wpb
+          join public.batches b on b.id = wpb.batch_id
+          join public.recipes r on r.id = b.recipe_id
+          where wpb.web_product_id = wp.id
+          order by b.batch_date, b.created_at, b.id
+          limit 1
+        ) product_recipe on true
+        where wp.active and product_recipe.price_detail is not null
+      ) products
     ), '[]'::jsonb)
   );
 $$;
@@ -1588,7 +1626,10 @@ declare
   v_order_id uuid;
   v_order_number text;
   v_item record;
+  v_batch record;
   v_available numeric;
+  v_remaining integer;
+  v_take integer;
 begin
   if nullif(trim(p_customer_name), '') is null or length(trim(p_customer_name)) > 120
      or nullif(trim(p_customer_phone), '') is null or length(trim(p_customer_phone)) > 40
@@ -1603,6 +1644,14 @@ begin
   if jsonb_array_length(p_items) = 0 or jsonb_array_length(p_items) > 20 then
     raise exception 'El pedido debe incluir entre 1 y 20 productos.';
   end if;
+  if exists (
+    select 1
+    from jsonb_to_recordset(p_items) as item(product_id uuid, quantity integer)
+    group by item.product_id
+    having sum(item.quantity) > 100
+  ) then
+    raise exception 'La cantidad máxima por producto es 100 unidades.';
+  end if;
 
   perform wp.id
   from jsonb_to_recordset(p_items) as item(product_id uuid, quantity integer)
@@ -1614,10 +1663,25 @@ begin
     select 1
     from jsonb_to_recordset(p_items) as item(product_id uuid, quantity integer)
     left join public.web_products wp on wp.id = item.product_id
-    left join public.batches b on b.id = wp.batch_id
-    left join public.recipes r on r.id = b.recipe_id
+    left join lateral (
+      select b.recipe_id, r.price_detail
+      from public.web_product_batches wpb
+      join public.batches b on b.id = wpb.batch_id
+      join public.recipes r on r.id = b.recipe_id
+      where wpb.web_product_id = wp.id
+      order by b.batch_date, b.created_at, b.id
+      limit 1
+    ) product_recipe on true
     where item.product_id is null or item.quantity is null or item.quantity < 1 or item.quantity > 100
-      or wp.id is null or not wp.active or b.id is null or r.id is null or r.price_detail is null
+      or wp.id is null or not wp.active
+      or product_recipe.recipe_id is null or product_recipe.price_detail is null
+      or exists (
+        select 1
+        from public.web_product_batches wpb
+        join public.batches b on b.id = wpb.batch_id
+        where wpb.web_product_id = wp.id
+          and b.recipe_id is distinct from product_recipe.recipe_id
+      )
   ) then
     raise exception 'El pedido contiene un producto no disponible o una cantidad inválida.';
   end if;
@@ -1626,25 +1690,11 @@ begin
     select distinct b.recipe_id
     from jsonb_to_recordset(p_items) as item(product_id uuid, quantity integer)
     join public.web_products wp on wp.id = item.product_id
-    join public.batches b on b.id = wp.batch_id
+    join public.web_product_batches wpb on wpb.web_product_id = wp.id
+    join public.batches b on b.id = wpb.batch_id
     order by b.recipe_id
   loop
     perform 1 from public.recipes where id = v_item.recipe_id for update;
-  end loop;
-
-  for v_item in
-    select b.id as batch_id, sum(item.quantity)::integer as quantity
-    from jsonb_to_recordset(p_items) as item(product_id uuid, quantity integer)
-    join public.web_products wp on wp.id = item.product_id
-    join public.batches b on b.id = wp.batch_id
-    group by b.id
-    order by b.id
-  loop
-    v_available := public.web_available_batch_stock(v_item.batch_id);
-    if v_available < v_item.quantity then
-      raise exception 'No hay suficientes unidades disponibles del lote seleccionado. Disponibles: %, solicitadas: %.',
-        v_available, v_item.quantity;
-    end if;
   end loop;
 
   v_order_number := 'WEB-' || pg_catalog.lpad(pg_catalog.nextval('public.web_order_number_seq')::text, 7, '0');
@@ -1657,16 +1707,41 @@ begin
   )
   returning id into v_order_id;
 
-  insert into public.web_order_items (
-    web_order_id, web_product_id, batch_id, recipe_id, product_name, quantity, unit_price, line_total
-  )
-  select
-    v_order_id, wp.id, b.id, r.id, wp.name, item.quantity, r.price_detail,
-    round(r.price_detail * item.quantity, 2)
-  from jsonb_to_recordset(p_items) as item(product_id uuid, quantity integer)
-  join public.web_products wp on wp.id = item.product_id
-  join public.batches b on b.id = wp.batch_id
-  join public.recipes r on r.id = b.recipe_id;
+  for v_item in
+    select item.product_id, sum(item.quantity)::integer as quantity
+    from jsonb_to_recordset(p_items) as item(product_id uuid, quantity integer)
+    group by item.product_id
+    order by item.product_id
+  loop
+    v_remaining := v_item.quantity;
+    for v_batch in
+      select b.id, b.recipe_id, r.price_detail
+      from public.web_product_batches wpb
+      join public.batches b on b.id = wpb.batch_id
+      join public.recipes r on r.id = b.recipe_id
+      where wpb.web_product_id = v_item.product_id
+      order by b.batch_date, b.created_at, b.id
+    loop
+      v_available := public.web_available_batch_stock(v_batch.id);
+      v_take := least(v_remaining, greatest(v_available, 0)::integer);
+      if v_take > 0 then
+        insert into public.web_order_items (
+          web_order_id, web_product_id, batch_id, recipe_id, product_name, quantity, unit_price, line_total
+        )
+        select
+          v_order_id, wp.id, v_batch.id, v_batch.recipe_id, wp.name, v_take, v_batch.price_detail,
+          round(v_batch.price_detail * v_take, 2)
+        from public.web_products wp
+        where wp.id = v_item.product_id;
+        v_remaining := v_remaining - v_take;
+      end if;
+      exit when v_remaining = 0;
+    end loop;
+    if v_remaining > 0 then
+      raise exception 'No hay suficientes unidades disponibles de "%". Faltan: %.',
+        (select name from public.web_products where id = v_item.product_id), v_remaining;
+    end if;
+  end loop;
 
   update public.web_orders wo
   set total = totals.total

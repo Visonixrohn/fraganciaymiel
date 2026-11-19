@@ -303,7 +303,7 @@ function App() {
       supabase.from('collection_reminders').select('*').order('due_date', { ascending: true }),
       supabase.from('finance_settings').select('*').eq('id', 1).maybeSingle(),
       supabase.from('web_settings').select('*').eq('id', 1).maybeSingle(),
-      supabase.from('web_products').select('*, batches(*)').order('sort_order').order('name'),
+      supabase.from('web_products').select('*, web_product_batches(batch_id)').order('sort_order').order('name'),
       supabase.from('web_orders').select('*, web_order_items(*)').order('created_at', { ascending: false }),
       supabase.from('custom_orders').select('*').order('created_at', { ascending: false }),
     ]);
@@ -423,12 +423,10 @@ function App() {
   }
 
   const soapStockRows = useMemo(() => data.webProducts.map((product) => {
-    const batch = data.batches.find((item) => item.id === product.batch_id);
-    return {
-      product,
-      batch,
-      available: batch ? availableWebBatchStock(batch) : 0,
-    };
+    const batches = getWebProductBatches(product);
+    return batches.length
+      ? batches.map((batch) => ({ product, batch, available: availableWebBatchStock(batch) }))
+      : [{ product, batch: null, available: 0 }];
   }), [data]);
   const soapStockTotal = useMemo(() => {
     const batches = new Map(
@@ -450,8 +448,8 @@ function App() {
   const visibleWebProducts = useMemo(() => {
     const query = webProductSearch.trim().toLocaleLowerCase('es');
     return data.webProducts.filter((product) => {
-      const batch = data.batches.find((item) => item.id === product.batch_id);
-      return !query || [product.name, batch?.code, batch?.recipe_name]
+      const batches = getWebProductBatches(product);
+      return !query || [product.name, ...batches.flatMap((batch) => [batch.code, batch.recipe_name])]
         .some((value) => String(value || '').toLocaleLowerCase('es').includes(query));
     });
   }, [data.batches, data.webProducts, webProductSearch]);
@@ -600,6 +598,12 @@ function App() {
     return produced - sold - reserved;
   }
 
+  function getWebProductBatches(product) {
+    return (product.web_product_batches || [])
+      .map((link) => data.batches.find((batch) => batch.id === link.batch_id))
+      .filter(Boolean);
+  }
+
   function availableWebBatchStock(batch) {
     const recipeBatches = data.batches
       .filter((item) => item.recipe_id === batch.recipe_id)
@@ -653,7 +657,6 @@ function App() {
     setWebProductDraft(product ? {
       id: duplicate ? '' : product.id,
       name: duplicate ? `${product.name} (copia)` : product.name,
-      batchId: product.batch_id || '',
       imagePath: product.image_path || '',
       benefits: (product.benefits || []).join('\n'),
       healthConcerns: (product.health_concerns || []).join(', '),
@@ -664,7 +667,6 @@ function App() {
     } : {
       id: '',
       name: '',
-      batchId: '',
       imagePath: '',
       benefits: '',
       healthConcerns: '',
@@ -686,7 +688,6 @@ function App() {
       const { error: saveError } = await supabase.from('web_products').upsert({
         id: webProductDraft.id || undefined,
         name: webProductDraft.name.trim(),
-        batch_id: webProductDraft.batchId || null,
         image_path: uploadedPath || webProductDraft.imagePath || null,
         benefits: webProductDraft.benefits.split('\n').map((item) => item.trim()).filter(Boolean),
         health_concerns: webProductDraft.healthConcerns.split(/[,\n]/).map((item) => item.trim()).filter(Boolean),
@@ -1004,7 +1005,7 @@ function App() {
   }
 
   async function deleteBatch(batch) {
-    if (!window.confirm(`¿Eliminar el lote ${batch.code}? Los pedidos activos relacionados se cancelarán; el historial se conservará y los productos web quedarán sin lote asignado.`)) return;
+    if (!window.confirm(`¿Eliminar el lote ${batch.code}? Los pedidos activos relacionados se cancelarán; el historial se conservará y el producto web mantendrá sus otros lotes asignados.`)) return;
     const { data: cancelledOrders, error: deleteError } = await supabase.rpc('delete_batch', {
       p_batch_id: batch.id,
     });
@@ -1129,7 +1130,7 @@ function App() {
     setModal(null);
     const linkedProduct = data.webProducts.find((product) => product.id === webProductId);
     toast(linkedProduct
-      ? `Lote registrado y asignado a ${linkedProduct.name}`
+      ? `Lote agregado a ${linkedProduct.name}; existencias sumadas`
       : 'Lote registrado y existencias actualizadas');
     await loadData();
   }
@@ -1866,7 +1867,7 @@ function App() {
             </div>
             <Table headers={['Producto web', 'Receta', 'Lote', 'Fecha de producción', 'Producidos', 'Disponibles', 'Estado']}>
               {soapStockRows.map(({ product, batch, available }) => (
-                <tr key={product.id}>
+                <tr key={`${product.id}-${batch?.id || 'sin-lote'}`}>
                   <td className="strong">{product.name}</td>
                   <td>{batch?.recipe_name || '—'}</td>
                   <td><code>{batch?.code || 'Sin lote'}</code></td>
@@ -2280,7 +2281,7 @@ function App() {
           <div className="web-admin-layout">
             <Section
               title="Catálogo de la tienda"
-              subtitle={`${data.webProducts.length} productos · asigna un lote para mostrar disponibilidad en la tienda`}
+              subtitle={`${data.webProducts.length} productos · cada producto puede acumular varios lotes`}
               action="＋ Nuevo producto"
               onAction={() => openWebProduct()}
             >
@@ -2293,9 +2294,11 @@ function App() {
               </div>
               <div className="web-product-grid">
                 {visibleWebProducts.map((product) => {
-                  const batch = data.batches.find((item) => item.id === product.batch_id);
+                  const batches = getWebProductBatches(product);
+                  const batch = batches[0];
                   const recipeItem = data.recipes.find((item) => item.id === batch?.recipe_id);
-                  const available = batch ? availableWebBatchStock(batch) : 0;
+                  const available = batches.reduce((sum, item) => sum + availableWebBatchStock(item), 0);
+                  const batchCodes = batches.map((item) => item.code).join(', ');
                   const image = product.image_path
                     ? supabase.storage.from('jabon').getPublicUrl(product.image_path).data.publicUrl
                     : null;
@@ -2308,7 +2311,7 @@ function App() {
                         <div><h3>{product.name}</h3><span className={`pill ${product.active ? 'good' : 'warning'}`}>{product.active ? 'Visible' : 'Oculto'}</span></div>
                         <strong>{recipeItem?.prices.detail == null ? 'Sin precio' : money(recipeItem.prices.detail)}</strong>
                       </div>
-                      <p>{batch ? `${batch.recipe_name} · ${batch.code}` : 'Sin lote asignado'}</p>
+                      <p>{batches.length ? `${batch.recipe_name} · Lotes: ${batchCodes}` : 'Sin lote asignado'}</p>
                       <div className="web-product-card-footer">
                         <span>{batch ? `${available} disponibles` : 'Asigna un lote para publicar'}</span>
                         <div>
@@ -2593,17 +2596,16 @@ function App() {
           <form className="stack-form" onSubmit={saveWebProduct}>
             <div className="form-grid">
               <Field label="Nombre del producto"><input required maxLength="120" value={webProductDraft.name} onChange={(event) => setWebProductDraft({ ...webProductDraft, name: event.target.value })} /></Field>
-              <Field label="Lote de producción (opcional)">
-                <select value={webProductDraft.batchId} onChange={(event) => setWebProductDraft({ ...webProductDraft, batchId: event.target.value })}>
-                  <option value="">Sin lote por ahora</option>
-                  {data.batches.map((batch) => {
-                    const available = availableWebBatchStock(batch);
-                    return <option key={batch.id} value={batch.id}>{batch.recipe_name} · {batch.code} · {available} disponibles</option>;
-                  })}
-                </select>
-              </Field>
+              <div className="form-note">
+                <strong>Lotes asignados:</strong>{' '}
+                {webProductDraft.id
+                  ? getWebProductBatches(data.webProducts.find((product) => product.id === webProductDraft.id) || {})
+                    .map((batch) => `${batch.recipe_name} · ${batch.code}`)
+                    .join(', ') || 'ninguno'
+                  : 'ninguno'}
+                {' '}Los nuevos lotes se agregan desde el formulario de producción.
+              </div>
             </div>
-            {!webProductDraft.batchId && <p className="form-note">Puedes guardarlo sin lote. No aparecerá en la tienda pública hasta que le asignes un lote producido.</p>}
             <div className="form-grid">
               <Field label="Foto del producto (JPG, PNG o WebP; máximo 8 MB)">
                 <input type="file" accept="image/jpeg,image/png,image/webp" onChange={(event) => setWebProductFile(event.target.files?.[0] || null)} />
@@ -2905,14 +2907,13 @@ function App() {
               </select></label>
               <label>Producto web que abastecer (opcional)<select name="webProductId" defaultValue="">
                 <option value="">No asignar a un producto web</option>
-                {productionRecipeId && data.webProducts.filter((product) => {
-                  const linkedBatch = data.batches.find((batch) => batch.id === product.batch_id);
-                  return !linkedBatch || linkedBatch.recipe_id === productionRecipeId;
-                }).map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
+                {productionRecipeId && data.webProducts.filter((product) => getWebProductBatches(product)
+                  .every((batch) => batch.recipe_id === productionRecipeId))
+                  .map((product) => <option key={product.id} value={product.id}>{product.name}</option>)}
               </select></label>
               <label>Código / número de lote<input name="code" defaultValue={makeCode()} required /></label>
               <label>Cantidad de jabones<input name="quantity" type="number" min="1" defaultValue="" required /></label>
-              <p className="form-note">Al elegir un producto web, este nuevo lote lo abastecerá automáticamente. Los pedidos ya reservados conservarán su lote. La producción descuenta las materias primas; si no hay existencias suficientes, no se guardará.</p>
+              <p className="form-note">Al elegir un producto web, el lote nuevo se agregará junto a los lotes actuales y sumará sus existencias. Los pedidos ya reservados conservarán sus lotes. La producción descuenta las materias primas; si no hay existencias suficientes, no se guardará.</p>
               <div className="dialog-actions"><button type="button" className="button secondary" onClick={() => setModal(null)}>Cancelar</button><button className="button primary">Confirmar producción</button></div>
             </form>}
         </Dialog>

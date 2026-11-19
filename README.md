@@ -30,15 +30,15 @@ En **Settings → Pages → Build and deployment**, selecciona **GitHub Actions*
 - Creación de recetas con varias materias primas, insumos indirectos y utensilios; las cantidades de materia prima se ingresan por jabón, se multiplican por el tamaño del lote y se muestra el costo por barra.
 - Precios editables al detalle, por mayor y para eventos; calcula ganancia por barra y margen bruto (`(precio - costo) / precio`).
 - Registro transaccional de producción: verifica existencias y descuenta materias primas.
-- Vista **Stock de jabones** con existencias disponibles por nombre de producto web, detalle de lote y total sin duplicar lotes compartidos.
-- Al eliminar un lote, los productos web quedan sin lote, se cancelan los pedidos activos relacionados y se conserva el historial de pedidos.
+- Vista **Stock de jabones** con existencias por producto web y detalle de cada lote; el total no duplica lotes.
+- Al eliminar un lote, se cancela cualquier pedido activo que lo use, se conserva el historial y el producto web mantiene los demás lotes asignados.
 - Ventas en borrador y comprobantes internos numerados; al emitirlos valida las existencias de jabones terminados (producción menos ventas), registra la venta y permite imprimir o reimprimir la factura.
 - Registro de compras por materia prima, insumo indirecto o utensilio, con proveedor, costo unitario y forma de pago; las compras acumulan stock/costo y rendimiento o vida útil según el tipo.
 - Catálogo público independiente en `storefront.html`, con tarjetas interactivas, carrito de compras modal, disponibilidad por lote, beneficios, composición y modo de uso.
 - Pedidos web: las órdenes pendientes no descuentan existencias; al reservarlas, el sistema valida y aparta unidades de forma atómica. Las pestañas separan pedidos, reservas, ventas y rechazados; entregar un pedido reservado lo convierte en una venta facturada. El contador y las notificaciones incluyen solo pedidos sin reservar.
 - Pedidos a crear: registra pedidos personalizados con nombre y celular del cliente, diseño, fragancia, color y cantidad; organízalos por estado pendiente, creado o rechazado.
 - Configuración de nombre, logo, contacto, WhatsApp y presentación del negocio desde el panel. Las imágenes se guardan en el bucket público `jabon`; solo usuarios autenticados pueden subirlas o editarlas.
-- Administración de productos web vinculados a un lote producido, con beneficios, afecciones asociadas, composición y modo de uso. Al registrar producción, se puede seleccionar el producto web compatible para que el lote nuevo lo abastezca automáticamente; los pedidos ya reservados conservan su lote. La tienda solo publica productos activos con precio definido y muestra existencias actualizadas.
+- Administración de productos web vinculados a varios lotes producidos, con beneficios, afecciones asociadas, composición y modo de uso. Al registrar producción, se puede seleccionar el producto web compatible para agregar el lote nuevo y sumar sus existencias; los pedidos conservan el lote o lotes que se reservaron. La tienda muestra la disponibilidad acumulada.
 - Cobros pendientes es una lista independiente de recordatorios manuales y no está conectada a ventas. Finanzas incluye ingresos adicionales por concepto, reflejados en el estado de resultados y el balance general de gestión.
 - Exportación de los datos visibles a JSON.
 - Acceso a la interfaz mediante un código y sesión anónima de Supabase; las sesiones anónimas comparten el inventario.
@@ -51,9 +51,9 @@ Al registrar una compra, ingresa el costo de una unidad por artículo; el sistem
 
 ## Tienda pública y pedidos web
 
-1. Vuelve a ejecutar el esquema actualizado `supabase/schema.sql` desde **Supabase → SQL Editor**. Esto crea las tablas de pedidos manuales, vistas de catálogo y pedidos, los procedimientos de reserva/venta y el bucket público `jabon`.
+1. Vuelve a ejecutar el esquema actualizado `supabase/schema.sql` desde **Supabase → SQL Editor**. La migración conserva el lote que cada producto tenga asignado y habilita varios lotes por producto. También configura las tablas de pedidos, los procedimientos de reserva/venta y el bucket público `jabon`.
 2. En la aplicación, abre **Configuración web** y guarda la identidad y los datos de contacto. Para WhatsApp, usa el número internacional con código de país (por ejemplo, `504...`).
-3. En **Productos web**, crea cada producto y, si ya está disponible, asígnale un lote de producción. También puedes dejarlo sin lote y, al registrar producción de su receta, elegirlo en **Producto web que abastecer** para asignarle automáticamente el lote nuevo. Solo se mostrarán en la tienda cuando tengan lote y precio. Completa beneficios, afecciones que ayuda a tratar (separadas por comas), composición con unidades y modo de uso; sube una imagen JPG, PNG o WebP de hasta 8 MB. En la tienda, el botón flotante permite filtrar productos por una o varias afecciones.
+3. En **Productos web**, crea cada producto y completa sus detalles. Al registrar una producción, selecciona el producto web compatible en **Producto web que abastecer**: el lote nuevo se agrega a sus lotes existentes y su stock se suma. Los pedidos de la tienda distribuyen las unidades entre los lotes disponibles y guardan qué lote(s) se reservaron. Solo se publican productos activos que tengan al menos un lote y un precio. Sube una imagen JPG, PNG o WebP de hasta 8 MB; en la tienda, el botón flotante permite filtrar productos por una o varias afecciones.
 4. Publica el archivo [`src/public/storefront.html`](./src/public/storefront.html) junto a la aplicación. En ese HTML reemplaza `SUPABASE_URL` y `SUPABASE_PUBLISHABLE_KEY` con la URL del proyecto y su clave **publicable**. Nunca pegues una clave `service_role` o secreta; la tienda necesita únicamente la RPC pública de catálogo y envío de pedidos.
 5. El despliegue existente de GitHub Pages incluye la tienda en `storefront.html`. Desde **Pedidos web**, reserva, cancela o completa cada pedido. Solo los pedidos reservados afectan el stock; los pendientes no descuentan existencias. Al completar, el sistema crea la venta y factura con los datos del pedido.
 
