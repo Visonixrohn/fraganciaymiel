@@ -1866,17 +1866,23 @@ function App() {
               <strong>{soapStockTotal} jabones</strong>
             </div>
             <Table headers={['Producto web', 'Receta', 'Lote', 'Fecha de producción', 'Producidos', 'Disponibles', 'Estado']}>
-              {soapStockRows.map(({ product, batch, available }) => (
-                <tr key={`${product.id}-${batch?.id || 'sin-lote'}`}>
-                  <td className="strong">{product.name}</td>
-                  <td>{batch?.recipe_name || '—'}</td>
-                  <td><code>{batch?.code || 'Sin lote'}</code></td>
-                  <td>{batch ? new Date(`${batch.batch_date}T12:00:00`).toLocaleDateString('es-HN') : '—'}</td>
-                  <td>{batch?.quantity ?? 0}</td>
-                  <td className="green">{available}</td>
-                  <td><span className={`pill ${batch ? 'good' : 'warning'}`}>{batch ? 'Con lote' : 'Sin lote asignado'}</span></td>
-                </tr>
-              ))}
+              {soapStockRows.map((row, index) => {
+                const product = row?.product;
+                const batch = row?.batch;
+                return (
+                  <tr key={`${product?.id || `producto-invalido-${index}`}-${batch?.id || 'sin-lote'}`}>
+                    <td className="strong">{product?.name || 'Producto no disponible'}</td>
+                    <td>{batch?.recipe_name || '—'}</td>
+                    <td><code>{batch?.code || 'Sin lote'}</code></td>
+                    <td>{batch ? new Date(`${batch.batch_date}T12:00:00`).toLocaleDateString('es-HN') : '—'}</td>
+                    <td>{batch?.quantity ?? 0}</td>
+                    <td className="green">{row?.available ?? 0}</td>
+                    <td><span className={`pill ${product && batch ? 'good' : 'warning'}`}>
+                      {!product ? 'Registro incompleto' : batch ? 'Con lote' : 'Sin lote asignado'}
+                    </span></td>
+                  </tr>
+                );
+              })}
             </Table>
           </Section>
         )}
