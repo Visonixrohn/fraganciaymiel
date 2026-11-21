@@ -3,9 +3,38 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#e6a000">
-  <meta name="description" content="Jabones artesanales elaborados con ingredientes seleccionados. Fragancia y Miel.">
-  <title>Jabones artesanales | Fragancia y Miel</title>
+  <meta name="theme-color" content="#5c3d1e">
+  <meta name="description" content="Descubre jabones artesanales de Fragancia y Miel, elaborados a mano con ingredientes seleccionados. Encuentra tu favorito y haz tu pedido en Honduras.">
+  <meta name="robots" content="index, follow">
+  <link rel="canonical" href="https://fraganciaymiel.com/">
+  <link rel="icon" href="/logo.jpeg" type="image/jpeg">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="es_HN">
+  <meta property="og:site_name" content="Fragancia y Miel">
+  <meta property="og:title" content="Jabones artesanales en Honduras | Fragancia y Miel">
+  <meta property="og:description" content="Descubre jabones artesanales de Fragancia y Miel, elaborados a mano con ingredientes seleccionados. Encuentra tu favorito y haz tu pedido en Honduras.">
+  <meta property="og:url" content="https://fraganciaymiel.com/">
+  <meta property="og:image" content="https://fraganciaymiel.com/logo.jpeg">
+  <meta property="og:image:type" content="image/jpeg">
+  <meta property="og:image:width" content="1254">
+  <meta property="og:image:height" content="1254">
+  <meta property="og:image:alt" content="Logo de Fragancia y Miel">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Jabones artesanales en Honduras | Fragancia y Miel">
+  <meta name="twitter:description" content="Descubre jabones artesanales elaborados a mano con ingredientes seleccionados.">
+  <meta name="twitter:image" content="https://fraganciaymiel.com/logo.jpeg">
+  <title>Jabones artesanales en Honduras | Fragancia y Miel</title>
+  <script type="application/ld+json">
+    {
+      "@context": "https://schema.org",
+      "@type": "Organization",
+      "name": "Fragancia y Miel",
+      "url": "https://fraganciaymiel.com/",
+      "logo": "https://fraganciaymiel.com/logo.jpeg",
+      "image": "https://fraganciaymiel.com/logo.jpeg",
+      "description": "Jabones artesanales elaborados a mano con ingredientes seleccionados."
+    }
+  </script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=Playfair+Display:ital,wght@0,600;0,700;1,600&display=swap" rel="stylesheet">
@@ -141,36 +170,55 @@
     }
     .top nav a:hover { color: var(--green); }
     .cart-link {
-      display: inline-flex;
-      min-height: 40px;
-      align-items: center;
-      gap: 8px;
-      padding: 0 16px;
+      position: fixed;
+      right: 22px;
+      bottom: 102px;
+      z-index: 80;
+      display: grid;
+      width: 64px;
+      height: 64px;
+      place-items: center;
+      padding: 0;
       border: 0;
-      border-radius: 999px;
-      background: var(--green);
+      border-radius: 50%;
+      background: linear-gradient(145deg, #6b481f, #3f2a14);
       color: white;
-      font-size: 12px;
-      font-weight: 700;
       cursor: pointer;
-      box-shadow: 0 4px 14px rgba(92, 61, 30, 0.25);
-      transition: transform 0.2s, box-shadow 0.2s, background 0.2s;
+      box-shadow: 0 8px 22px rgba(61, 42, 20, 0.32), 0 0 0 4px rgba(255, 220, 114, 0.28);
+      transition: box-shadow 0.2s, filter 0.2s;
+      animation: cart-float 3s ease-in-out infinite;
     }
     .cart-link:hover {
-      background: var(--green-deep);
-      transform: translateY(-1px);
-      box-shadow: 0 6px 18px rgba(92, 61, 30, 0.3);
+      filter: brightness(1.16);
+      box-shadow: 0 10px 26px rgba(61, 42, 20, 0.38), 0 0 0 5px rgba(255, 220, 114, 0.4);
+    }
+    .cart-link:focus-visible {
+      outline: 3px solid #f3ad28;
+      outline-offset: 4px;
+    }
+    .cart-icon {
+      width: 27px;
+      height: 27px;
+      fill: none;
+      stroke: currentColor;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+      stroke-width: 1.8;
     }
     .cart-count-badge {
+      position: absolute;
+      top: -3px;
+      right: -3px;
       display: grid;
-      min-width: 20px;
-      height: 20px;
+      min-width: 23px;
+      height: 23px;
       place-items: center;
       padding: 0 5px;
+      border: 2px solid var(--cream);
       border-radius: 999px;
-      background: var(--gold-soft);
-      color: var(--green-deep);
-      font-size: 10px;
+      background: linear-gradient(145deg, #ffe58a, #f3ad28);
+      color: #4a3212;
+      font-size: 11px;
       font-weight: 800;
     }
     .cart-link.has-items .cart-count-badge {
@@ -289,6 +337,7 @@
       margin: 0 auto;
     }
     .section { padding: 72px 0; }
+    #productos { scroll-margin-top: 84px; }
     .section-title {
       text-align: center;
       margin-bottom: 8px;
@@ -306,14 +355,81 @@
       font-size: 14px;
       line-height: 1.7;
     }
+    .personal-assistance {
+      width: fit-content;
+      max-width: calc(100% - 32px);
+      margin: 24px auto 8px;
+      padding: 12px 12px 12px 20px;
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      border: 1px solid rgba(201, 146, 42, 0.28);
+      border-radius: 999px;
+      background: linear-gradient(135deg, rgba(255, 250, 235, 0.96), rgba(255, 244, 205, 0.92));
+      box-shadow: 0 8px 24px rgba(113, 78, 22, 0.08);
+      text-align: left;
+    }
+    .personal-assistance p {
+      margin: 0;
+      color: #5f4b2a;
+      font-size: 14px;
+      line-height: 1.4;
+    }
+    .personal-assistance .whatsapp-assistance {
+      flex: 0 0 auto;
+      min-height: 44px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 17px;
+      border-radius: 999px;
+      background: linear-gradient(135deg, #ffdf7d, #efb62f);
+      color: #4a3212;
+      border: 1px solid rgba(157, 111, 20, 0.18);
+      box-shadow: 0 6px 16px rgba(153, 99, 14, 0.22);
+      font-size: 13px;
+      font-weight: 700;
+      text-decoration: none;
+      transition: transform 0.2s, box-shadow 0.2s, filter 0.2s;
+    }
+    .personal-assistance .whatsapp-assistance:hover {
+      transform: translateY(-2px);
+      filter: brightness(1.04);
+      box-shadow: 0 9px 20px rgba(153, 99, 14, 0.28);
+    }
+    .personal-assistance .whatsapp-assistance:focus-visible {
+      outline: 3px solid #8a5d16;
+      outline-offset: 3px;
+    }
+    .whatsapp-assistance svg {
+      width: 18px;
+      height: 18px;
+      fill: currentColor;
+    }
+    @media (max-width: 620px) {
+      .personal-assistance {
+        width: calc(100% - 32px);
+        max-width: 420px;
+        flex-direction: column;
+        gap: 10px;
+        padding: 16px;
+        border-radius: 20px;
+        text-align: center;
+      }
+      .personal-assistance .whatsapp-assistance {
+        width: 100%;
+        justify-content: center;
+      }
+    }
 
     /* ——— Products ——— */
     .products {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
       gap: 28px;
       margin-top: 40px;
       align-items: stretch;
+      justify-content: center;
     }
     .social-section {
       padding-top: 12px;
@@ -365,6 +481,8 @@
       position: relative;
       display: flex;
       flex-direction: column;
+      width: min(100%, 360px);
+      justify-self: center;
       aspect-ratio: 4 / 5;
       min-height: 400px;
       min-width: 0;
@@ -591,70 +709,200 @@
       font-size: 13px;
     }
     .catalog-filter-reset {
-      padding: 6px 12px;
-      border: 1px solid var(--line);
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 8px 14px;
+      border: 1px solid rgba(51, 91, 67, 0.22);
       border-radius: 999px;
-      background: var(--white);
+      background: #edf4ed;
       color: var(--green);
       font-size: 12px;
       font-weight: 600;
       cursor: pointer;
+      transition: background 0.2s, border-color 0.2s, transform 0.2s;
+    }
+    .catalog-filter-reset:hover {
+      transform: translateY(-1px);
+      border-color: var(--green);
+      background: #e2eee2;
+    }
+    .catalog-filter-reset span {
+      font-size: 17px;
+      line-height: 0.8;
     }
     .concern-search-trigger {
       position: fixed;
       right: 22px;
-      bottom: 76px;
+      bottom: 22px;
       z-index: 70;
-      min-height: 52px;
-      padding: 0 20px;
+      display: grid;
+      width: 64px;
+      height: 64px;
+      place-items: center;
+      padding: 0;
       border: 1px solid rgba(255, 255, 255, 0.6);
-      border-radius: 999px;
-      background: var(--green);
-      color: white;
-      font-size: 13px;
-      font-weight: 700;
-      box-shadow: 0 8px 24px rgba(61, 42, 20, 0.28);
+      border-radius: 50%;
+      background: linear-gradient(115deg, #ffe991 0%, #ffc83f 45%, #f2a91e 100%);
+      background-size: 200% 200%;
+      color: #4a3212;
+      box-shadow: 0 8px 24px rgba(153, 99, 14, 0.3), 0 0 0 4px rgba(255, 220, 114, 0.22);
       cursor: pointer;
-      transition: transform 0.2s, background 0.2s;
+      transition: transform 0.2s, filter 0.2s, box-shadow 0.2s;
+      animation: honey-button-float 3.2s ease-in-out infinite, honey-shimmer 5s ease-in-out infinite;
+    }
+    .concern-search-icon {
+      width: 26px;
+      height: 26px;
+      fill: none;
+      stroke: currentColor;
+      stroke-linecap: round;
+      stroke-width: 2;
     }
     .concern-search-trigger:hover {
       transform: translateY(-2px);
-      background: var(--green-deep);
+      filter: brightness(1.08);
+      box-shadow: 0 10px 28px rgba(153, 99, 14, 0.38), 0 0 0 5px rgba(255, 220, 114, 0.32);
+    }
+    .concern-search-trigger:focus-visible {
+      outline: 3px solid #8a5d16;
+      outline-offset: 4px;
     }
     .concern-search-modal {
       position: relative;
       width: min(100%, 520px);
       max-height: min(88vh, 680px);
       overflow: auto;
-      border: 1px solid #ebe3d0;
-      border-radius: 22px;
-      background: #fbfaf6;
-      box-shadow: 0 32px 80px rgba(30, 22, 12, 0.28);
+      border: 1px solid rgba(201, 146, 42, 0.42);
+      border-radius: 26px;
+      background: radial-gradient(circle at 100% 100%, rgba(255, 221, 130, 0.14), transparent 38%), #fffefa;
+      box-shadow: 0 32px 80px rgba(30, 22, 12, 0.3), 0 0 34px rgba(255, 199, 63, 0.12);
     }
-    .concern-search-form { padding: 22px 26px 26px; }
+    .concern-search-modal .modal-heading {
+      align-items: flex-start;
+      padding: 26px 28px 22px;
+      border-bottom-color: rgba(201, 146, 42, 0.3);
+      background: radial-gradient(circle at 0% 0%, #ffe8a5, transparent 68%), #fffefa;
+    }
+    .concern-search-modal .modal-heading h2 {
+      max-width: 370px;
+      margin-top: 5px;
+      font-size: clamp(21px, 4vw, 26px);
+      line-height: 1.2;
+    }
+    .concern-search-modal .modal-heading p {
+      margin-top: 8px;
+      font-size: 13px;
+    }
+    .concern-search-eyebrow {
+      color: #98722d;
+      font-size: 10px;
+      font-weight: 800;
+      letter-spacing: 1.4px;
+      text-transform: uppercase;
+    }
+    .concern-search-form { padding: 20px 28px 26px; }
     .concern-search-hint {
-      margin: 0 0 16px;
+      margin: 0 0 18px;
       color: var(--muted);
       font-size: 13px;
       line-height: 1.6;
     }
-    .concern-options { display: grid; gap: 9px; }
+    .concern-search-label {
+      display: block;
+      margin-bottom: 7px;
+      color: var(--ink-soft);
+      font-size: 13px;
+      font-weight: 700;
+    }
+    .concern-search-input {
+      width: 100%;
+      min-height: 46px;
+      margin-bottom: 16px;
+      padding: 10px 13px;
+      border: 1px solid #d9d1c2;
+      border-radius: 12px;
+      background: white;
+      color: var(--ink);
+    }
+    .concern-search-input:focus-visible {
+      outline: 3px solid rgba(201, 146, 42, 0.3);
+      outline-offset: 2px;
+      border-color: #b99142;
+    }
+    .concern-options {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(min(100%, 190px), 1fr));
+      gap: 10px;
+      max-height: min(38vh, 360px);
+      overflow-y: auto;
+      overscroll-behavior: contain;
+      -webkit-overflow-scrolling: touch;
+    }
+    .concern-search-empty {
+      margin: 0;
+      padding: 14px;
+      border-radius: 12px;
+      background: #f8f5ed;
+      color: var(--muted);
+      font-size: 13px;
+      text-align: center;
+    }
     .concern-option {
       display: flex;
       align-items: center;
-      gap: 11px;
+      gap: 12px;
+      min-height: 60px;
       padding: 12px 14px;
-      border: 1px solid var(--line);
-      border-radius: 12px;
-      background: white;
+      border: 1px solid #e8e2d5;
+      border-radius: 15px;
+      background: linear-gradient(145deg, #fff, #fcfaf4);
       color: var(--ink-soft);
-      font-size: 14px;
+      font-size: 13px;
+      font-weight: 600;
       cursor: pointer;
+      transition: border-color 0.18s, background 0.18s, box-shadow 0.18s, transform 0.18s;
+    }
+    .concern-option:hover {
+      transform: translateY(-1px);
+      border-color: #d7bd7d;
+      box-shadow: 0 5px 14px rgba(89, 55, 14, 0.07);
     }
     .concern-option input {
-      width: 18px;
-      height: 18px;
-      accent-color: var(--green);
+      display: grid;
+      flex: 0 0 21px;
+      width: 21px;
+      height: 21px;
+      place-content: center;
+      margin: 0;
+      appearance: none;
+      border: 1.5px solid #c9c1b1;
+      border-radius: 7px;
+      background: white;
+      cursor: pointer;
+      transition: border-color 0.18s, background 0.18s, box-shadow 0.18s;
+    }
+    .concern-option input::before {
+      content: "✓";
+      color: white;
+      font-size: 14px;
+      font-weight: 800;
+      transform: scale(0);
+      transition: transform 0.12s ease-in-out;
+    }
+    .concern-option input:checked {
+      border-color: #c58a1a;
+      background: linear-gradient(145deg, #eab02e, #c58a1a);
+    }
+    .concern-option input:checked::before { transform: scale(1); }
+    .concern-option input:focus-visible {
+      outline: 3px solid rgba(201, 146, 42, 0.35);
+      outline-offset: 2px;
+    }
+    .concern-option.is-selected {
+      border-color: rgba(201, 146, 42, 0.75);
+      background: linear-gradient(145deg, #fff8df, #ffefbf);
+      box-shadow: 0 0 0 2px rgba(201, 146, 42, 0.12);
     }
     .concern-search-error {
       margin: 12px 0 0;
@@ -663,11 +911,22 @@
     }
     .concern-search-actions {
       display: flex;
-      justify-content: flex-end;
+      justify-content: space-between;
       gap: 10px;
-      margin-top: 20px;
+      margin-top: 22px;
+      padding-top: 18px;
+      border-top: 1px solid #eee8dc;
     }
     .concern-search-actions .button { border-radius: 10px; }
+    .concern-search-actions .button:not(.secondary) {
+      background: linear-gradient(135deg, #ffdc72, #f3ad28);
+      color: #4a3212;
+      box-shadow: 0 5px 16px rgba(153, 99, 14, 0.26);
+    }
+    .concern-search-actions .button:not(.secondary):hover:not(:disabled) {
+      background: linear-gradient(135deg, #ffe99b, #ffc144);
+      box-shadow: 0 7px 20px rgba(153, 99, 14, 0.32);
+    }
 
     /* ——— About ——— */
     .about {
@@ -902,6 +1161,60 @@
       align-self: flex-start;
       margin-top: 24px;
     }
+    .product-detail-actions {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 24px;
+    }
+    .product-detail-actions .button {
+      margin-top: 0;
+      align-self: auto;
+    }
+    .product-detail-actions .secondary {
+      border: 1px solid #dbcaa5;
+      background: transparent;
+      color: var(--green);
+      box-shadow: none;
+    }
+    .product-detail-actions .secondary:hover:not(:disabled) {
+      background: #f7f1e4;
+      border-color: #cbb98f;
+      box-shadow: none;
+    }
+    .ad-preview-modal {
+      position: relative;
+      width: min(94vw, 620px);
+      max-height: 94vh;
+      overflow: auto;
+      border: 1px solid #ebe3d0;
+      border-radius: 22px;
+      background: #fbfaf6;
+      box-shadow: 0 32px 80px rgba(30, 22, 12, 0.28);
+    }
+    .ad-preview-modal .modal-heading {
+      padding: 16px 20px;
+    }
+    .ad-preview-body {
+      padding: 18px;
+    }
+    .ad-preview-body canvas {
+      width: 100%;
+      max-height: 62vh;
+      object-fit: contain;
+      border: 1px solid #e8dcc1;
+      border-radius: 12px;
+      background: #fffaf0;
+      box-shadow: 0 12px 28px rgba(61, 42, 20, 0.12);
+    }
+    .ad-preview-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      padding: 0 18px 18px;
+    }
+    .ad-preview-actions .button { width: 100%; }
     .modal-heading {
       position: sticky;
       top: 0;
@@ -1261,7 +1574,7 @@
     }
     .flying-bee {
       position: absolute;
-      left: -42px;
+      right: -42px;
       display: block;
       font-size: 16px;
       line-height: 1;
@@ -1305,9 +1618,21 @@
       70% { transform: rotate(4deg) scale(1.06); }
       100% { transform: none; }
     }
+    @keyframes cart-float {
+      0%, 100% { translate: 0 0; }
+      50% { translate: 0 -5px; }
+    }
+    @keyframes honey-button-float {
+      0%, 100% { translate: 0 0; }
+      50% { translate: 0 -4px; }
+    }
     @keyframes social-float {
       0%, 100% { translate: 0 0; }
       50% { translate: 0 -5px; }
+    }
+    @keyframes honey-shimmer {
+      0%, 100% { background-position: 0% 50%; }
+      50% { background-position: 100% 50%; }
     }
     @keyframes added-pop {
       50% { transform: scale(1.04); }
@@ -1325,24 +1650,24 @@
     }
     @keyframes bee-flight-one {
       0% { transform: translate(0, 0) rotate(-8deg); }
-      20% { transform: translate(22vw, 8vh) rotate(10deg); }
-      43% { transform: translate(48vw, -3vh) rotate(-10deg); }
-      69% { transform: translate(75vw, 6vh) rotate(12deg); }
-      100% { transform: translate(calc(100vw + 90px), 1vh) rotate(-6deg); }
+      20% { transform: translate(-22vw, 8vh) rotate(10deg); }
+      43% { transform: translate(-48vw, -3vh) rotate(-10deg); }
+      69% { transform: translate(-75vw, 6vh) rotate(12deg); }
+      100% { transform: translate(calc(-100vw - 90px), 1vh) rotate(-6deg); }
     }
     @keyframes bee-flight-two {
       0% { transform: translate(0, 0) rotate(8deg); }
-      24% { transform: translate(25vw, -6vh) rotate(-10deg); }
-      51% { transform: translate(53vw, 7vh) rotate(12deg); }
-      76% { transform: translate(81vw, -4vh) rotate(-8deg); }
-      100% { transform: translate(calc(100vw + 90px), 5vh) rotate(7deg); }
+      24% { transform: translate(-25vw, -6vh) rotate(-10deg); }
+      51% { transform: translate(-53vw, 7vh) rotate(12deg); }
+      76% { transform: translate(-81vw, -4vh) rotate(-8deg); }
+      100% { transform: translate(calc(-100vw - 90px), 5vh) rotate(7deg); }
     }
     @keyframes bee-flight-three {
       0% { transform: translate(0, 0) rotate(-6deg); }
-      22% { transform: translate(21vw, -5vh) rotate(11deg); }
-      47% { transform: translate(49vw, 5vh) rotate(-12deg); }
-      73% { transform: translate(78vw, -6vh) rotate(8deg); }
-      100% { transform: translate(calc(100vw + 90px), -1vh) rotate(-6deg); }
+      22% { transform: translate(-21vw, -5vh) rotate(11deg); }
+      47% { transform: translate(-49vw, 5vh) rotate(-12deg); }
+      73% { transform: translate(-78vw, -6vh) rotate(8deg); }
+      100% { transform: translate(calc(-100vw - 90px), -1vh) rotate(-6deg); }
     }
 
     /* Responsive */
@@ -1364,9 +1689,48 @@
         padding: 64px 20px 80px;
       }
       .section { padding: 52px 0; }
-      .products { grid-template-columns: 1fr; gap: 16px; }
-      .product-body { padding: 16px; }
-      .product-body h3 { min-height: 0; }
+      .products {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+        gap: 12px;
+      }
+      .product {
+        width: 100%;
+        min-height: 0;
+        aspect-ratio: 3 / 4;
+        border-radius: 14px;
+      }
+      .product-body { padding: 10px; }
+      .product-body h3 {
+        min-height: 0;
+        font-size: 13px;
+        line-height: 1.2;
+      }
+      .product-meta {
+        align-items: flex-start;
+        flex-direction: column;
+        gap: 6px;
+        margin-top: 7px;
+      }
+      .product .price { font-size: 12px; }
+      .product .availability {
+        gap: 4px;
+        padding: 3px 6px;
+        font-size: 8px;
+      }
+      .product .availability::before { width: 5px; height: 5px; }
+      .product .buy-row {
+        gap: 5px;
+        padding-top: 8px;
+      }
+      .product .buy-row button {
+        min-width: 0;
+        min-height: 34px;
+        padding: 4px;
+        border-radius: 8px;
+        font-size: 9px;
+        line-height: 1.15;
+        white-space: normal;
+      }
       .about { padding: 24px; }
       .about-art { min-height: 200px; }
       .order-invitation { padding: 28px 22px; }
@@ -1390,6 +1754,14 @@
       }
       .product-detail-info { padding: 24px; }
       .product-detail-info > .button { width: 100%; }
+      .product-detail-actions {
+        width: 100%;
+        display: grid;
+        grid-template-columns: 1fr;
+      }
+      .product-detail-actions .button { width: 100%; }
+      .ad-preview-actions { grid-template-columns: 1fr; }
+      .ad-preview-modal { width: 100%; border-radius: 20px 20px 0 0; }
       .modal-heading { padding: 16px 18px; }
       .modal-heading h2 { font-size: 20px; }
       .modal-body { gap: 12px; padding: 14px; }
@@ -1403,18 +1775,24 @@
       .modal-actions { padding: 0 14px 16px; }
       .modal-actions .button { flex: 1; }
       .concern-search-trigger {
-        right: 12px;
-        bottom: 72px;
-        min-height: 46px;
-        padding: 0 16px;
-        font-size: 12px;
+        right: 16px;
+        bottom: 18px;
+        width: 60px;
+        height: 60px;
+      }
+      .cart-link {
+        right: 16px;
+        bottom: 96px;
+        width: 60px;
+        height: 60px;
       }
       .concern-search-modal {
         width: 100%;
         max-height: 88dvh;
         margin: auto;
-        border-radius: 20px;
+        border-radius: 22px;
       }
+      .concern-search-modal .modal-heading { padding: 20px 20px 18px; }
       .concern-search-form { padding: 18px; }
       .result-modal {
         width: calc(100% - 28px);
@@ -1441,7 +1819,7 @@
   <div class="honey-edge right" aria-hidden="true"><span></span><span></span><span></span></div>
   <header class="top">
     <a class="brand" href="#inicio">
-      <span id="brand-mark" class="brand-mark">✿</span>
+      <img id="brand-mark" class="brand-mark" src="/logo.jpeg" alt="Logo de Fragancia y Miel">
       <span>
         <strong id="brand-name">Fragancia y Miel</strong>
         <small>Jabones artesanales</small>
@@ -1450,18 +1828,20 @@
     <nav aria-label="Navegación principal">
       <a href="#productos">Productos</a>
       <a href="#historia">Nuestra esencia</a>
-      <button id="open-cart" class="cart-link" type="button" aria-haspopup="dialog" aria-controls="cart-modal">
-        Mi pedido <span id="cart-count" class="cart-count-badge">0</span>
-      </button>
     </nav>
   </header>
+
+  <button id="open-cart" class="cart-link" type="button" aria-label="Mi pedido, 0 productos" aria-haspopup="dialog" aria-controls="cart-modal">
+    <svg class="cart-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M3 4h2l2.2 11.1a2 2 0 0 0 2 1.6h8.9a2 2 0 0 0 1.9-1.4L22 8H6"></path><circle cx="10" cy="20" r="1"></circle><circle cx="18" cy="20" r="1"></circle></svg>
+    <span id="cart-count" class="cart-count-badge">0</span>
+  </button>
 
   <main>
     <section class="hero" id="inicio">
       <div class="hero-inner">
         <span class="eyebrow">Hecho a mano, con intención</span>
-        <h1 id="hero-title">Fragancia y Miel<br></h1>
-        <p id="hero-tagline">Jabones artesanales hechos con cuidado</p>
+        <h1 id="hero-title">Jabones artesanales de Fragancia y Miel</h1>
+        <p id="hero-tagline">Elaborados a mano con ingredientes seleccionados para convertir tu rutina en un momento especial.</p>
       </div>
     </section>
 
@@ -1469,18 +1849,19 @@
       <div class="section-title">
         <span class="eyebrow">Nuestra colección</span>
         <h2>Un jabón para cada momento</h2>
-        <p>Regálale a tu piel un momento especial. ✨
-
-Descubre nuestra colección de jabones artesanales, elaborados con ingredientes seleccionados, aromas encantadores y el cuidado que cada detalle merece.
-
-🌿 Encuentra tu favorito y convierte tu rutina diaria en un momento de bienestar.
-
-¡Elige el tuyo y haz tu pedido hoy! 💛</p>
+        <p>Descubre jabones artesanales elaborados a mano con ingredientes seleccionados y aromas encantadores. Encuentra tu favorito y convierte tu rutina diaria en un momento especial.</p>
+      </div>
+      <div id="personal-assistance" class="personal-assistance" hidden>
+        <p>Si quieres asistencia personalizada, chatea aquí</p>
+        <a id="personal-assistance-link" class="whatsapp-assistance" href="#" target="_blank" rel="noopener noreferrer">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12.04 2a9.7 9.7 0 0 0-8.3 14.75L2.35 21.1l4.48-1.17A9.72 9.72 0 1 0 12.04 2Zm0 17.74a7.96 7.96 0 0 1-4.06-1.11l-.29-.17-2.66.69.71-2.59-.19-.31A7.99 7.99 0 1 1 12.04 19.74Zm4.38-5.98c-.24-.12-1.42-.7-1.64-.78-.22-.08-.38-.12-.54.12-.16.24-.62.78-.76.94-.14.16-.28.18-.52.06a6.53 6.53 0 0 1-1.92-1.18 7.18 7.18 0 0 1-1.33-1.65c-.14-.24-.02-.37.1-.49.11-.1.24-.28.36-.42.12-.14.16-.24.24-.4.08-.16.04-.3-.02-.42-.06-.12-.54-1.3-.74-1.78-.2-.47-.4-.4-.54-.41h-.46c-.16 0-.42.06-.64.3-.22.24-.84.82-.84 2s.86 2.32.98 2.48c.12.16 1.69 2.58 4.1 3.62.57.25 1.02.39 1.37.5.58.18 1.1.16 1.52.1.46-.07 1.42-.58 1.62-1.14.2-.56.2-1.04.14-1.14-.06-.1-.22-.16-.46-.28Z"/></svg>
+          Chatear por WhatsApp
+        </a>
       </div>
       <div id="catalog-status" class="loading">Cargando catálogo artesanal…</div>
       <div class="catalog-filter-row">
         <p id="catalog-filter-status" class="catalog-filter-status" aria-live="polite" hidden></p>
-        <button id="clear-concern-filter" class="catalog-filter-reset" type="button" hidden>Quitar filtro</button>
+        <button id="clear-concern-filter" class="catalog-filter-reset" type="button" aria-label="Quitar el filtro por afección" hidden><span aria-hidden="true">×</span> Quitar filtro</button>
       </div>
       <div id="products" class="products"></div>
       <div id="no-concern-results" class="empty" hidden>No encontramos productos para las afecciones seleccionadas.</div>
@@ -1550,25 +1931,31 @@ Descubre nuestra colección de jabones artesanales, elaborados con ingredientes 
     <p>Jabones artesanales · Hechos con cuidado</p>
   </footer>
 
-  <button id="open-concern-search" class="concern-search-trigger" type="button" aria-haspopup="dialog" aria-controls="concern-search-modal" hidden>✿ Buscar por afección</button>
+  <button id="open-concern-search" class="concern-search-trigger" type="button" aria-label="Buscar por afección" title="Buscar por afección" aria-haspopup="dialog" aria-controls="concern-search-modal" hidden>
+    <svg class="concern-search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.8"></circle><path d="m16 16 4.5 4.5"></path></svg>
+  </button>
 
   <div id="concern-search-modal" class="modal-backdrop" hidden>
     <section class="concern-search-modal" role="dialog" aria-modal="true" aria-labelledby="concern-search-title">
       <header class="modal-heading">
         <div>
+          <span class="concern-search-eyebrow">Búsqueda personalizada</span>
           <h2 id="concern-search-title">¿Qué afección quieres ayudar a tratar?</h2>
-          <p>Selecciona una o varias opciones.</p>
+          <p>Elige lo que buscas y encuentra el jabón ideal para ti.</p>
         </div>
         <button id="close-concern-search" class="modal-close" type="button" aria-label="Cerrar búsqueda">×</button>
       </header>
       <form id="concern-search-form" class="concern-search-form">
-        <p class="concern-search-hint">Te mostraremos los productos asociados con cualquiera de tus selecciones.</p>
-        <div id="concern-options" class="concern-options"></div>
+        <p class="concern-search-hint">Puedes elegir una o varias opciones. Te mostraremos productos asociados con cualquiera de ellas.</p>
+        <label class="concern-search-label" for="concern-search-input">Buscar afección</label>
+        <input id="concern-search-input" class="concern-search-input" type="search" placeholder="Escribe el nombre de una afección" aria-controls="concern-options">
         <p id="concern-search-error" class="concern-search-error" role="alert" hidden>Selecciona al menos una afección para buscar.</p>
         <div class="concern-search-actions">
           <button id="cancel-concern-search" class="button secondary" type="button">Cancelar</button>
           <button class="button" type="submit">Buscar productos</button>
         </div>
+        <p id="concern-search-empty" class="concern-search-empty" role="status" hidden>No encontramos afecciones con ese nombre.</p>
+        <div id="concern-options" class="concern-options"></div>
       </form>
     </section>
   </div>
@@ -1587,8 +1974,30 @@ Descubre nuestra colección de jabones artesanales, elaborados con ingredientes 
             <span id="product-modal-availability" class="availability"></span>
           </div>
           <div id="product-modal-content" class="product-detail-content"></div>
-          <button id="product-modal-add" class="button" type="button">Agregar al carrito</button>
+          <div class="product-detail-actions">
+            <button id="product-modal-add" class="button" type="button">Agregar al carrito</button>
+            <button id="product-modal-ad" class="button secondary" type="button">Generar imagen</button>
+          </div>
         </div>
+      </div>
+    </section>
+  </div>
+
+  <div id="ad-preview-backdrop" class="modal-backdrop" hidden>
+    <section class="ad-preview-modal" role="dialog" aria-modal="true" aria-labelledby="ad-preview-title">
+      <header class="modal-heading">
+        <div>
+          <h2 id="ad-preview-title">Publicidad del producto</h2>
+          <p>Lista para descargar o compartir</p>
+        </div>
+        <button id="close-ad-preview" class="modal-close" type="button" aria-label="Cerrar publicidad">×</button>
+      </header>
+      <div class="ad-preview-body">
+        <canvas id="product-ad-canvas" width="1080" height="1080" aria-label="Vista previa de la publicidad del producto"></canvas>
+      </div>
+      <div class="ad-preview-actions">
+        <button id="download-ad" class="button" type="button">Descargar imagen</button>
+        <button id="share-ad" class="button secondary" type="button">Compartir</button>
       </div>
     </section>
   </div>
@@ -1675,10 +2084,13 @@ Descubre nuestra colección de jabones artesanales, elaborados con ingredientes 
     // Never use a service_role or secret key in this public page.
     const SUPABASE_URL = 'https://alqoigvsxsgqenqosfbr.supabase.co';
     const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_bHXZOe0puNVzekZFFxdm0g_qDQ1Aawo';
+    const GOOGLE_APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzg1Qh1qip67vyu0v2CChpBjEP6wqaQ5sLeUlPlGiYYm70g06ew5VxOHEgswcxHF5jH7g/exec';
     const currency = new Intl.NumberFormat('es-HN', { style: 'currency', currency: 'HNL' });
     const cart = new Map();
     const modalClosures = new WeakMap();
+    const modalHistoryKey = 'fraganciaMielModal';
     let databasePromise;
+    let modalHistoryBackPending = false;
     let products = [];
     let concernOptions = [];
     let selectedConcerns = new Set();
@@ -1687,11 +2099,13 @@ Descubre nuestra colección de jabones artesanales, elaborados con ingredientes 
     let returnFocus = null;
     let concernSearchReturnFocus = null;
     let toastTimer;
+    let adBlob = null;
 
     const escapeHtml = (value) => String(value ?? '').replace(/[&<>"']/g, (character) => ({
       '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;',
     })[character]);
     const normalizeConcern = (value) => String(value ?? '').trim().toLocaleLowerCase('es');
+    const normalizeSearchText = (value) => String(value ?? '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLocaleLowerCase('es').trim();
     const imageUrl = (path) => path ? client.storage.from('jabon').getPublicUrl(path).data.publicUrl : '';
     const getDatabase = () => {
       if (!databasePromise) {
@@ -1748,6 +2162,18 @@ Descubre nuestra colección de jabones artesanales, elaborados con ingredientes 
       transaction.objectStore('orders').add(order);
       await waitForTransaction(transaction);
     };
+    const notifyOrderByEmail = async (order) => {
+      if (!GOOGLE_APPS_SCRIPT_URL) {
+        console.warn('Configura GOOGLE_APPS_SCRIPT_URL para activar los avisos por correo.');
+        return;
+      }
+      const url = new URL(GOOGLE_APPS_SCRIPT_URL);
+      url.searchParams.set('payload', JSON.stringify(order));
+      await fetch(url, {
+        method: 'GET',
+        mode: 'no-cors',
+      });
+    };
     const renderProductDetails = (product) => {
       const list = (title, values) => values?.length
         ? `<div><h4>${title}</h4><ul>${values.map((entry) => `<li>${escapeHtml(entry)}</li>`).join('')}</ul></div>` : '';
@@ -1765,6 +2191,21 @@ Descubre nuestra colección de jabones artesanales, elaborados con ingredientes 
     const hideCartFeedback = () => {
       document.getElementById('cart-feedback').hidden = true;
       document.getElementById('cart-feedback').classList.remove('feedback-shake');
+    };
+    const openModalHistory = () => {
+      if (history.state?.[modalHistoryKey]) return;
+      const currentState = history.state && typeof history.state === 'object' ? history.state : {};
+      history.pushState({ ...currentState, [modalHistoryKey]: true }, '', location.href);
+    };
+    if (history.state?.[modalHistoryKey]) {
+      const currentState = { ...history.state };
+      delete currentState[modalHistoryKey];
+      history.replaceState(currentState, '', location.href);
+    }
+    const closeModalHistory = (fromPopstate, keepHistory) => {
+      if (fromPopstate || keepHistory || modalHistoryBackPending || !history.state?.[modalHistoryKey]) return;
+      modalHistoryBackPending = true;
+      history.back();
     };
     const persistCartWithNotice = async () => {
       try {
@@ -1810,16 +2251,16 @@ Descubre nuestra colección de jabones artesanales, elaborados con ingredientes 
       const count = [...cart.values()].reduce((sum, amount) => sum + amount, 0);
       const button = document.getElementById('open-cart');
       document.getElementById('cart-count').textContent = count > 99 ? '99+' : count;
+      button.setAttribute('aria-label', `Mi pedido, ${count} producto${count === 1 ? '' : 's'}`);
       button.classList.toggle('has-items', count > 0);
       if (count > 0) {
         button.classList.remove('cart-pop');
         requestAnimationFrame(() => button.classList.add('cart-pop'));
       }
     };
-    const addProductToCart = (product, quantity, button, quantityInput) => {
+    const addProductToCart = (product, quantity, button) => {
       if (!Number.isInteger(quantity) || quantity < 1 || quantity > Number(product.available)) {
         showToast('Elige una cantidad disponible para este jabón.');
-        quantityInput?.focus();
         return;
       }
       const existing = cart.get(product.id) || 0;
@@ -1862,11 +2303,347 @@ Descubre nuestra colección de jabones artesanales, elaborados con ingredientes 
       availability.classList.toggle('none', available < 1);
       document.getElementById('product-modal-content').innerHTML = renderProductDetails(product);
       document.getElementById('product-modal-add').disabled = available < 1;
+      openModalHistory();
       document.getElementById('product-modal').hidden = false;
       document.body.classList.add('modal-open');
       document.getElementById('close-product-modal').focus();
     };
-    const closeProductDetails = async () => {
+    const loadCanvasImage = (src) => new Promise((resolve) => {
+      if (!src) {
+        resolve(null);
+        return;
+      }
+      const image = new Image();
+      image.crossOrigin = 'anonymous';
+      image.onload = () => resolve(image);
+      image.onerror = () => resolve(null);
+      image.src = src;
+    });
+    const roundedRect = (context, x, y, width, height, radius) => {
+      context.beginPath();
+      context.roundRect(x, y, width, height, radius);
+    };
+    const drawContainedImage = (context, image, x, y, width, height, padding = 0) => {
+      if (!image) return;
+      const availableWidth = width - padding * 2;
+      const availableHeight = height - padding * 2;
+      const scale = Math.min(availableWidth / image.naturalWidth, availableHeight / image.naturalHeight);
+      const drawWidth = image.naturalWidth * scale;
+      const drawHeight = image.naturalHeight * scale;
+      context.drawImage(image, x + (width - drawWidth) / 2, y + (height - drawHeight) / 2, drawWidth, drawHeight);
+    };
+    const wrapCanvasText = (context, text, maxWidth) => {
+      const words = String(text || '').trim().split(/\s+/).filter(Boolean);
+      const lines = [];
+      let line = '';
+      words.forEach((word) => {
+        const candidate = line ? `${line} ${word}` : word;
+        if (context.measureText(candidate).width <= maxWidth) {
+          line = candidate;
+        } else {
+          if (line) lines.push(line);
+          line = word;
+        }
+      });
+      if (line) lines.push(line);
+      return lines;
+    };
+    const canvasToBlob = (canvas) => new Promise((resolve) => {
+      canvas.toBlob((blob) => resolve(blob), 'image/png', 1);
+    });
+    const generateProductAd = async (product) => {
+      const button = document.getElementById('product-modal-ad');
+      button.disabled = true;
+      button.textContent = 'Generando...';
+      adBlob = null;
+      try {
+        if (document.fonts?.ready) await document.fonts.ready;
+        const photo = await loadCanvasImage(imageUrl(product.image_path));
+        const logoElement = document.querySelector('#brand-mark');
+        const logo = await loadCanvasImage(logoElement?.src || '');
+        const canvas = document.getElementById('product-ad-canvas');
+        const context = canvas.getContext('2d');
+        const businessName = document.getElementById('brand-name').textContent || 'Fragancia y Miel';
+
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        const backgroundGradient = context.createLinearGradient(0, 0, 1080, 1080);
+        backgroundGradient.addColorStop(0, '#fffdf7');
+        backgroundGradient.addColorStop(0.48, '#f4dfad');
+        backgroundGradient.addColorStop(1, '#d29b3d');
+        context.fillStyle = backgroundGradient;
+        context.fillRect(0, 0, 1080, 1080);
+
+        context.fillStyle = 'rgba(91, 55, 20, 0.10)';
+        for (let index = 0; index < 6; index += 1) {
+          context.beginPath();
+          context.arc(920 + (index % 2) * 38, 70 + index * 38, 7, 0, Math.PI * 2);
+          context.fill();
+        }
+        context.beginPath();
+        context.arc(-70, 1010, 240, 0, Math.PI * 2);
+        context.fill();
+
+        context.textAlign = 'left';
+        if (logo) {
+          context.save();
+          context.fillStyle = '#fffaf1';
+          context.beginPath();
+          context.arc(96, 96, 58, 0, Math.PI * 2);
+          context.fill();
+          context.beginPath();
+          context.arc(96, 96, 50, 0, Math.PI * 2);
+          context.clip();
+          context.drawImage(logo, 46, 46, 100, 100);
+          context.restore();
+        } else {
+          context.fillStyle = '#fffaf1';
+          context.beginPath();
+          context.arc(96, 96, 58, 0, Math.PI * 2);
+          context.fill();
+          context.fillStyle = '#8a5a1a';
+          context.font = '700 42px Georgia';
+          context.textAlign = 'center';
+          context.fillText('✿', 96, 111);
+        }
+
+        context.textAlign = 'left';
+        context.fillStyle = '#503316';
+        context.font = '700 40px Georgia';
+        context.fillText(businessName, 178, 84);
+        context.fillStyle = '#91682f';
+        context.font = '700 16px Arial';
+        context.fillText('JABONES ARTESANALES', 180, 116);
+
+        context.fillStyle = '#fffaf1';
+        roundedRect(context, 780, 58, 224, 58, 29);
+        context.fill();
+        context.fillStyle = '#6a451c';
+        context.font = '700 17px Arial';
+        context.textAlign = 'center';
+        context.fillText('HECHO A MANO', 892, 94);
+        context.textAlign = 'left';
+
+        context.save();
+        context.shadowColor = 'rgba(74, 49, 18, 0.24)';
+        context.shadowBlur = 34;
+        context.shadowOffsetY = 18;
+        context.fillStyle = '#fffaf1';
+        roundedRect(context, 54, 154, 972, 842, 44);
+        context.fill();
+        context.restore();
+
+        context.save();
+        roundedRect(context, 78, 178, 526, 794, 34);
+        context.clip();
+        context.fillStyle = '#efe1c2';
+        context.fillRect(78, 178, 526, 794);
+        if (photo) {
+          const photoScale = Math.max(526 / photo.naturalWidth, 794 / photo.naturalHeight);
+          const photoWidth = photo.naturalWidth * photoScale;
+          const photoHeight = photo.naturalHeight * photoScale;
+          context.drawImage(photo, 78 + (526 - photoWidth) / 2, 178 + (794 - photoHeight) / 2, photoWidth, photoHeight);
+        }
+        context.restore();
+
+        context.save();
+        context.strokeStyle = '#fffaf1';
+        context.lineWidth = 10;
+        roundedRect(context, 78, 178, 526, 794, 34);
+        context.stroke();
+        context.restore();
+
+        context.fillStyle = '#fffaf1';
+        roundedRect(context, 106, 206, 194, 54, 27);
+        context.fill();
+        context.fillStyle = '#71491d';
+        context.font = '700 18px Arial';
+        context.textAlign = 'center';
+        context.fillText('100% ARTESANAL', 203, 240);
+        context.textAlign = 'left';
+
+        const weight = String(product.soap_weight || '').trim();
+        if (weight) {
+          context.fillStyle = 'rgba(74, 49, 18, 0.82)';
+          roundedRect(context, 106, 876, 170, 54, 27);
+          context.fill();
+          context.fillStyle = '#fffaf1';
+          context.font = '700 18px Arial';
+          context.textAlign = 'center';
+          context.fillText(`≈ ${weight} g`, 191, 910);
+          context.textAlign = 'left';
+        }
+
+        context.fillStyle = '#503316';
+        context.font = '700 48px Georgia';
+        const titleLines = wrapCanvasText(context, product.name || 'Jabón artesanal', 340);
+        let titleY = 218;
+        titleLines.slice(0, 3).forEach((line) => {
+          context.fillText(line, 638, titleY);
+          titleY += 62;
+        });
+
+        context.fillStyle = '#d29a35';
+        roundedRect(context, 638, titleY - 8, 86, 7, 4);
+        context.fill();
+
+        context.fillStyle = '#80694a';
+        context.font = '700 18px Arial';
+        context.fillText('BENEFICIOS', 638, titleY + 50);
+
+        const benefits = Array.isArray(product.benefits) ? product.benefits.filter(Boolean) : [];
+        const displayBenefits = benefits.slice(0, 2);
+        let benefitY = titleY + 92;
+
+        if (displayBenefits.length) {
+          displayBenefits.forEach((benefit) => {
+            const lines = wrapCanvasText(context, benefit, 292).slice(0, 2);
+            context.fillStyle = '#fffaf1';
+            context.strokeStyle = '#dfc99a';
+            context.lineWidth = 2;
+            const pillHeight = Math.max(58, lines.length * 30 + 18);
+            roundedRect(context, 638, benefitY - 34, 348, pillHeight, 16);
+            context.fill();
+            context.stroke();
+            context.fillStyle = '#d29a35';
+            context.beginPath();
+            context.arc(665, benefitY - 2, 7, 0, Math.PI * 2);
+            context.fill();
+            context.fillStyle = '#5c4a38';
+            context.font = '600 19px Arial';
+            lines.forEach((line, index) => {
+              context.fillText(line, 686, benefitY + index * 29);
+            });
+            benefitY += pillHeight + 12;
+          });
+        } else {
+          context.fillStyle = '#fffaf1';
+          roundedRect(context, 638, benefitY - 34, 348, 58, 16);
+          context.fill();
+          context.fillStyle = '#5c4a38';
+          context.font = '600 19px Arial';
+          context.fillText('Cuidado suave para tu piel', 663, benefitY);
+        }
+
+        const composition = Array.isArray(product.composition) ? product.composition.filter(Boolean).slice(0, 3) : [];
+        const concerns = Array.isArray(product.health_concerns) ? product.health_concerns.filter(Boolean).slice(0, 2) : [];
+        let detailY = Math.max(benefitY + 54, 620);
+
+        context.fillStyle = '#80694a';
+        context.font = '700 18px Arial';
+        context.fillText('INGREDIENTES DESTACADOS', 638, detailY);
+        context.fillStyle = '#5c4a38';
+        context.font = '600 17px Arial';
+        const compositionText = composition.length ? composition.join('  ·  ') : 'Ingredientes naturales';
+        const compositionLines = wrapCanvasText(context, compositionText, 348).slice(0, 2);
+        compositionLines.forEach((line, index) => context.fillText(line, 638, detailY + 31 + index * 26));
+
+        detailY += compositionLines.length > 1 ? 82 : 56;
+
+        if (concerns.length) {
+          context.fillStyle = '#80694a';
+          context.font = '700 18px Arial';
+          context.fillText('IDEAL PARA', 638, detailY);
+          context.fillStyle = '#5c4a38';
+          context.font = '600 17px Arial';
+          const concernText = concerns.join('  ·  ');
+          wrapCanvasText(context, concernText, 348).slice(0, 2).forEach((line, index) => {
+            context.fillText(line, 638, detailY + 31 + index * 26);
+          });
+          detailY += 68;
+        }
+
+        const usage = String(product.usage_instructions || '').trim();
+        if (usage) {
+          context.fillStyle = '#80694a';
+          context.font = '700 18px Arial';
+          context.fillText('MODO DE USO', 638, detailY);
+          context.fillStyle = '#5c4a38';
+          context.font = '600 16px Arial';
+          wrapCanvasText(context, usage, 348).slice(0, 2).forEach((line, index) => {
+            context.fillText(line, 638, detailY + 29 + index * 24);
+          });
+        }
+
+        context.save();
+        context.shadowColor = 'rgba(74, 49, 18, 0.18)';
+        context.shadowBlur = 16;
+        context.shadowOffsetY = 8;
+        context.fillStyle = '#654018';
+        roundedRect(context, 638, 874, 348, 102, 22);
+        context.fill();
+        context.restore();
+        context.fillStyle = '#dcbf74';
+        context.font = '700 16px Arial';
+        context.fillText('PRECIO', 668, 912);
+        context.fillStyle = '#fffaf1';
+        context.font = '700 40px Georgia';
+        context.fillText(currency.format(Number(product.price || 0)), 668, 956);
+
+        context.fillStyle = '#805b25';
+        context.textAlign = 'center';
+        context.font = '700 16px Arial';
+        context.fillText('AROMA  •  CUIDADO  •  NATURALEZA', 540, 1028);
+
+        adBlob = await canvasToBlob(canvas);
+        openModalHistory();
+        document.getElementById('ad-preview-backdrop').hidden = false;
+        document.body.classList.add('modal-open');
+        document.getElementById('close-ad-preview').focus();
+      } catch (error) {
+        console.error(error);
+        showToast('No pudimos generar la imagen publicitaria.');
+      } finally {
+        button.disabled = false;
+        button.textContent = 'Generar publicidad';
+      }
+    };
+    const closeAdPreview = async ({ fromPopstate = false } = {}) => {
+      closeModalHistory(fromPopstate, false);
+      await hideModal(document.getElementById('ad-preview-backdrop'));
+      document.getElementById('product-modal-ad')?.focus();
+    };
+    const downloadProductAd = () => {
+      if (!adBlob || !detailProduct) {
+        showToast('Primero genera la imagen publicitaria.');
+        return;
+      }
+      const url = URL.createObjectURL(adBlob);
+      const link = document.createElement('a');
+      const name = (detailProduct.name || 'producto').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
+      link.href = url;
+      link.download = `${name || 'producto'}-fragancia-y-miel.png`;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    };
+    const shareProductAd = async () => {
+      if (!adBlob || !detailProduct) {
+        showToast('Primero genera la imagen publicitaria.');
+        return;
+      }
+      const fileName = `${(detailProduct.name || 'producto').replace(/[^a-z0-9áéíóúñü -]/gi, '').trim() || 'producto'}-fragancia-y-miel.png`;
+      const file = new File([adBlob], fileName, { type: 'image/png' });
+      if (navigator.share) {
+        try {
+          if (!navigator.canShare || navigator.canShare({ files: [file] })) {
+            await navigator.share({
+              title: detailProduct.name || 'Producto artesanal',
+              text: `Conoce ${detailProduct.name || 'nuestro jabón artesanal'} de Fragancia y Miel.`,
+              files: [file],
+            });
+            return;
+          }
+        } catch (error) {
+          if (error.name !== 'AbortError') console.error(error);
+          return;
+        }
+      }
+      downloadProductAd();
+      showToast('Tu imagen se descargó. Compártela desde tu galería.');
+    };
+    const closeProductDetails = async ({ fromPopstate = false } = {}) => {
+      closeModalHistory(fromPopstate, false);
       await hideModal(document.getElementById('product-modal'));
       document.body.classList.remove('modal-open');
       returnFocus?.focus?.();
@@ -1875,11 +2652,13 @@ Descubre nuestra colección de jabones artesanales, elaborados con ingredientes 
       returnFocus = trigger || document.activeElement;
       hideCartFeedback();
       renderCart();
+      openModalHistory();
       document.getElementById('cart-modal').hidden = false;
       document.body.classList.add('modal-open');
       document.querySelector('#cart-modal input[name="name"]').focus();
     };
-    const closeCart = async () => {
+    const closeCart = async ({ fromPopstate = false, keepHistory = false } = {}) => {
+      closeModalHistory(fromPopstate, keepHistory);
       await hideModal(document.getElementById('cart-modal'));
       document.body.classList.remove('modal-open');
       returnFocus?.focus?.();
@@ -1896,6 +2675,7 @@ Descubre nuestra colección de jabones artesanales, elaborados con ingredientes 
       const warningBox = document.getElementById('refresh-warning');
       warningBox.hidden = !warning;
       warningBox.textContent = warning || '';
+      openModalHistory();
       document.getElementById('result-backdrop').hidden = false;
       document.body.classList.add('modal-open');
       document.getElementById('close-result').focus();
@@ -1903,7 +2683,23 @@ Descubre nuestra colección de jabones artesanales, elaborados con ingredientes 
 
     function renderCatalog(settings, items) {
       const businessName = settings?.business_name || 'Fragancia y Miel';
-      document.title = `Jabones artesanales | ${businessName}`;
+      const pageTitle = `Jabones artesanales en Honduras | ${businessName}`;
+      const pageDescription = `Descubre jabones artesanales de ${businessName}, elaborados a mano con ingredientes seleccionados. Encuentra tu favorito y haz tu pedido en Honduras.`;
+      document.title = pageTitle;
+      document.querySelector('meta[name="description"]').content = pageDescription;
+      document.querySelector('meta[property="og:title"]').content = pageTitle;
+      document.querySelector('meta[property="og:description"]').content = pageDescription;
+      document.querySelector('meta[name="twitter:title"]').content = pageTitle;
+      document.querySelector('meta[name="twitter:description"]').content = pageDescription;
+      document.querySelector('script[type="application/ld+json"]').textContent = JSON.stringify({
+        '@context': 'https://schema.org',
+        '@type': 'Organization',
+        name: businessName,
+        url: 'https://fraganciaymiel.com/',
+        logo: 'https://fraganciaymiel.com/logo.jpeg',
+        image: 'https://fraganciaymiel.com/logo.jpeg',
+        description: pageDescription,
+      });
       document.getElementById('brand-name').textContent = businessName;
       document.getElementById('footer-name').textContent = businessName;
       document.getElementById('hero-tagline').textContent = settings?.tagline || 'Jabones artesanales hechos con cuidado';
@@ -1969,8 +2765,13 @@ Descubre nuestra colección de jabones artesanales, elaborados con ingredientes 
       if (whatsappNumber) {
         const reseller = document.getElementById('reseller-link');
         reseller.href = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(`Hola, me interesa revender los jabones artesanales de ${businessName}.`)}`;
+        const personalAssistance = document.getElementById('personal-assistance');
+        const personalAssistanceLink = document.getElementById('personal-assistance-link');
+        personalAssistanceLink.href = `https://wa.me/${whatsappNumber}?text=${encodeURIComponent(`Hola, quiero asistencia personalizada para elegir un jabón de ${businessName}.`)}`;
+        personalAssistance.hidden = false;
       } else {
         document.getElementById('reseller-link').hidden = true;
+        document.getElementById('personal-assistance').hidden = true;
       }
       products = items || [];
       const concerns = new Map();
@@ -1985,6 +2786,12 @@ Descubre nuestra colección de jabones artesanales, elaborados con ingredientes 
       document.getElementById('concern-options').innerHTML = concernOptions.map(({ value, label }) => `
         <label class="concern-option"><input type="checkbox" name="concern" value="${escapeHtml(value)}"><span>${escapeHtml(label)}</span></label>
       `).join('');
+      document.querySelectorAll('#concern-options input[name="concern"]').forEach((checkbox) => {
+        checkbox.addEventListener('change', () => {
+          checkbox.closest('.concern-option').classList.toggle('is-selected', checkbox.checked);
+        });
+      });
+      filterConcernOptions();
       selectedConcerns = new Set();
       document.getElementById('catalog-status').hidden = true;
       const container = document.getElementById('products');
@@ -1998,20 +2805,14 @@ Descubre nuestra colección de jabones artesanales, elaborados con ingredientes 
         return `<article class="product" tabindex="0" data-open-product="${escapeHtml(product.id)}" aria-haspopup="dialog" aria-label="Ver detalles de ${escapeHtml(product.name)}">
           <div class="product-image">${photo ? `<img loading="lazy" src="${escapeHtml(photo)}" alt="${escapeHtml(product.name)}">` : '<span aria-hidden="true">✿</span>'}</div>
           <div class="product-body"><h3>${escapeHtml(product.name)}</h3>
-          <div class="buy-row"><input aria-label="Cantidad de ${escapeHtml(product.name)}" id="quantity-${escapeHtml(product.id)}" type="number" min="1" max="${available}" value="1" ${available < 1 ? 'disabled' : ''}><button class="button" type="button" data-add="${escapeHtml(product.id)}" ${available < 1 ? 'disabled' : ''}>Agregar al pedido</button></div>
-          <div class="product-meta"><span class="price">${currency.format(Number(product.price || 0))}</span><span class="availability${available < 1 ? ' none' : ''}">${available > 9 ? '9+ disponibles' : available > 0 ? `${available} disponibles` : 'Agotado'}</span></div></div>
+          <div class="product-meta"><span class="price">${currency.format(Number(product.price || 0))}</span><span class="availability${available < 1 ? ' none' : ''}">${available > 9 ? '9+ disponibles' : available > 0 ? `${available} disponibles` : 'Agotado'}</span></div>
+          <div class="buy-row"><button class="button" type="button" data-add="${escapeHtml(product.id)}" ${available < 1 ? 'disabled' : ''}>Agregar al pedido</button></div></div>
         </article>`;
       }).join('');
       applyConcernFilter();
-      container.querySelectorAll('.product input[type="number"]').forEach((input) => {
-        input.addEventListener('input', () => {
-          input.closest('.product').classList.toggle('is-selected', Number(input.value) > 0);
-        });
-      });
       container.querySelectorAll('[data-add]').forEach((button) => button.addEventListener('click', () => {
         const product = products.find((item) => item.id === button.dataset.add);
-        const quantityInput = document.getElementById(`quantity-${product.id}`);
-        addProductToCart(product, Number(quantityInput.value), button, quantityInput);
+        addProductToCart(product, 1, button);
       }));
     }
 
@@ -2032,17 +2833,32 @@ Descubre nuestra colección de jabones artesanales, elaborados con ingredientes 
       document.getElementById('clear-concern-filter').hidden = selectedConcerns.size === 0;
     }
 
+    function filterConcernOptions() {
+      const query = normalizeSearchText(document.getElementById('concern-search-input').value);
+      let visibleCount = 0;
+      document.querySelectorAll('#concern-options .concern-option').forEach((option) => {
+        option.hidden = !normalizeSearchText(option.textContent).includes(query);
+        if (!option.hidden) visibleCount += 1;
+      });
+      document.getElementById('concern-search-empty').hidden = visibleCount > 0;
+    }
+
     const openConcernSearch = (trigger) => {
       concernSearchReturnFocus = trigger || document.activeElement;
+      document.getElementById('concern-search-input').value = '';
+      filterConcernOptions();
       document.querySelectorAll('#concern-options input[name="concern"]').forEach((checkbox) => {
         checkbox.checked = selectedConcerns.has(checkbox.value);
+        checkbox.closest('.concern-option').classList.toggle('is-selected', checkbox.checked);
       });
       document.getElementById('concern-search-error').hidden = true;
+      openModalHistory();
       document.getElementById('concern-search-modal').hidden = false;
       document.body.classList.add('modal-open');
-      document.getElementById('close-concern-search').focus();
+      document.getElementById('concern-search-input').focus();
     };
-    const closeConcernSearch = async () => {
+    const closeConcernSearch = async ({ fromPopstate = false } = {}) => {
+      closeModalHistory(fromPopstate, false);
       await hideModal(document.getElementById('concern-search-modal'));
       document.body.classList.remove('modal-open');
       concernSearchReturnFocus?.focus?.();
@@ -2147,6 +2963,29 @@ Descubre nuestra colección de jabones artesanales, elaborados con ingredientes 
         showCartFeedback(error.message || 'No se pudo enviar el pedido. Comprueba la disponibilidad e inténtalo de nuevo.');
         return;
       }
+      let emailWarning = '';
+      try {
+        const orderItems = entries.map(([productId, quantity]) => {
+          const product = products.find((item) => item.id === productId);
+          return {
+            name: product?.name || String(productId),
+            quantity,
+            unitPrice: Number(product?.price || 0),
+          };
+        });
+        await notifyOrderByEmail({
+          orderNumber: String(data),
+          name: String(form.get('name') || ''),
+          phone: String(form.get('phone') || ''),
+          email: String(form.get('email') || ''),
+          address: String(form.get('address') || ''),
+          notes: String(form.get('notes') || ''),
+          items: orderItems,
+        });
+      } catch (notificationError) {
+        console.error('El pedido quedó registrado, pero no se pudo notificar por correo.', notificationError);
+        emailWarning = 'El pedido sí quedó registrado, pero no se pudo enviar el aviso por correo.';
+      }
       let storageWarning = '';
       try {
         const orderItems = entries.map(([productId, quantity]) => {
@@ -2185,11 +3024,12 @@ Descubre nuestra colección de jabones artesanales, elaborados con ingredientes 
       } catch (refreshError) {
         refreshWarning = refreshError.message || 'No se pudo actualizar la disponibilidad en pantalla.';
       }
-      await closeCart();
+      await closeCart({ keepHistory: true });
       showOrderResult({
         success: true,
         orderNumber: data,
         warning: [
+          emailWarning,
           storageWarning,
           refreshWarning ? `Tu pedido sí quedó registrado. No se pudo actualizar la disponibilidad en pantalla: ${refreshWarning}` : '',
         ].filter(Boolean).join(' '),
@@ -2236,10 +3076,11 @@ Descubre nuestra colección de jabones artesanales, elaborados con ingredientes 
     document.getElementById('open-concern-search').addEventListener('click', (event) => openConcernSearch(event.currentTarget));
     document.getElementById('close-concern-search').addEventListener('click', closeConcernSearch);
     document.getElementById('cancel-concern-search').addEventListener('click', closeConcernSearch);
+    document.getElementById('concern-search-input').addEventListener('input', filterConcernOptions);
     document.getElementById('concern-search-modal').addEventListener('click', (event) => {
       if (event.target === event.currentTarget) closeConcernSearch();
     });
-    document.getElementById('concern-search-form').addEventListener('submit', (event) => {
+    document.getElementById('concern-search-form').addEventListener('submit', async (event) => {
       event.preventDefault();
       const checked = [...document.querySelectorAll('#concern-options input[name="concern"]:checked')];
       if (!checked.length) {
@@ -2248,8 +3089,8 @@ Descubre nuestra colección de jabones artesanales, elaborados con ingredientes 
       }
       selectedConcerns = new Set(checked.map((checkbox) => checkbox.value));
       applyConcernFilter();
-      void closeConcernSearch();
-      document.getElementById('productos').scrollIntoView({ behavior: 'smooth' });
+      await closeConcernSearch();
+      document.getElementById('productos').scrollIntoView({ behavior: 'smooth', block: 'start' });
     });
     document.getElementById('clear-concern-filter').addEventListener('click', () => {
       selectedConcerns.clear();
@@ -2258,10 +3099,20 @@ Descubre nuestra colección de jabones artesanales, elaborados con ingredientes 
     document.getElementById('product-modal-add').addEventListener('click', () => {
       if (detailProduct) addProductToCart(detailProduct, 1, document.getElementById('product-modal-add'));
     });
+    document.getElementById('product-modal-ad').addEventListener('click', () => {
+      if (detailProduct) void generateProductAd(detailProduct);
+    });
+    document.getElementById('close-ad-preview').addEventListener('click', closeAdPreview);
+    document.getElementById('ad-preview-backdrop').addEventListener('click', (event) => {
+      if (event.target === event.currentTarget) closeAdPreview();
+    });
+    document.getElementById('download-ad').addEventListener('click', downloadProductAd);
+    document.getElementById('share-ad').addEventListener('click', () => { void shareProductAd(); });
     document.getElementById('product-modal').addEventListener('click', (event) => {
       if (event.target === event.currentTarget) closeProductDetails();
     });
-    const closeResult = async () => {
+    const closeResult = async ({ fromPopstate = false } = {}) => {
+      closeModalHistory(fromPopstate, false);
       await hideModal(document.getElementById('result-backdrop'));
       document.body.classList.remove('modal-open');
       document.getElementById('open-cart').focus();
@@ -2270,6 +3121,17 @@ Descubre nuestra colección de jabones artesanales, elaborados con ingredientes 
     document.getElementById('result-done').addEventListener('click', closeResult);
     document.getElementById('result-backdrop').addEventListener('click', (event) => {
       if (event.target === event.currentTarget) closeResult();
+    });
+    window.addEventListener('popstate', () => {
+      if (modalHistoryBackPending) {
+        modalHistoryBackPending = false;
+        return;
+      }
+      if (!document.getElementById('ad-preview-backdrop').hidden) void closeAdPreview({ fromPopstate: true });
+      else if (!document.getElementById('result-backdrop').hidden) void closeResult({ fromPopstate: true });
+      else if (!document.getElementById('cart-modal').hidden) void closeCart({ fromPopstate: true });
+      else if (!document.getElementById('product-modal').hidden) void closeProductDetails({ fromPopstate: true });
+      else if (!document.getElementById('concern-search-modal').hidden) void closeConcernSearch({ fromPopstate: true });
     });
     document.addEventListener('keydown', (event) => {
       if (event.key !== 'Escape') return;

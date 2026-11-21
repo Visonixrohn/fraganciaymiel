@@ -2358,7 +2358,7 @@ function App() {
               </div>
               <div className="form-grid">
                 <Field label="Teléfono de contacto"><input type="tel" maxLength="40" value={webSettingsDraft?.phone || ''} onChange={(event) => setWebSettingsDraft({ ...webSettingsDraft, phone: event.target.value })} /></Field>
-                <Field label="WhatsApp para revendedores (con código de país)"><input type="tel" maxLength="40" value={webSettingsDraft?.whatsapp_phone || ''} onChange={(event) => setWebSettingsDraft({ ...webSettingsDraft, whatsapp_phone: event.target.value })} placeholder="50499999999" /></Field>
+                <Field label="Número de WhatsApp para atención y revendedores (con código de país)"><input type="tel" maxLength="40" value={webSettingsDraft?.whatsapp_phone || ''} onChange={(event) => setWebSettingsDraft({ ...webSettingsDraft, whatsapp_phone: event.target.value })} placeholder="50499999999" /></Field>
               </div>
               <div className="form-grid">
                 <Field label="Correo electrónico"><input type="email" maxLength="254" value={webSettingsDraft?.email || ''} onChange={(event) => setWebSettingsDraft({ ...webSettingsDraft, email: event.target.value })} /></Field>
@@ -2370,7 +2370,7 @@ function App() {
                 <Field label="Instagram"><input type="url" maxLength="500" value={webSettingsDraft?.instagram_url || ''} onChange={(event) => setWebSettingsDraft({ ...webSettingsDraft, instagram_url: event.target.value })} placeholder="https://www.instagram.com/tu_cuenta" /></Field>
               </div>
               <Field label="Presentación del negocio"><textarea rows="5" maxLength="2000" value={webSettingsDraft?.about_text || ''} onChange={(event) => setWebSettingsDraft({ ...webSettingsDraft, about_text: event.target.value })} placeholder="Cuenta brevemente la historia de tu taller y cómo elaboras tus jabones." /></Field>
-              <p className="form-note">El enlace para revendedores abre WhatsApp con el número configurado. No se publican credenciales secretas en la tienda.</p>
+              <p className="form-note">El botón de asistencia personalizada y el enlace para revendedores usan este número de WhatsApp. Incluye el código de país sin signos, espacios ni guiones.</p>
               <button className="button primary">Guardar configuración</button>
             </form>
           </Section>
