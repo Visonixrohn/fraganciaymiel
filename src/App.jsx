@@ -660,6 +660,8 @@ function App() {
     setWebProductDraft(product ? {
       id: duplicate ? '' : product.id,
       name: duplicate ? `${product.name} (copia)` : product.name,
+      normalPrice: product.normal_price == null ? '' : String(product.normal_price),
+      promotionPrice: product.promotion_price == null ? '' : String(product.promotion_price),
       imagePath: product.image_path || '',
       benefits: (product.benefits || []).join('\n'),
       healthConcerns: (product.health_concerns || []).join(', '),
@@ -670,6 +672,8 @@ function App() {
     } : {
       id: '',
       name: '',
+      normalPrice: '',
+      promotionPrice: '',
       imagePath: '',
       benefits: '',
       healthConcerns: '',
@@ -685,12 +689,20 @@ function App() {
   async function saveWebProduct(event) {
     event.preventDefault();
     if (!webProductDraft) return;
+    if ([webProductDraft.normalPrice, webProductDraft.promotionPrice].some((price) => (
+      price === '' || !Number.isFinite(Number(price)) || Number(price) < 0
+    ))) {
+      toast('Ingresa un precio normal y un precio promocional válidos.', 'error');
+      return;
+    }
     let uploadedPath = null;
     try {
       uploadedPath = await uploadWebImage(webProductFile, 'products');
       const { error: saveError } = await supabase.from('web_products').upsert({
         id: webProductDraft.id || undefined,
         name: webProductDraft.name.trim(),
+        normal_price: number(webProductDraft.normalPrice),
+        promotion_price: number(webProductDraft.promotionPrice),
         image_path: uploadedPath || webProductDraft.imagePath || null,
         benefits: webProductDraft.benefits.split('\n').map((item) => item.trim()).filter(Boolean),
         health_concerns: webProductDraft.healthConcerns.split(/[,\n]/).map((item) => item.trim()).filter(Boolean),
@@ -2299,7 +2311,6 @@ function App() {
                 {visibleWebProducts.map((product) => {
                   const batches = getWebProductBatches(product);
                   const batch = batches[0];
-                  const recipeItem = data.recipes.find((item) => item.id === batch?.recipe_id);
                   const available = batches.reduce((sum, item) => sum + availableWebBatchStock(item), 0);
                   const batchCodes = batches.map((item) => item.code).join(', ');
                   const image = product.image_path
@@ -2312,7 +2323,10 @@ function App() {
                     <div className="web-product-card-content">
                       <div className="web-product-card-heading">
                         <div><h3>{product.name}</h3><span className={`pill ${product.active ? 'good' : 'warning'}`}>{product.active ? 'Visible' : 'Oculto'}</span></div>
-                        <strong>{recipeItem?.prices.detail == null ? 'Sin precio' : money(recipeItem.prices.detail)}</strong>
+                        <div className="web-product-card-prices">
+                          <strong>{product.promotion_price == null ? 'Sin precio promocional' : money(product.promotion_price)}</strong>
+                          {product.normal_price != null && <small className="web-product-normal-price">Normal: {money(product.normal_price)}</small>}
+                        </div>
                       </div>
                       <p>{batches.length ? `${batch.recipe_name} · Lotes: ${batchCodes}` : 'Sin lote asignado'}</p>
                       <div className="web-product-card-footer">
@@ -2613,6 +2627,10 @@ function App() {
                   : 'ninguno'}
                 {' '}Los nuevos lotes se agregan desde el formulario de producción.
               </div>
+            </div>
+            <div className="form-grid">
+              <Field label="Precio normal (LPS)"><input required type="number" min="0" step="0.01" value={webProductDraft.normalPrice} onChange={(event) => setWebProductDraft({ ...webProductDraft, normalPrice: event.target.value })} /></Field>
+              <Field label="Precio promocional (LPS)"><input required type="number" min="0" step="0.01" value={webProductDraft.promotionPrice} onChange={(event) => setWebProductDraft({ ...webProductDraft, promotionPrice: event.target.value })} /></Field>
             </div>
             <div className="form-grid">
               <Field label="Foto del producto (JPG, PNG o WebP; máximo 8 MB)">

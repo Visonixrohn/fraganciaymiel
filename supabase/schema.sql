@@ -196,6 +196,8 @@ create table if not exists public.web_products (
   health_concerns text[] not null default '{}',
   composition text[] not null default '{}',
   usage_instructions text not null default '',
+  normal_price numeric(14, 2) check (normal_price is null or normal_price >= 0),
+  promotion_price numeric(14, 2) check (promotion_price is null or promotion_price >= 0),
   active boolean not null default true,
   sort_order integer not null default 0,
   created_at timestamptz not null default now(),
@@ -204,6 +206,10 @@ create table if not exists public.web_products (
 
 alter table public.web_products
   add column if not exists health_concerns text[] not null default '{}';
+alter table public.web_products
+  add column if not exists normal_price numeric(14, 2) check (normal_price is null or normal_price >= 0);
+alter table public.web_products
+  add column if not exists promotion_price numeric(14, 2) check (promotion_price is null or promotion_price >= 0);
 
 create table if not exists public.web_product_batches (
   web_product_id uuid not null references public.web_products(id) on delete cascade,
@@ -211,6 +217,8 @@ create table if not exists public.web_product_batches (
   created_at timestamptz not null default now(),
   primary key (web_product_id, batch_id)
 );
+
+
 
 create unique index if not exists web_product_batches_batch_uidx
   on public.web_product_batches(batch_id);
@@ -350,6 +358,24 @@ order by wp.created_at, wp.id
 on conflict (batch_id) do nothing;
 
 update public.web_products set batch_id = null where batch_id is not null;
+
+with product_prices as (
+  select distinct on (wp.id)
+    wp.id as web_product_id,
+    r.price_detail
+  from public.web_products wp
+  join public.web_product_batches wpb on wpb.web_product_id = wp.id
+  join public.batches b on b.id = wpb.batch_id
+  join public.recipes r on r.id = b.recipe_id
+  where r.price_detail is not null
+  order by wp.id, b.batch_date, b.created_at, b.id
+)
+update public.web_products wp
+set normal_price = coalesce(wp.normal_price, product_prices.price_detail + 100),
+    promotion_price = coalesce(wp.promotion_price, product_prices.price_detail)
+from product_prices
+where wp.id = product_prices.web_product_id
+  and (wp.normal_price is null or wp.promotion_price is null);
 
 alter table public.web_order_items alter column batch_id drop not null;
 alter table public.web_order_items drop constraint if exists web_order_items_batch_id_fkey;
@@ -1600,12 +1626,13 @@ as $$
               join public.batches b on b.id = wpb.batch_id
               where wpb.web_product_id = wp.id
             ), 0),
-            'price', product_recipe.price_detail,
+            'normal_price', wp.normal_price,
+            'price', wp.promotion_price,
             'soap_weight', product_recipe.soap_weight
           ) as product_data
         from public.web_products wp
         join lateral (
-          select r.price_detail, r.soap_weight
+          select r.soap_weight
           from public.web_product_batches wpb
           join public.batches b on b.id = wpb.batch_id
           join public.recipes r on r.id = b.recipe_id
@@ -1613,7 +1640,7 @@ as $$
           order by b.batch_date, b.created_at, b.id
           limit 1
         ) product_recipe on true
-        where wp.active and product_recipe.price_detail is not null
+        where wp.active and wp.normal_price is not null and wp.promotion_price is not null
       ) products
     ), '[]'::jsonb)
   );
@@ -1674,17 +1701,17 @@ begin
     from jsonb_to_recordset(p_items) as item(product_id uuid, quantity integer)
     left join public.web_products wp on wp.id = item.product_id
     left join lateral (
-      select b.recipe_id, r.price_detail
+      select b.recipe_id, wp.promotion_price
       from public.web_product_batches wpb
       join public.batches b on b.id = wpb.batch_id
-      join public.recipes r on r.id = b.recipe_id
-      where wpb.web_product_id = wp.id
+      where wpb.web_product_id = item.product_id
       order by b.batch_date, b.created_at, b.id
       limit 1
     ) product_recipe on true
     where item.product_id is null or item.quantity is null or item.quantity < 1 or item.quantity > 100
       or wp.id is null or not wp.active
-      or product_recipe.recipe_id is null or product_recipe.price_detail is null
+      or wp.normal_price is null
+      or product_recipe.recipe_id is null or product_recipe.promotion_price is null
       or exists (
         select 1
         from public.web_product_batches wpb
@@ -1725,10 +1752,10 @@ begin
   loop
     v_remaining := v_item.quantity;
     for v_batch in
-      select b.id, b.recipe_id, r.price_detail
+      select b.id, b.recipe_id, wp.promotion_price
       from public.web_product_batches wpb
       join public.batches b on b.id = wpb.batch_id
-      join public.recipes r on r.id = b.recipe_id
+      join public.web_products wp on wp.id = wpb.web_product_id
       where wpb.web_product_id = v_item.product_id
       order by b.batch_date, b.created_at, b.id
     loop
@@ -1739,8 +1766,8 @@ begin
           web_order_id, web_product_id, batch_id, recipe_id, product_name, quantity, unit_price, line_total
         )
         select
-          v_order_id, wp.id, v_batch.id, v_batch.recipe_id, wp.name, v_take, v_batch.price_detail,
-          round(v_batch.price_detail * v_take, 2)
+          v_order_id, wp.id, v_batch.id, v_batch.recipe_id, wp.name, v_take, v_batch.promotion_price,
+          round(v_batch.promotion_price * v_take, 2)
         from public.web_products wp
         where wp.id = v_item.product_id;
         v_remaining := v_remaining - v_take;

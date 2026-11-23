@@ -573,6 +573,17 @@
       color: #ffda67;
       text-shadow: 0 1px 5px rgba(32, 20, 8, 0.5);
     }
+    .product-prices {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-start;
+      gap: 2px;
+    }
+    .product-normal-price {
+      color: rgba(255, 250, 241, 0.78);
+      font-size: 12px;
+      text-decoration: line-through;
+    }
     .price {
       color: var(--gold);
       font-size: 17px;
@@ -1156,6 +1167,7 @@
       margin-bottom: 24px;
     }
     .product-detail-price-row .price { margin: 0; }
+    .product-detail-price-row .product-normal-price { color: #788078; }
     .product-detail-info .product-detail-content { gap: 18px; }
     .product-detail-info > .button {
       align-self: flex-start;
@@ -1970,6 +1982,7 @@
           <span class="eyebrow">Detalles del jabón</span>
           <h2 id="product-modal-title"></h2>
           <div class="product-detail-price-row">
+            <span id="product-modal-normal-price" class="product-normal-price"></span>
             <p id="product-modal-price" class="price"></p>
             <span id="product-modal-availability" class="availability"></span>
           </div>
@@ -2297,6 +2310,7 @@
         : '<span aria-hidden="true">✿</span>';
       document.getElementById('product-modal-title').textContent = product.name || 'Jabón artesanal';
       document.getElementById('product-modal-price').textContent = currency.format(Number(product.price || 0));
+      document.getElementById('product-modal-normal-price').textContent = `Normal: ${currency.format(Number(product.normal_price || 0))}`;
       const available = Math.max(0, Number(product.available || 0));
       const availability = document.getElementById('product-modal-availability');
       availability.textContent = available > 0 ? `${available} disponibles` : 'Agotado';
@@ -2805,7 +2819,7 @@
         return `<article class="product" tabindex="0" data-open-product="${escapeHtml(product.id)}" aria-haspopup="dialog" aria-label="Ver detalles de ${escapeHtml(product.name)}">
           <div class="product-image">${photo ? `<img loading="lazy" src="${escapeHtml(photo)}" alt="${escapeHtml(product.name)}">` : '<span aria-hidden="true">✿</span>'}</div>
           <div class="product-body"><h3>${escapeHtml(product.name)}</h3>
-          <div class="product-meta"><span class="price">${currency.format(Number(product.price || 0))}</span><span class="availability${available < 1 ? ' none' : ''}">${available > 9 ? '9+ disponibles' : available > 0 ? `${available} disponibles` : 'Agotado'}</span></div>
+          <div class="product-meta"><span class="product-prices"><span class="product-normal-price">Normal: ${currency.format(Number(product.normal_price || 0))}</span><span class="price">Oferta: ${currency.format(Number(product.price || 0))}</span></span><span class="availability${available < 1 ? ' none' : ''}">${available > 9 ? '9+ disponibles' : available > 0 ? `${available} disponibles` : 'Agotado'}</span></div>
           <div class="buy-row"><button class="button" type="button" data-add="${escapeHtml(product.id)}" ${available < 1 ? 'disabled' : ''}>Agregar al pedido</button></div></div>
         </article>`;
       }).join('');
