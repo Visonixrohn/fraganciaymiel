@@ -67,12 +67,21 @@ const mobileQuickNavigation = [
 ];
 const navigationTabIds = new Set(navigationGroups.flatMap((group) => group.items.map(([id]) => id)));
 const activeTabStorageKey = 'fragancia-y-miel-active-tab';
+const themeStorageKey = 'fragancia-y-miel-theme';
 function getSavedTab() {
   try {
     const savedTab = window.localStorage.getItem(activeTabStorageKey);
     return navigationTabIds.has(savedTab) ? savedTab : 'materials';
   } catch {
     return 'materials';
+  }
+}
+
+function getSavedTheme() {
+  try {
+    return window.localStorage.getItem(themeStorageKey) === 'dark' ? 'dark' : 'light';
+  } catch {
+    return 'light';
   }
 }
 
@@ -149,10 +158,11 @@ function App() {
   const [unlocked, setUnlocked] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
   const [loading, setLoading] = useState(false);
-  const [deletingInvoice, setDeletingInvoice] = useState(false);
+  const [deletingSale, setDeletingSale] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState(null);
   const [tab, setTab] = useState(getSavedTab);
+  const [theme, setTheme] = useState(getSavedTheme);
   const [installPrompt, setInstallPrompt] = useState(null);
   const [collectionFilter, setCollectionFilter] = useState('pending');
   const [webOrderFilter, setWebOrderFilter] = useState('pending');
@@ -256,6 +266,14 @@ function App() {
       console.warn('No se pudo guardar la vista activa.', storageError);
     }
   }, [tab]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(themeStorageKey, theme);
+    } catch (storageError) {
+      console.warn('No se pudo guardar el tema seleccionado.', storageError);
+    }
+  }, [theme]);
 
   useEffect(() => {
     const handleInstallPrompt = (event) => {
@@ -1564,7 +1582,7 @@ function App() {
     setModal({ kind: 'invoice', sale: invoice });
   }
 
-  async function confirmDeleteInvoice(event) {
+  async function confirmDeleteSale(event) {
     event.preventDefault();
     const form = new FormData(event.currentTarget);
     if (form.get('accessCode') !== ACCESS_CODE) {
@@ -1573,27 +1591,29 @@ function App() {
     }
 
     const sale = modal?.sale;
-    if (!sale || deletingInvoice) return;
-    setDeletingInvoice(true);
-    const { data: deletedInvoice, error: deleteError } = await supabase
+    if (!sale || deletingSale) return;
+    setDeletingSale(true);
+    const { data: deletedSale, error: deleteError } = await supabase
       .from('sales')
       .delete()
       .eq('id', sale.id)
-      .eq('status', 'issued')
+      .eq('status', sale.status)
       .select('id')
       .maybeSingle();
-    setDeletingInvoice(false);
+    setDeletingSale(false);
     if (deleteError) {
       toast(deleteError.message, 'error');
       return;
     }
-    if (!deletedInvoice) {
-      toast('No se encontró la factura para eliminar.', 'error');
+    if (!deletedSale) {
+      toast('No se encontró la venta para eliminar.', 'error');
       return;
     }
 
     setModal(null);
-    toast('Factura eliminada; el inventario disponible se actualizó.');
+    toast(sale.status === 'issued'
+      ? 'Factura eliminada; el inventario disponible se actualizó.'
+      : 'Borrador eliminado.');
     await loadData();
   }
 
@@ -1934,7 +1954,7 @@ function App() {
   if (!isSupabaseConfigured) return <div className="center-screen"><Notice type="error">{error}</Notice></div>;
   if (!unlocked || !session) {
     return (
-      <div className="auth-page">
+      <div className="auth-page" data-theme={theme}>
         <div className="auth-card">
           <div className="brand-mark">
             {brandLogoUrl
@@ -1956,7 +1976,7 @@ function App() {
   }
 
   return (
-    <div className="app-shell">
+    <div className="app-shell" data-theme={theme}>
       <header className="topbar">
         <a className="brand" href="#" onClick={(event) => event.preventDefault()}>
           {brandLogoUrl
@@ -1974,9 +1994,13 @@ function App() {
             onClick={() => setMobileNavOpen(!mobileNavOpen)}
           >☰</button>
           <span className="currency-label">LPS <span>· Lempiras</span></span>
-          <button className="button ghost" onClick={exportData}>↓ <span>Exportar</span></button>
-          <button className="button ghost" onClick={() => document.getElementById('import-backup').click()}>↑ <span>Importar</span></button>
-          <input id="import-backup" className="file-input" type="file" accept="application/json,.json" onChange={importData} />
+          <button
+            type="button"
+            className="button ghost theme-toggle"
+            aria-label={`Cambiar a tema ${theme === 'light' ? 'oscuro' : 'claro'}`}
+            aria-pressed={theme === 'dark'}
+            onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+          >{theme === 'light' ? '☾' : '☀'} <span>{theme === 'light' ? 'Oscuro' : 'Claro'}</span></button>
           <button className="button ghost" onClick={lockApp}>Salir</button>
         </div>
       </header>
@@ -2297,14 +2321,14 @@ function App() {
                             <button className="button primary small" onClick={() => markAsPaid('sales', sale)}>Marcar pagada</button>
                             <button className="button secondary small" onClick={() => markSaleAsLost(sale)}>Marcar perdida</button>
                           </>}
-                          <button
-                            type="button"
-                            className="icon-button danger-text"
-                            aria-label="Eliminar factura"
-                            title="Eliminar factura"
-                            onClick={() => setModal({ kind: 'deleteInvoice', sale })}
-                          >×</button>
                         </>}
+                      <button
+                        type="button"
+                        className="icon-button danger-text"
+                        aria-label={sale.status === 'issued' ? 'Eliminar factura' : 'Eliminar borrador'}
+                        title={sale.status === 'issued' ? 'Eliminar factura' : 'Eliminar borrador'}
+                        onClick={() => setModal({ kind: 'deleteSale', sale })}
+                      >×</button>
                     </td>
                   </tr>
                 ))}
@@ -2760,8 +2784,12 @@ function App() {
               ))}
             </div>
             <div className="mobile-menu-tools">
-              <button type="button" className="button secondary" onClick={exportData}>↓ Descargar respaldo</button>
-              <button type="button" className="button secondary" onClick={() => document.getElementById('import-backup').click()}>↑ Importar respaldo</button>
+              <button
+                type="button"
+                className="button secondary theme-toggle"
+                aria-pressed={theme === 'dark'}
+                onClick={() => setTheme(theme === 'light' ? 'dark' : 'light')}
+              >{theme === 'light' ? '☾ Activar tema oscuro' : '☀ Activar tema claro'}</button>
               <button type="button" className="button ghost" onClick={lockApp}>Salir</button>
             </div>
           </nav>
@@ -2778,7 +2806,7 @@ function App() {
         </button>
       </nav>
 
-      {modal && !['production', 'sale', 'purchase', 'purchaseDetail', 'invoice', 'deleteInvoice', 'completeWebOrder', 'webOrderDetail', 'webProduct', 'customOrder'].includes(modal.kind) && (
+      {modal && !['production', 'sale', 'purchase', 'purchaseDetail', 'invoice', 'deleteSale', 'completeWebOrder', 'webOrderDetail', 'webProduct', 'customOrder'].includes(modal.kind) && (
         <Dialog title={`${modal.item ? 'Editar' : 'Registrar'} ${modal.kind === 'materials' ? 'materia prima' : modal.kind === 'indirects' ? 'insumo indirecto' : 'utensilio'}`} onClose={() => setModal(null)}>
           <form className="stack-form" onSubmit={saveEntity}>
             <Field label="Código"><input required value={modal.values.code} onChange={(e) => setModal({ ...modal, values: { ...modal.values, code: e.target.value } })} /></Field>
@@ -3082,24 +3110,30 @@ function App() {
           </div>
           <div className="dialog-actions no-print">
             <button type="button" className="button secondary" onClick={() => setModal(null)}>Cerrar</button>
-            <button type="button" className="button secondary" onClick={() => setModal({ kind: 'deleteInvoice', sale: modal.sale })}>Eliminar factura</button>
+            <button type="button" className="button secondary" onClick={() => setModal({ kind: 'deleteSale', sale: modal.sale })}>Eliminar factura</button>
             <button type="button" className="button primary" onClick={() => window.print()}>Imprimir / reimprimir</button>
           </div>
         </Dialog>
       )}
-      {modal?.kind === 'deleteInvoice' && (
-        <Dialog title="Confirmar eliminación de factura" onClose={() => { if (!deletingInvoice) setModal(null); }}>
-          <form className="stack-form" onSubmit={confirmDeleteInvoice}>
+      {modal?.kind === 'deleteSale' && (
+        <Dialog
+          title={modal.sale.status === 'issued' ? 'Confirmar eliminación de factura' : 'Confirmar eliminación de borrador'}
+          onClose={() => { if (!deletingSale) setModal(null); }}
+        >
+          <form className="stack-form" onSubmit={confirmDeleteSale}>
             <p className="form-note">
-              Se eliminará la factura {modal.sale.invoice_number}. Esta acción no se puede deshacer; las existencias disponibles se recalcularán.
+              Se eliminará {modal.sale.status === 'issued'
+                ? `la factura ${modal.sale.invoice_number}`
+                : `el borrador VTA-${modal.sale.id.slice(0, 8).toUpperCase()}`}.
+              {' '}Esta acción no se puede deshacer{modal.sale.status === 'issued' ? '; las existencias disponibles se recalcularán.' : '.'}
             </p>
             <Field label="Clave de acceso (la misma que usas para ingresar)">
               <input name="accessCode" type="password" inputMode="numeric" pattern="[0-9]{4}" maxLength="4" autoComplete="off" autoFocus required />
             </Field>
             <div className="dialog-actions">
-              <button type="button" className="button secondary" disabled={deletingInvoice} onClick={() => setModal(null)}>Cancelar</button>
-              <button className="button primary danger-button" disabled={deletingInvoice}>
-                {deletingInvoice ? 'Eliminando…' : 'Confirmar eliminación'}
+              <button type="button" className="button secondary" disabled={deletingSale} onClick={() => setModal(null)}>Cancelar</button>
+              <button className="button primary danger-button" disabled={deletingSale}>
+                {deletingSale ? 'Eliminando…' : 'Confirmar eliminación'}
               </button>
             </div>
           </form>

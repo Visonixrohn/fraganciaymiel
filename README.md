@@ -24,6 +24,7 @@ En **Settings → Pages → Build and deployment**, selecciona **GitHub Actions*
 ## Funciones
 
 - Aplicación web progresiva (PWA): instalable desde navegadores compatibles, con shell y recursos estáticos disponibles sin conexión. La información de negocio se sincroniza con Supabase y requiere conexión; la última vista se conserva en este navegador al recargar.
+- Tema claro u oscuro seleccionable; la preferencia se guarda en el navegador.
 - Navegación organizada por áreas, adaptable a escritorio y móvil; agrupa facturación, cobros, compras y finanzas en **Ventas y finanzas**.
 - Inventario de materias primas con alertas, existencias y costo unitario configurable por gramo, mililitro o pieza.
 - Control de insumos indirectos con unidad física (g/ml/pza), existencias, mínimo de reabastecimiento, consumo por jabón, rendimiento estimado y costo unitario; producción descuenta su consumo real. Control de depreciación de utensilios.
@@ -33,7 +34,7 @@ En **Settings → Pages → Build and deployment**, selecciona **GitHub Actions*
 - Vista **Stock de jabones** con existencias por producto web y detalle de cada lote; el total no duplica lotes.
 - Al eliminar un lote, se cancela cualquier pedido activo que lo use, se conserva el historial y el producto web mantiene los demás lotes asignados.
 - Ventas en borrador y comprobantes internos numerados; al emitirlos valida las existencias de jabones terminados (producción menos ventas), registra la venta y permite imprimir o reimprimir la factura.
-- Finanzas permite filtrar ventas facturadas por fecha y distinguir los totales pagados, pendientes e incobrables; desde Facturación se puede eliminar una factura confirmando el mismo código de acceso usado para ingresar.
+- Finanzas permite filtrar ventas facturadas por fecha y distinguir los totales pagados, pendientes e incobrables; desde Facturación se pueden eliminar facturas y borradores confirmando el mismo código de acceso usado para ingresar.
 - Registro de compras por materia prima, insumo indirecto o utensilio, con proveedor, costo unitario y forma de pago; las compras acumulan stock/costo y rendimiento o vida útil según el tipo.
 - Catálogo público independiente en `storefront.html`, con tarjetas interactivas, carrito de compras modal, disponibilidad por lote, beneficios, composición y modo de uso.
 - Pedidos web: las órdenes pendientes no descuentan existencias; al reservarlas, el sistema valida y aparta unidades de forma atómica. Las pestañas separan pedidos, reservas, ventas y rechazados; entregar un pedido reservado lo convierte en una venta facturada. El contador y las notificaciones incluyen solo pedidos sin reservar.
@@ -41,7 +42,6 @@ En **Settings → Pages → Build and deployment**, selecciona **GitHub Actions*
 - Configuración de nombre, logo, contacto, WhatsApp y presentación del negocio desde el panel. Las imágenes se guardan en el bucket público `jabon`; solo usuarios autenticados pueden subirlas o editarlas.
 - Administración de productos web vinculados a varios lotes producidos, con beneficios, afecciones asociadas, composición y modo de uso. Al registrar producción, se puede seleccionar el producto web compatible para agregar el lote nuevo y sumar sus existencias; los pedidos conservan el lote o lotes que se reservaron. La tienda muestra la disponibilidad acumulada.
 - Cobros pendientes es una lista independiente de recordatorios manuales y no está conectada a ventas. Finanzas incluye ingresos adicionales por concepto, reflejados en el estado de resultados y el balance general de gestión.
-- Exportación de los datos visibles a JSON.
 - Acceso a la interfaz mediante un código y sesión anónima de Supabase; las sesiones anónimas comparten el inventario.
 
 **Importante:** `8863` se valida en React y puede encontrarse inspeccionando los archivos del frontend; es una pantalla de acceso, no una autenticación segura. Todas las sesiones anónimas comparten el mismo inventario y pueden consultar, crear, editar o eliminar sus registros. Por tanto, cualquier persona que pueda abrir la aplicación puede acceder a esos datos; para restringir el acceso, configura autenticación real en Supabase y políticas RLS por usuario. Nunca pongas una clave secreta o `service_role` en React.

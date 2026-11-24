@@ -559,3 +559,173 @@ td { padding: 14px 15px; font-size: 12px; }
   .metric-card { align-items: flex-start; }
   .metric-icon { flex: 0 0 32px; }
 }
+
+[data-theme="dark"] {
+  --green: #edc36a;
+  --green-soft: #364438;
+  --line: #39463e;
+  --muted: #b2beb5;
+  color-scheme: dark;
+}
+
+.app-shell[data-theme="dark"],
+.auth-page[data-theme="dark"] {
+  background: #121914;
+  color: #e7eee8;
+}
+
+.app-shell[data-theme="dark"] .topbar { background: #203a2b; }
+.app-shell[data-theme="dark"] .app-workspace,
+.app-shell[data-theme="dark"] .main-content,
+.app-shell[data-theme="dark"] .sidebar { background: #141c17; }
+.app-shell[data-theme="dark"] .sidebar { border-color: #354139; }
+.app-shell[data-theme="dark"] .nav-group,
+.app-shell[data-theme="dark"] .panel,
+.app-shell[data-theme="dark"] .metric-card,
+.app-shell[data-theme="dark"] .mobile-table-card,
+.app-shell[data-theme="dark"] .mobile-bottom-bar,
+.app-shell[data-theme="dark"] .mobile-menu-item,
+.app-shell[data-theme="dark"] .dialog,
+.app-shell[data-theme="dark"] .mobile-menu-sheet {
+  border-color: #35433a;
+  background: #1b251e;
+  color: #e7eee8;
+}
+.app-shell[data-theme="dark"] .nav-group h2,
+.app-shell[data-theme="dark"] .nav-item { color: #c1ccc3; }
+.app-shell[data-theme="dark"] .nav-group h2 { color: #d7bf82; }
+.app-shell[data-theme="dark"] .nav-item:hover { background: #2a362d; color: #f0d99c; }
+.app-shell[data-theme="dark"] .nav-item.active,
+.app-shell[data-theme="dark"] .mobile-menu-item.active {
+  border-color: #7d6937;
+  background: #3a4536;
+  color: #ffdfa0;
+  box-shadow: inset 3px 0 #edc36a;
+}
+.app-shell[data-theme="dark"] .nav-icon,
+.app-shell[data-theme="dark"] .mobile-menu-icon { color: #edc36a; }
+.app-shell[data-theme="dark"] .mobile-menu-icon { background: #303c31; }
+.app-shell[data-theme="dark"] :is(.section-heading h2, .welcome-row h1, .dialog-heading h2, .mobile-menu-heading h2, .balance-grid h3) {
+  color: #edf2e8;
+}
+.app-shell[data-theme="dark"] .metric-card strong { color: #edf2e8; }
+.app-shell[data-theme="dark"] .metric-warning strong { color: #f0d28e; }
+.app-shell[data-theme="dark"] .metric-warning .metric-icon { background: #493b21; color: #f0d28e; }
+.app-shell[data-theme="dark"] :is(
+  .stack-form label, .dialog label, .sales-search, .sales-filter, .inventory-search,
+  .list-heading h3, .recipe-name strong, .web-product-card-heading h3, .cost-line strong,
+  .logo-preview-card strong, .logo-preview-card small, .mobile-table-card-field
+) { color: #e0e8e1; }
+.app-shell[data-theme="dark"] :is(
+  .section-heading p, .metric-label, .metric-card small, .muted, .footer, .form-note,
+  .inventory-count, .cost-line, .margin-explainer, .price-card small, .ingredient-cost,
+  .resource-item-cost, .sales-intro p, .table-secondary, .mobile-table-card-field > span,
+  .mobile-table-card-title > span, .mobile-menu-group h3, .web-product-normal-price,
+  .recipe-name small, .web-product-card-content > p, .sale-line-price, .report-period label, .opening-form label,
+  .expense-form label, .reminder-form label, .income-form label, .price-input-wrap > span
+) { color: #b2beb5; }
+.app-shell[data-theme="dark"] :is(.section-heading, .section-heading p, .dialog-heading, .dialog-actions) {
+  border-color: #35433a;
+}
+.app-shell[data-theme="dark"] .dialog-heading,
+.app-shell[data-theme="dark"] .dialog-actions { background: #1b251e; }
+.app-shell[data-theme="dark"] :is(.button.secondary, .icon-button) {
+  border-color: #46544a;
+  background: #263229;
+  color: #e1e9e2;
+}
+.app-shell[data-theme="dark"] .icon-button.danger-text { color: #ff9a89; }
+[data-theme="dark"] :is(input, select, textarea) {
+  border-color: #46544a;
+  background: #202b23;
+  color: #edf2ed;
+}
+[data-theme="dark"] :is(input, textarea)::placeholder { color: #9aa79d; }
+[data-theme="dark"] select option { background: #202b23; color: #edf2ed; }
+.app-shell[data-theme="dark"] :is(table, .mobile-table-card-fields) { color: #e2e9e3; }
+.app-shell[data-theme="dark"] th { background: #253128; color: #c5d0c7; }
+.app-shell[data-theme="dark"] td { border-color: #354139; color: #d0dad2; }
+.app-shell[data-theme="dark"] tbody tr:hover { background: #202b23; }
+.app-shell[data-theme="dark"] td.strong,
+.app-shell[data-theme="dark"] .mobile-table-card-title > div { color: #edf2ed; }
+.app-shell[data-theme="dark"] code {
+  border-color: #46544a;
+  background: #263229;
+  color: #e0e9e1;
+}
+.app-shell[data-theme="dark"] :is(.stock-total, .sale-total, .invoice-total, .unit-cost, .mobile-form-launcher) {
+  border-color: #5a4d2d;
+  background: #302d22;
+  color: #f0e2bd;
+}
+.app-shell[data-theme="dark"] .stock-total small { color: #c2bda9; }
+.app-shell[data-theme="dark"] .collection-filter {
+  border-color: #46544a;
+  background: #202b23;
+  color: #d0dad2;
+}
+.app-shell[data-theme="dark"] .collection-filter.active { border-color: #8b7440; background: #3a4536; color: #ffdfa0; }
+.app-shell[data-theme="dark"] .collection-filter span { background: #303c32; color: #e7eee8; }
+.app-shell[data-theme="dark"] :is(.pill.good, .pill.warning, .pill.danger) { border: 1px solid transparent; }
+.app-shell[data-theme="dark"] .pill.good { background: #244333; color: #a9e3bd; }
+.app-shell[data-theme="dark"] .pill.warning { background: #493b21; color: #f0d28e; }
+.app-shell[data-theme="dark"] .pill.danger { background: #4a2d29; color: #ffb6a9; }
+.app-shell[data-theme="dark"] .finance-layout > .panel { box-shadow: 0 5px 18px #00000022; }
+.app-shell[data-theme="dark"] .report-period {
+  border-color: #35433a;
+  background: #1b251e;
+}
+.app-shell[data-theme="dark"] .statement-lines > div { border-color: #354139; color: #d0dad2; }
+.app-shell[data-theme="dark"] .statement-lines > div strong,
+.app-shell[data-theme="dark"] .balance-grid h3 { color: #e9efe9; }
+.app-shell[data-theme="dark"] .statement-lines .statement-subtotal { color: #eef2e8; }
+.app-shell[data-theme="dark"] .balance-check.balanced { color: #a9e3bd; }
+.app-shell[data-theme="dark"] .cost-total { color: #e0e8e1; }
+.app-shell[data-theme="dark"] :is(.reminder-form, .income-form) {
+  border-color: #354139;
+  background: #18221b;
+}
+.app-shell[data-theme="dark"] :is(.price-card, .web-product-card) {
+  border-color: #35433a;
+  background: #202b23;
+}
+.app-shell[data-theme="dark"] .web-product-card-footer { border-color: #354139; color: #b2beb5; }
+.app-shell[data-theme="dark"] .web-product-placeholder { background: #202b23; color: #b2c9b4; }
+.app-shell[data-theme="dark"] .logo-preview-card {
+  border-color: #35433a;
+  background: linear-gradient(110deg, #202b23, #1b251e);
+}
+.app-shell[data-theme="dark"] :is(.logo-preview-card img, .logo-preview-card > span) {
+  border-color: #46544a;
+  background: #263229;
+  color: #c5d0c7;
+}
+.app-shell[data-theme="dark"] .logo-preview-card strong { color: #e7eee8; }
+.app-shell[data-theme="dark"] .mobile-bottom-item { color: #b2beb5; }
+.app-shell[data-theme="dark"] .mobile-bottom-item.active { background: #3a4536; color: #ffdfa0; }
+.app-shell[data-theme="dark"] .mobile-menu-tools { border-color: #354139; }
+.app-shell[data-theme="dark"] .mobile-menu-tools .button.ghost {
+  border-color: #63413b;
+  background: #302421;
+  color: #ffb6a9;
+}
+.app-shell[data-theme="dark"] .mobile-form-section.mobile-form-open .section-heading { background: #1b251e; }
+.app-shell[data-theme="dark"] .notice.error { border-color: #69423b; background: #382723; color: #ffb6a9; }
+.auth-page[data-theme="dark"] .notice.error { border-color: #69423b; background: #382723; color: #ffb6a9; }
+.app-shell[data-theme="dark"] .auth-card,
+.auth-page[data-theme="dark"] .auth-card {
+  border-color: #35433a;
+  background: #1b251e;
+  color: #e7eee8;
+}
+.auth-page[data-theme="dark"] .auth-card h1 { color: #edf2e8; }
+.auth-page[data-theme="dark"] .muted { color: #b2beb5; }
+.auth-page[data-theme="dark"] .auth-footnote { border-color: #354139; color: #b2beb5; }
+.auth-page[data-theme="dark"] .brand-mark { background: #303c31; color: #edc36a; }
+.auth-page[data-theme="dark"] .stack-form label { color: #e0e8e1; }
+.app-shell[data-theme="dark"] .empty-state { color: #b2beb5; }
+.app-shell[data-theme="dark"] .empty-state span { color: #9fbd9f; }
+.app-shell[data-theme="dark"] .report-period,
+.app-shell[data-theme="dark"] .report-period label { color: #d0dad2; }
+.app-shell[data-theme="dark"] .balance-check { color: #ffb6a9; }
+.app-shell[data-theme="dark"] .invoice-paper td { border-color: #e4ebe4; color: #344238; }
