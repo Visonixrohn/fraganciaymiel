@@ -24,7 +24,7 @@ En **Settings → Pages → Build and deployment**, selecciona **GitHub Actions*
 ## Funciones
 
 - Aplicación web progresiva (PWA): instalable desde navegadores compatibles, con shell y recursos estáticos disponibles sin conexión. La información de negocio se sincroniza con Supabase y requiere conexión; la última vista se conserva en este navegador al recargar.
-- Navegación organizada por áreas, adaptable a escritorio y móvil; incluye vistas para recetas, ventas, recordatorios de cobro y reportes financieros.
+- Navegación organizada por áreas, adaptable a escritorio y móvil; agrupa facturación, cobros, compras y finanzas en **Ventas y finanzas**.
 - Inventario de materias primas con alertas, existencias y costo unitario configurable por gramo, mililitro o pieza.
 - Control de insumos indirectos con unidad física (g/ml/pza), existencias, mínimo de reabastecimiento, consumo por jabón, rendimiento estimado y costo unitario; producción descuenta su consumo real. Control de depreciación de utensilios.
 - Creación de recetas con varias materias primas, insumos indirectos y utensilios; las cantidades de materia prima se ingresan por jabón, se multiplican por el tamaño del lote y se muestra el costo por barra.
@@ -33,6 +33,7 @@ En **Settings → Pages → Build and deployment**, selecciona **GitHub Actions*
 - Vista **Stock de jabones** con existencias por producto web y detalle de cada lote; el total no duplica lotes.
 - Al eliminar un lote, se cancela cualquier pedido activo que lo use, se conserva el historial y el producto web mantiene los demás lotes asignados.
 - Ventas en borrador y comprobantes internos numerados; al emitirlos valida las existencias de jabones terminados (producción menos ventas), registra la venta y permite imprimir o reimprimir la factura.
+- Finanzas permite filtrar ventas facturadas por fecha y distinguir los totales pagados, pendientes e incobrables; desde Facturación se puede eliminar una factura confirmando el mismo código de acceso usado para ingresar.
 - Registro de compras por materia prima, insumo indirecto o utensilio, con proveedor, costo unitario y forma de pago; las compras acumulan stock/costo y rendimiento o vida útil según el tipo.
 - Catálogo público independiente en `storefront.html`, con tarjetas interactivas, carrito de compras modal, disponibilidad por lote, beneficios, composición y modo de uso.
 - Pedidos web: las órdenes pendientes no descuentan existencias; al reservarlas, el sistema valida y aparta unidades de forma atómica. Las pestañas separan pedidos, reservas, ventas y rechazados; entregar un pedido reservado lo convierte en una venta facturada. El contador y las notificaciones incluyen solo pedidos sin reservar.

@@ -20,11 +20,17 @@ const navigationGroups = [
     ],
   },
   {
-    label: 'Comercial',
+    label: 'Ventas y finanzas',
     items: [
       ['sales', 'Facturación', '▧'],
       ['collections', 'Cobros pendientes', '＄'],
       ['purchases', 'Compras', '＋'],
+      ['finance', 'Finanzas', '＄'],
+    ],
+  },
+  {
+    label: 'Comercial',
+    items: [
       ['webOrders', 'Pedidos web', '🛍'],
       ['customOrders', 'Pedidos a crear', '✎'],
     ],
@@ -34,7 +40,6 @@ const navigationGroups = [
     items: [
       ['webProducts', 'Productos web', '▣'],
       ['webSettings', 'Configuración web', '⚙'],
-      ['finance', 'Finanzas', '＄'],
     ],
   },
 ];
@@ -144,6 +149,7 @@ function App() {
   const [unlocked, setUnlocked] = useState(false);
   const [authLoading, setAuthLoading] = useState(true);
   const [loading, setLoading] = useState(false);
+  const [deletingInvoice, setDeletingInvoice] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState(null);
   const [tab, setTab] = useState(getSavedTab);
@@ -525,6 +531,9 @@ function App() {
     const withinPeriod = (date) => Boolean(date && date >= reportPeriod.from && date <= reportPeriod.to);
     const periodSales = data.sales.filter((sale) => sale.status === 'issued' && withinPeriod(sale.invoice_date));
     const periodRevenue = periodSales.reduce((sum, sale) => sum + number(sale.total), 0);
+    const paidSales = periodSales.filter((sale) => sale.payment_status === 'paid');
+    const pendingSales = periodSales.filter((sale) => sale.payment_status === 'pending');
+    const lostSales = periodSales.filter((sale) => sale.payment_status === 'lost');
     const periodCost = periodSales.reduce((sum, sale) => sum
       + (sale.sale_items || []).reduce((itemSum, item) => itemSum + number(item.cost_total), 0), 0);
     const periodExpenses = data.expenses
@@ -591,6 +600,13 @@ function App() {
     const assets = cash + receivables + rawInventory + indirectInventory + finishedInventory;
     const equity = number(settings.opening_equity) + retainedEarnings;
     return {
+      periodSales,
+      paidSales: paidSales.reduce((sum, sale) => sum + number(sale.total), 0),
+      paidSalesCount: paidSales.length,
+      pendingSales: pendingSales.reduce((sum, sale) => sum + number(sale.total), 0),
+      pendingSalesCount: pendingSales.length,
+      lostSales: lostSales.reduce((sum, sale) => sum + number(sale.total), 0),
+      lostSalesCount: lostSales.length,
       revenue: periodRevenue,
       additionalIncome: periodAdditionalIncome,
       cost: periodCost,
@@ -1548,6 +1564,39 @@ function App() {
     setModal({ kind: 'invoice', sale: invoice });
   }
 
+  async function confirmDeleteInvoice(event) {
+    event.preventDefault();
+    const form = new FormData(event.currentTarget);
+    if (form.get('accessCode') !== ACCESS_CODE) {
+      toast('La clave de acceso no es válida.', 'error');
+      return;
+    }
+
+    const sale = modal?.sale;
+    if (!sale || deletingInvoice) return;
+    setDeletingInvoice(true);
+    const { data: deletedInvoice, error: deleteError } = await supabase
+      .from('sales')
+      .delete()
+      .eq('id', sale.id)
+      .eq('status', 'issued')
+      .select('id')
+      .maybeSingle();
+    setDeletingInvoice(false);
+    if (deleteError) {
+      toast(deleteError.message, 'error');
+      return;
+    }
+    if (!deletedInvoice) {
+      toast('No se encontró la factura para eliminar.', 'error');
+      return;
+    }
+
+    setModal(null);
+    toast('Factura eliminada; el inventario disponible se actualizó.');
+    await loadData();
+  }
+
   function exportData() {
     const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const link = document.createElement('a');
@@ -2218,10 +2267,10 @@ function App() {
                   <select value={salesFilter} onChange={(event) => setSalesFilter(event.target.value)}>
                     <option value="all">Todos los estados</option>
                     <option value="draft">Borrador</option>
-                    <option value="issued">Facturado</option>
-                    <option value="paid">Pagado</option>
-                    <option value="pending">Pendiente de cobro</option>
-                    <option value="lost">Perdida</option>
+                    <option value="issued">Todos los facturados</option>
+                    <option value="paid">Facturado · Pagado</option>
+                    <option value="pending">Facturado · Pendiente</option>
+                    <option value="lost">Facturado · Incobrable</option>
                   </select>
                 </label>
               </div>
@@ -2248,6 +2297,13 @@ function App() {
                             <button className="button primary small" onClick={() => markAsPaid('sales', sale)}>Marcar pagada</button>
                             <button className="button secondary small" onClick={() => markSaleAsLost(sale)}>Marcar perdida</button>
                           </>}
+                          <button
+                            type="button"
+                            className="icon-button danger-text"
+                            aria-label="Eliminar factura"
+                            title="Eliminar factura"
+                            onClick={() => setModal({ kind: 'deleteInvoice', sale })}
+                          >×</button>
                         </>}
                     </td>
                   </tr>
@@ -2537,6 +2593,30 @@ function App() {
               </div>
             </Section>
             <Section
+              title="Ventas facturadas del período"
+              subtitle={`Facturas emitidas entre ${reportPeriod.from} y ${reportPeriod.to}`}
+            >
+              <div className="metrics-grid finance-sales-summary">
+                <Metric label="Total facturado" value={money(reports.revenue)} detail={`${reports.periodSales.length} facturas`} icon="▧" />
+                <Metric label="Facturado · pagado" value={money(reports.paidSales)} detail={`${reports.paidSalesCount} facturas`} icon="✓" />
+                <Metric label="Facturado · pendiente" value={money(reports.pendingSales)} detail={`${reports.pendingSalesCount} facturas`} icon="◷" warning={reports.pendingSalesCount > 0} />
+                <Metric label="Facturado · incobrable" value={money(reports.lostSales)} detail={`${reports.lostSalesCount} facturas`} icon="!" warning={reports.lostSalesCount > 0} />
+              </div>
+              <Table headers={['Fecha', 'Factura', 'Cliente', 'Importe', 'Estado de pago']}>
+                {reports.periodSales.map((sale) => (
+                  <tr key={sale.id}>
+                    <td>{new Date(`${sale.invoice_date}T12:00:00`).toLocaleDateString('es-HN')}</td>
+                    <td><code>{sale.invoice_number}</code></td>
+                    <td className="strong">{sale.customer_name}</td>
+                    <td className="green">{money(sale.total)}</td>
+                    <td><span className={`pill ${sale.payment_status === 'paid' ? 'good' : sale.payment_status === 'lost' ? 'danger' : 'warning'}`}>
+                      {paymentStatusLabels[sale.payment_status] || sale.payment_status}
+                    </span></td>
+                  </tr>
+                ))}
+              </Table>
+            </Section>
+            <Section
               title="Registrar ingreso adicional"
               subtitle="Registra conceptos ajenos a ventas; se incluyen en resultados y en el balance"
               className={`mobile-form-section${mobileFormOpen === 'additionalIncome' ? ' mobile-form-open' : ''}`}
@@ -2698,7 +2778,7 @@ function App() {
         </button>
       </nav>
 
-      {modal && !['production', 'sale', 'purchase', 'purchaseDetail', 'invoice', 'completeWebOrder', 'webOrderDetail', 'webProduct', 'customOrder'].includes(modal.kind) && (
+      {modal && !['production', 'sale', 'purchase', 'purchaseDetail', 'invoice', 'deleteInvoice', 'completeWebOrder', 'webOrderDetail', 'webProduct', 'customOrder'].includes(modal.kind) && (
         <Dialog title={`${modal.item ? 'Editar' : 'Registrar'} ${modal.kind === 'materials' ? 'materia prima' : modal.kind === 'indirects' ? 'insumo indirecto' : 'utensilio'}`} onClose={() => setModal(null)}>
           <form className="stack-form" onSubmit={saveEntity}>
             <Field label="Código"><input required value={modal.values.code} onChange={(e) => setModal({ ...modal, values: { ...modal.values, code: e.target.value } })} /></Field>
@@ -3002,8 +3082,27 @@ function App() {
           </div>
           <div className="dialog-actions no-print">
             <button type="button" className="button secondary" onClick={() => setModal(null)}>Cerrar</button>
+            <button type="button" className="button secondary" onClick={() => setModal({ kind: 'deleteInvoice', sale: modal.sale })}>Eliminar factura</button>
             <button type="button" className="button primary" onClick={() => window.print()}>Imprimir / reimprimir</button>
           </div>
+        </Dialog>
+      )}
+      {modal?.kind === 'deleteInvoice' && (
+        <Dialog title="Confirmar eliminación de factura" onClose={() => { if (!deletingInvoice) setModal(null); }}>
+          <form className="stack-form" onSubmit={confirmDeleteInvoice}>
+            <p className="form-note">
+              Se eliminará la factura {modal.sale.invoice_number}. Esta acción no se puede deshacer; las existencias disponibles se recalcularán.
+            </p>
+            <Field label="Clave de acceso (la misma que usas para ingresar)">
+              <input name="accessCode" type="password" inputMode="numeric" pattern="[0-9]{4}" maxLength="4" autoComplete="off" autoFocus required />
+            </Field>
+            <div className="dialog-actions">
+              <button type="button" className="button secondary" disabled={deletingInvoice} onClick={() => setModal(null)}>Cancelar</button>
+              <button className="button primary danger-button" disabled={deletingInvoice}>
+                {deletingInvoice ? 'Eliminando…' : 'Confirmar eliminación'}
+              </button>
+            </div>
+          </form>
         </Dialog>
       )}
       {modal?.kind === 'completeWebOrder' && (

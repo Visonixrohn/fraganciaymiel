@@ -37,6 +37,8 @@ button { cursor: pointer; }
 .button.primary { color: #392400; background: var(--green); }
 .button.primary:hover { background: #d28f00; }
 .button.secondary { color: #46564d; background: white; border-color: var(--line); }
+.button.danger-button { color: white; background: #a54838; }
+.button.danger-button:hover { background: #8f3d30; }
 .button.ghost { min-height: 34px; padding: 0 11px; border-color: #b9821c; background: transparent; color: white; }
 .button.ghost:hover { background: #ffffff16; }
 .button.small { min-height: 36px; font-size: 11px; }
@@ -194,6 +196,7 @@ input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--green); 
 .invoice-total { margin-top: 16px; }
 .invoice-thanks { margin: 20px 0 0; color: var(--green); font: 700 14px "Playfair Display", serif; text-align: center; }
 .finance-layout { display: grid; gap: 16px; }
+.finance-sales-summary { padding: 16px 19px 0; margin: 0; }
 .web-admin-layout { display: grid; gap: 16px; }
 .web-editor { padding: 20px; }
 .web-product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(270px, 1fr)); gap: 14px; padding: 18px; }
