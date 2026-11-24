@@ -151,6 +151,8 @@ function App() {
   const [collectionFilter, setCollectionFilter] = useState('pending');
   const [webOrderFilter, setWebOrderFilter] = useState('pending');
   const [customOrderFilter, setCustomOrderFilter] = useState('pending');
+  const [salesSearch, setSalesSearch] = useState('');
+  const [salesFilter, setSalesFilter] = useState('all');
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [mobileFormOpen, setMobileFormOpen] = useState(null);
   const [materialSearch, setMaterialSearch] = useState('');
@@ -420,6 +422,22 @@ function App() {
   const pendingCollectionsTotal = useMemo(() => data.collectionReminders
     .filter((reminder) => reminder.status === 'pending')
     .reduce((sum, reminder) => sum + number(reminder.amount), 0), [data.collectionReminders]);
+  const visibleSales = useMemo(() => {
+    const query = salesSearch.trim().toLocaleLowerCase('es');
+    return data.sales.filter((sale) => {
+      if (salesFilter === 'draft' || salesFilter === 'issued') {
+        if (sale.status !== salesFilter) return false;
+      } else if (salesFilter !== 'all'
+        && (sale.status !== 'issued' || sale.payment_status !== salesFilter)) return false;
+      const invoiceNumber = sale.invoice_number || `VTA-${sale.id.slice(0, 8).toUpperCase()}`;
+      return !query || [
+        invoiceNumber,
+        sale.customer_name,
+        sale.customer_phone,
+        ...(sale.sale_items || []).map((item) => item.recipe_name),
+      ].some((value) => String(value || '').toLocaleLowerCase('es').includes(query));
+    });
+  }, [data.sales, salesFilter, salesSearch]);
 
   function openMobileForm(formId) {
     if (window.matchMedia('(max-width: 900px)').matches) setMobileFormOpen(formId);
@@ -427,10 +445,19 @@ function App() {
 
   const soapStockRows = useMemo(() => data.webProducts.flatMap((product) => {
     const batches = getWebProductBatches(product);
-    return batches.length
-      ? batches.map((batch) => ({ product, batch, available: availableWebBatchStock(batch) }))
+    const availableBatches = batches
+      .map((batch) => ({ product, batch, available: availableWebBatchStock(batch) }))
+      .filter((row) => row.available > 0);
+    return availableBatches.length
+      ? availableBatches
       : [{ product, batch: null, available: 0 }];
   }), [data]);
+  const saleProducts = useMemo(() => data.webProducts.map((product) => ({
+    product,
+    recipe: getWebProductRecipe(product),
+  })).filter(({ product, recipe }) => recipe
+    && priceTypes.some(([value]) => recipe.prices[value] != null)
+    && (product.promotion_price != null || product.normal_price != null)), [data]);
   const soapStockTotal = useMemo(() => {
     const batches = new Map(
       soapStockRows.filter((row) => row.batch).map((row) => [row.batch.id, row.batch]),
@@ -489,10 +516,10 @@ function App() {
   const saleDraftTotal = useMemo(() => {
     if (!saleDraft) return 0;
     return saleDraft.items.reduce((total, item) => {
-      const product = data.recipes.find((entry) => entry.id === item.recipeId);
-      return total + number(product?.prices?.[item.priceType]) * number(item.quantity);
+      const { product } = saleProducts.find(({ product: entry }) => entry.id === item.webProductId) || {};
+      return total + number(product?.promotion_price ?? product?.normal_price) * number(item.quantity);
     }, 0);
-  }, [data.recipes, saleDraft]);
+  }, [saleProducts, saleDraft]);
 
   const reports = useMemo(() => {
     const withinPeriod = (date) => Boolean(date && date >= reportPeriod.from && date <= reportPeriod.to);
@@ -605,6 +632,15 @@ function App() {
     return (product.web_product_batches || [])
       .map((link) => data.batches.find((batch) => batch.id === link.batch_id))
       .filter(Boolean);
+  }
+
+  function getWebProductRecipe(product) {
+    const batches = getWebProductBatches(product)
+      .sort((a, b) => String(a.batch_date).localeCompare(String(b.batch_date))
+        || String(a.created_at).localeCompare(String(b.created_at))
+        || String(a.id).localeCompare(String(b.id)));
+    const recipeIds = [...new Set(batches.map((batch) => batch.recipe_id))];
+    return recipeIds.map((id) => data.recipes.find((recipeItem) => recipeItem.id === id)).find(Boolean) || null;
   }
 
   function availableWebBatchStock(batch) {
@@ -1159,9 +1195,10 @@ function App() {
         paymentMethod: sale.payment_method,
         paymentStatus: sale.payment_status,
         items: (sale.sale_items || []).map((item) => ({
-          recipeId: item.recipe_id,
+          webProductId: (saleProducts.find(({ product, recipe }) => recipe.id === item.recipe_id
+            && product.name === item.recipe_name)
+            || saleProducts.find(({ recipe }) => recipe.id === item.recipe_id))?.product.id || '',
           quantity: String(item.quantity),
-          priceType: item.price_type,
         })),
       }
       : {
@@ -1170,7 +1207,7 @@ function App() {
         customerPhone: '',
         paymentMethod: 'cash',
         paymentStatus: defaultPaymentStatus,
-        items: [{ recipeId: '', quantity: '1', priceType: 'detail' }],
+        items: [{ webProductId: '', quantity: '1' }],
       });
     setModal({ kind: 'sale' });
   }
@@ -1392,28 +1429,96 @@ function App() {
 
   async function saveSalesOrder(event) {
     event.preventDefault();
-    const items = saleDraft.items
-      .filter((item) => item.recipeId)
-      .map((item) => ({
-        recipe_id: item.recipeId,
+    const items = saleDraft.items.map((item) => {
+      const { product, recipe } = saleProducts.find(({ product: entry }) => entry.id === item.webProductId) || {};
+      const priceType = recipe && priceTypes.find(([value]) => recipe.prices[value] != null)?.[0];
+      return {
+        product,
+        recipe,
         quantity: number(item.quantity),
-        price_type: item.priceType,
-      }));
-    if (!items.length || items.some((item) => item.quantity < 1)) {
-      toast('Agrega productos y cantidades válidas a la venta.', 'error');
+        priceType,
+        unitPrice: number(product?.promotion_price ?? product?.normal_price),
+      };
+    });
+    if (!items.length || items.some((item) => (
+      !item.product || !item.recipe || !item.priceType || !Number.isInteger(item.quantity) || item.quantity < 1
+      || !Number.isFinite(item.unitPrice) || item.unitPrice < 0
+    ))) {
+      toast('Selecciona productos web vinculados a una receta, con precio válido, y cantidades enteras positivas.', 'error');
       return;
     }
 
-    const { error: saveError } = await supabase.rpc('save_sales_order', {
+    const { data: savedSaleId, error: saveError } = await supabase.rpc('save_sales_order', {
       p_sale_id: saleDraft.id || null,
       p_customer_name: saleDraft.customerName.trim() || null,
       p_customer_phone: saleDraft.customerPhone.trim() || null,
       p_payment_method: saleDraft.paymentMethod,
       p_payment_status: saleDraft.paymentStatus,
-      p_items: items,
+      p_items: items.map((item) => ({
+        recipe_id: item.recipe.id,
+        quantity: item.quantity,
+        price_type: item.priceType,
+      })),
     });
     if (saveError) {
       toast(saveError.message, 'error');
+      return;
+    }
+    if (!savedSaleId) {
+      toast('La venta se guardó, pero no se recibió su identificador para terminar de preparar el borrador.', 'error');
+      return;
+    }
+
+    const { data: savedItems, error: savedItemsError } = await supabase
+      .from('sale_items')
+      .select('id, recipe_id, quantity, price_type')
+      .eq('sale_id', savedSaleId);
+    if (savedItemsError || !savedItems || savedItems.length !== items.length) {
+      toast(`La venta se guardó, pero no se pudieron aplicar los nombres y precios de la tienda${savedItemsError ? `: ${savedItemsError.message}` : '.'}`, 'error');
+      setSaleDraft({ ...saleDraft, id: savedSaleId });
+      await loadData();
+      return;
+    }
+
+    const itemQueues = new Map();
+    items.forEach((item) => {
+      const key = JSON.stringify([item.recipe.id, item.quantity, item.priceType]);
+      itemQueues.set(key, [...(itemQueues.get(key) || []), item]);
+    });
+    const updates = savedItems.map((savedItem) => {
+      const key = JSON.stringify([savedItem.recipe_id, savedItem.quantity, savedItem.price_type]);
+      const item = itemQueues.get(key)?.shift();
+      if (!item) return null;
+      const lineTotal = Math.round(item.unitPrice * item.quantity * 100) / 100;
+      return supabase.from('sale_items').update({
+        recipe_name: item.product.name,
+        unit_price: item.unitPrice,
+        line_total: lineTotal,
+      }).eq('id', savedItem.id);
+    });
+    if (updates.some((update) => !update)) {
+      toast('La venta se guardó, pero no se pudieron relacionar sus productos con la tienda. Revisa el borrador antes de emitir.', 'error');
+      setSaleDraft({ ...saleDraft, id: savedSaleId });
+      await loadData();
+      return;
+    }
+    const updateResults = await Promise.all(updates);
+    const failedUpdate = updateResults.find(({ error: updateError }) => updateError);
+    if (failedUpdate) {
+      toast(`La venta se guardó, pero no se pudieron aplicar los precios de tienda: ${failedUpdate.error.message}`, 'error');
+      setSaleDraft({ ...saleDraft, id: savedSaleId });
+      await loadData();
+      return;
+    }
+    const total = items.reduce((sum, item) => sum + Math.round(item.unitPrice * item.quantity * 100) / 100, 0);
+    const { error: totalError } = await supabase.from('sales')
+      .update({ subtotal: total, total })
+      .eq('id', savedSaleId)
+      .eq('status', 'draft');
+    if (totalError) {
+      toast(`Los precios de tienda se aplicaron, pero no se pudo actualizar el total de la venta: ${totalError.message}`, 'error');
+      setSaleDraft({ ...saleDraft, id: savedSaleId });
+      await loadData();
       return;
     }
     setModal(null);
@@ -2098,8 +2203,30 @@ function App() {
               </div>
             </Section>
             <Section title="Registro de ventas" subtitle={`${data.sales.length} ventas y borradores registrados`}>
+              <div className="sales-toolbar">
+                <label className="sales-search">
+                  <span>Buscar venta</span>
+                  <input
+                    type="search"
+                    value={salesSearch}
+                    onChange={(event) => setSalesSearch(event.target.value)}
+                    placeholder="Factura, cliente o producto…"
+                  />
+                </label>
+                <label className="sales-filter">
+                  <span>Filtrar por estado</span>
+                  <select value={salesFilter} onChange={(event) => setSalesFilter(event.target.value)}>
+                    <option value="all">Todos los estados</option>
+                    <option value="draft">Borrador</option>
+                    <option value="issued">Facturado</option>
+                    <option value="paid">Pagado</option>
+                    <option value="pending">Pendiente de cobro</option>
+                    <option value="lost">Perdida</option>
+                  </select>
+                </label>
+              </div>
               <Table headers={['N.º / venta', 'Fecha', 'Cliente', 'Unidades', 'Total', 'Estado', 'Acciones']}>
-                {data.sales.map((sale) => (
+                {visibleSales.map((sale) => (
                   <tr key={sale.id}>
                     <td><code>{sale.invoice_number || `VTA-${sale.id.slice(0, 8).toUpperCase()}`}</code></td>
                     <td>{new Date(`${sale.invoice_date || sale.created_at.slice(0, 10)}T12:00:00`).toLocaleDateString('es-HN')}</td>
@@ -2125,6 +2252,9 @@ function App() {
                     </td>
                   </tr>
                 ))}
+                {visibleSales.length === 0 && (
+                  <tr><td colSpan="7"><Empty text={data.sales.length ? 'No se encontraron ventas con esos filtros.' : 'Todavía no hay ventas registradas.'} /></td></tr>
+                )}
               </Table>
             </Section>
           </div>
@@ -2702,30 +2832,29 @@ function App() {
               </select>
             </Field>
             <div className="sale-lines">
-              <div className="list-heading"><h3>Productos</h3><button type="button" className="text-button" onClick={() => setSaleDraft({ ...saleDraft, items: [...saleDraft.items, { recipeId: '', quantity: '1', priceType: 'detail' }] })}>＋ Agregar producto</button></div>
+              <div className="list-heading"><h3>Productos</h3><button type="button" className="text-button" onClick={() => setSaleDraft({ ...saleDraft, items: [...saleDraft.items, { webProductId: '', quantity: '1' }] })}>＋ Agregar producto</button></div>
+              {saleProducts.length === 0 && <p className="form-note">No hay productos web vinculados a una receta con precio. Vincula un lote y configura el precio de la receta para poder facturarlos.</p>}
               {saleDraft.items.map((item, index) => {
-                const product = data.recipes.find((entry) => entry.id === item.recipeId);
-                const selectedPrice = product?.prices?.[item.priceType];
+                const { product, recipe } = saleProducts.find(({ product: entry }) => entry.id === item.webProductId) || {};
+                const selectedPrice = product?.promotion_price ?? product?.normal_price;
                 return (
-                  <div className="sale-item-row" key={`${index}-${item.recipeId}`}>
-                    <select aria-label="Producto" value={item.recipeId} required onChange={(event) => setSaleDraft({
+                  <div className="sale-item-row" key={`${index}-${item.webProductId}`}>
+                    <select aria-label="Producto web" value={item.webProductId} required onChange={(event) => setSaleDraft({
                       ...saleDraft,
-                      items: saleDraft.items.map((row, rowIndex) => rowIndex === index ? { ...row, recipeId: event.target.value } : row),
+                      items: saleDraft.items.map((row, rowIndex) => rowIndex === index ? { ...row, webProductId: event.target.value } : row),
                     })}>
-                      <option value="" disabled>Selecciona un jabón</option>
-                      {data.recipes.map((recipeItem) => <option key={recipeItem.id} value={recipeItem.id}>{recipeItem.name}</option>)}
-                    </select>
-                    <select aria-label="Precio" value={item.priceType} onChange={(event) => setSaleDraft({
-                      ...saleDraft,
-                      items: saleDraft.items.map((row, rowIndex) => rowIndex === index ? { ...row, priceType: event.target.value } : row),
-                    })}>
-                      {priceTypes.map(([value, label]) => <option key={value} value={value} disabled={product?.prices?.[value] == null}>{label}</option>)}
+                      <option value="" disabled>Selecciona un producto web</option>
+                      {saleProducts.map(({ product: webProduct }) => <option key={webProduct.id} value={webProduct.id}>
+                        {webProduct.name} · {money(webProduct.promotion_price ?? webProduct.normal_price)}
+                      </option>)}
                     </select>
                     <input aria-label="Cantidad" placeholder="Cant." type="number" min="1" step="1" required value={item.quantity} onChange={(event) => setSaleDraft({
                       ...saleDraft,
                       items: saleDraft.items.map((row, rowIndex) => rowIndex === index ? { ...row, quantity: event.target.value } : row),
                     })} />
-                    <span className="sale-line-price">{product ? `Disp. ${availableFinishedStock(product.id)} · ${selectedPrice == null ? 'Sin precio' : money(selectedPrice)}` : '—'}</span>
+                    <span className="sale-line-price">{product
+                      ? `Disp. ${availableFinishedStock(recipe.id)} · ${money(selectedPrice)}${product.promotion_price != null && product.normal_price != null ? ` (Normal ${money(product.normal_price)})` : ''}`
+                      : '—'}</span>
                     <button type="button" className="icon-button danger-text" aria-label="Quitar producto" onClick={() => setSaleDraft({
                       ...saleDraft,
                       items: saleDraft.items.filter((_, rowIndex) => rowIndex !== index),
@@ -2735,7 +2864,7 @@ function App() {
               })}
             </div>
             <div className="sale-total"><span>Total de la venta</span><strong>{money(saleDraftTotal)}</strong></div>
-            <p className="form-note">La venta queda en borrador. Al emitir la factura se verifica y descuenta el stock de jabones terminados.</p>
+            <p className="form-note">Se usa el precio promocional de la tienda (o el normal si no hay promoción). La venta queda en borrador; al emitirla se verifica y descuenta el stock de la receta vinculada.</p>
             <div className="dialog-actions">
               <button type="button" className="button secondary" onClick={() => { setModal(null); setSaleDraft(null); }}>Cancelar</button>
               <button className="button primary">Guardar venta</button>

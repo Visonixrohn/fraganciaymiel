@@ -148,6 +148,11 @@ input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--green); 
 .sales-intro { display: flex; align-items: center; gap: 13px; padding: 16px 21px; }
 .sales-intro p { margin: 0; color: #69766d; font-size: 11px; line-height: 1.6; }
 .sales-intro-icon { display: grid; width: 38px; height: 38px; flex: 0 0 38px; place-items: center; border-radius: 50%; background: var(--green-soft); color: var(--green); font-size: 19px; }
+.sales-toolbar { display: flex; align-items: flex-end; gap: 14px; padding: 15px 19px; border-bottom: 1px solid var(--line); }
+.sales-search, .sales-filter { display: grid; gap: 6px; color: #536157; font-size: 10px; font-weight: 600; }
+.sales-search { width: min(100%, 390px); }
+.sales-filter { width: min(100%, 220px); }
+.sales-search input, .sales-filter select { height: 37px; }
 .footer { padding: 25px 0 0; color: #98a19b; font-size: 10px; text-align: center; }
 .footer span { color: #bdc9be; }
 .loading-inline { padding: 9px 13px; margin-bottom: 13px; border-radius: 6px; background: #fff4d8; color: #805a12; font-size: 11px; }
@@ -165,7 +170,7 @@ input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--green); 
 .dialog-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 5px; }
 .form-note { margin: 0; color: #738078; font-size: 10px; line-height: 1.6; }
 .sale-lines { display: grid; gap: 11px; }
-.sale-item-row { display: grid; grid-template-columns: minmax(150px, 1fr) 120px 82px minmax(105px, auto) 30px; gap: 8px; align-items: center; }
+.sale-item-row { display: grid; grid-template-columns: minmax(150px, 1fr) 82px minmax(105px, auto) 30px; gap: 8px; align-items: center; }
 .purchase-item-row { display: grid; grid-template-columns: minmax(120px, .8fr) minmax(150px, 1fr) 85px 120px minmax(100px, auto) 30px; gap: 8px; align-items: center; }
 .sale-item-row select, .sale-item-row input { height: 36px; font-size: 10px; }
 .purchase-item-row select, .purchase-item-row input { height: 36px; font-size: 10px; }
@@ -279,6 +284,8 @@ input[type="checkbox"] { width: 16px; height: 16px; accent-color: var(--green); 
   .inventory-toolbar { align-items: stretch; flex-direction: column; padding: 13px 15px; }
   .inventory-search { width: 100%; }
   .inventory-count { padding-bottom: 0; }
+  .sales-toolbar { align-items: stretch; flex-direction: column; padding: 13px 15px; }
+  .sales-search, .sales-filter { width: 100%; }
   .form-grid { gap: 9px; }
   .recipe-editor > .stack-form { padding: 15px; }
   .auth-card { padding: 29px 22px; }
