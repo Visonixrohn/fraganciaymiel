@@ -327,11 +327,25 @@ create table if not exists public.custom_orders (
   fragrance text not null check (length(btrim(fragrance)) > 0),
   color text not null check (length(btrim(color)) > 0),
   quantity integer not null check (quantity > 0),
+  order_value numeric(14, 2) not null default 0 check (order_value >= 0),
   created_at timestamptz not null default now()
 );
 
 alter table public.custom_orders
   add column if not exists status text not null default 'pending';
+alter table public.custom_orders
+  add column if not exists order_value numeric(14, 2) not null default 0 check (order_value >= 0);
+
+create table if not exists public.promotion_events (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  event_date date not null,
+  activity text not null check (length(btrim(activity)) > 0),
+  resources text not null default '',
+  objective text not null default '',
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
 
 do $$
 begin
@@ -575,6 +589,7 @@ create index if not exists web_order_items_batch_idx on public.web_order_items(b
 create index if not exists manual_reservations_status_date_idx on public.manual_reservations(status, reservation_date desc);
 create index if not exists business_loans_date_idx on public.business_loans(loan_date desc);
 create index if not exists business_loan_repayments_loan_idx on public.business_loan_repayments(business_loan_id, payment_date);
+create index if not exists promotion_events_date_idx on public.promotion_events(event_date);
 
 alter table public.materials enable row level security;
 alter table public.indirects enable row level security;
@@ -599,6 +614,7 @@ alter table public.web_orders enable row level security;
 alter table public.web_order_items enable row level security;
 alter table public.manual_reservations enable row level security;
 alter table public.custom_orders enable row level security;
+alter table public.promotion_events enable row level security;
 alter table public.business_loans enable row level security;
 alter table public.business_loan_repayments enable row level security;
 
@@ -700,6 +716,10 @@ drop policy if exists "Authenticated users manage custom orders" on public.custo
 create policy "Authenticated users manage custom orders" on public.custom_orders
   for all to authenticated using (true) with check (true);
 
+drop policy if exists "Authenticated users manage promotion events" on public.promotion_events;
+create policy "Authenticated users manage promotion events" on public.promotion_events
+  for all to authenticated using (true) with check (true);
+
 drop policy if exists "Authenticated users manage business loans" on public.business_loans;
 create policy "Authenticated users manage business loans" on public.business_loans
   for all to authenticated using (true) with check (true);
@@ -725,6 +745,7 @@ $$;
 grant select, insert, update, delete on public.materials, public.indirects, public.utensils, public.recipes, public.recipe_items, public.recipe_indirects, public.recipe_utensils, public.batches, public.sales, public.sale_items, public.purchases, public.purchase_items, public.expenses, public.additional_incomes, public.collection_reminders, public.finance_settings, public.web_settings, public.web_products, public.web_product_batches, public.manual_reservations, public.business_loans, public.business_loan_repayments to authenticated;
 grant select on public.web_orders, public.web_order_items to authenticated;
 grant select, insert, update, delete on public.custom_orders to authenticated;
+grant select, insert, update, delete on public.promotion_events to authenticated;
 grant usage, select on sequence public.sales_invoice_number_seq, public.purchases_number_seq, public.web_order_number_seq to authenticated;
 
 insert into storage.buckets (id, name, public)

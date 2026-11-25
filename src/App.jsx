@@ -3,6 +3,12 @@ import { isSupabaseConfigured, supabase } from './supabase.js';
 
 const navigationGroups = [
   {
+    label: 'Inicio',
+    items: [
+      ['dashboard', 'Dashboard', '▦'],
+    ],
+  },
+  {
     label: 'Inventario',
     items: [
       ['soapStock', 'Stock de jabones', '▦'],
@@ -36,11 +42,13 @@ const navigationGroups = [
       ['webOrders', 'Pedidos web', '🛍'],
       ['reservations', 'Reservaciones', '◷'],
       ['customOrders', 'Pedidos a crear', '✎'],
+      ['marketing', 'Venta y promoción', '◷'],
     ],
   },
   {
     label: 'Administración',
     items: [
+      ['settings', 'Configuraciones', '⚙'],
       ['webProducts', 'Productos web', '▣'],
       ['webSettings', 'Configuración web', '⚙'],
     ],
@@ -68,15 +76,48 @@ const mobileQuickNavigation = [
   ['recipes', 'Recetas', '⌗'],
   ['customOrders', 'Pedidos', '✎'],
 ];
-const navigationTabIds = new Set(navigationGroups.flatMap((group) => group.items.map(([id]) => id)));
-const activeTabStorageKey = 'fragancia-y-miel-active-tab';
 const themeStorageKey = 'fragancia-y-miel-theme';
-function getSavedTab() {
+const preferencesStorageKey = 'fragancia-y-miel-preferences';
+const defaultPreferences = {
+  accentColor: '#e6a000',
+  fontFamily: '"DM Sans", sans-serif',
+  fontScale: 1,
+  navigationPosition: 'left',
+};
+const accentPresets = [
+  ['#e6a000', 'Miel'],
+  ['#28865a', 'Bosque'],
+  ['#3478bd', 'Océano'],
+  ['#aa536f', 'Rosa'],
+  ['#7652a8', 'Violeta'],
+];
+const fontOptions = [
+  ['"DM Sans", sans-serif', 'DM Sans'],
+  ['Arial, sans-serif', 'Arial'],
+  ['Georgia, serif', 'Georgia'],
+  ['"Trebuchet MS", sans-serif', 'Trebuchet MS'],
+  ['system-ui, sans-serif', 'Sistema'],
+];
+const navigationPositions = [
+  ['left', 'Izquierda'],
+  ['right', 'Derecha'],
+  ['header', 'Header'],
+  ['bottom', 'Parte inferior'],
+];
+
+function getSavedPreferences() {
   try {
-    const savedTab = window.localStorage.getItem(activeTabStorageKey);
-    return navigationTabIds.has(savedTab) ? savedTab : 'materials';
+    const saved = JSON.parse(window.localStorage.getItem(preferencesStorageKey) || '{}');
+    const allowedFonts = new Set(fontOptions.map(([value]) => value));
+    const allowedPositions = new Set(navigationPositions.map(([value]) => value));
+    return {
+      accentColor: /^#[0-9a-f]{6}$/i.test(saved.accentColor) ? saved.accentColor : defaultPreferences.accentColor,
+      fontFamily: allowedFonts.has(saved.fontFamily) ? saved.fontFamily : defaultPreferences.fontFamily,
+      fontScale: [0.9, 1, 1.1, 1.2].includes(saved.fontScale) ? saved.fontScale : defaultPreferences.fontScale,
+      navigationPosition: allowedPositions.has(saved.navigationPosition) ? saved.navigationPosition : defaultPreferences.navigationPosition,
+    };
   } catch {
-    return 'materials';
+    return defaultPreferences;
   }
 }
 
@@ -91,6 +132,7 @@ function getSavedTheme() {
 const money = (value) => `L ${Number(value || 0).toFixed(2)}`;
 const unitMoney = (value) => `L ${new Intl.NumberFormat('es-HN', { minimumFractionDigits: 2, maximumFractionDigits: 6 }).format(Number(value || 0))}`;
 const number = (value) => Number(value || 0);
+const dateKey = (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
 const today = new Date().toISOString().slice(0, 10);
 const makeCode = () => `LOTE-${new Date().toISOString().slice(0, 10).replaceAll('-', '')}-${Math.floor(Math.random() * 900 + 100)}`;
 const ACCESS_CODE = '8863';
@@ -164,8 +206,11 @@ function App() {
   const [deletingSale, setDeletingSale] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState(null);
-  const [tab, setTab] = useState(getSavedTab);
+  const [tab, setTab] = useState('dashboard');
   const [theme, setTheme] = useState(getSavedTheme);
+  const [preferences, setPreferences] = useState(getSavedPreferences);
+  const [calendarMonth, setCalendarMonth] = useState(() => new Date(`${today.slice(0, 7)}-01T12:00:00`));
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState(today);
   const [installPrompt, setInstallPrompt] = useState(null);
   const [collectionFilter, setCollectionFilter] = useState('pending');
   const [webOrderFilter, setWebOrderFilter] = useState('pending');
@@ -192,6 +237,7 @@ function App() {
     manualReservations: [],
     businessLoans: [],
     loanRepayments: [],
+    promotionEvents: [],
     financeSettings: null,
     webSettings: null,
     webProducts: [],
@@ -259,19 +305,19 @@ function App() {
 
   useEffect(() => {
     try {
-      window.localStorage.setItem(activeTabStorageKey, tab);
-    } catch (storageError) {
-      console.warn('No se pudo guardar la vista activa.', storageError);
-    }
-  }, [tab]);
-
-  useEffect(() => {
-    try {
       window.localStorage.setItem(themeStorageKey, theme);
     } catch (storageError) {
       console.warn('No se pudo guardar el tema seleccionado.', storageError);
     }
   }, [theme]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(preferencesStorageKey, JSON.stringify(preferences));
+    } catch (storageError) {
+      console.warn('No se pudieron guardar las configuraciones en este navegador.', storageError);
+    }
+  }, [preferences]);
 
   useEffect(() => {
     const handleInstallPrompt = (event) => {
@@ -333,6 +379,7 @@ function App() {
       supabase.from('web_products').select('*, web_product_batches(batch_id)').order('sort_order').order('name'),
       supabase.from('web_orders').select('*, web_order_items(*)').order('created_at', { ascending: false }),
       supabase.from('custom_orders').select('*').order('created_at', { ascending: false }),
+      supabase.from('promotion_events').select('*').order('event_date'),
     ]);
     const failed = queries.find(({ error: queryError }) => queryError);
     if (failed) {
@@ -341,7 +388,7 @@ function App() {
       const [
         materials, indirects, utensils, recipes, batches, sales, purchases, expenses, additionalIncomes,
         collectionReminders, manualReservations, businessLoans, loanRepayments, financeSettings,
-        webSettings, webProducts, webOrders, customOrders,
+        webSettings, webProducts, webOrders, customOrders, promotionEvents,
       ] = queries.map((result) => result.data);
       setData({
         materials: materials.map(fromMaterial),
@@ -362,6 +409,7 @@ function App() {
         webProducts,
         webOrders,
         customOrders,
+        promotionEvents,
       });
       setWebSettingsDraft(webSettings || {
         id: 1,
@@ -467,6 +515,9 @@ function App() {
   ])), [data.customOrders]);
   const visibleCustomOrders = useMemo(() => data.customOrders
     .filter((order) => order.status === customOrderFilter), [data.customOrders, customOrderFilter]);
+  const potentialCustomOrderIncome = useMemo(() => data.customOrders
+    .filter((order) => order.status !== 'rejected')
+    .reduce((sum, order) => sum + number(order.order_value), 0), [data.customOrders]);
   const collectionCounts = useMemo(() => ({
     pending: data.collectionReminders.filter((reminder) => reminder.status === 'pending').length,
     done: data.collectionReminders.filter((reminder) => reminder.status === 'done').length,
@@ -693,6 +744,85 @@ function App() {
     };
   }, [data, reportPeriod]);
 
+  const dashboardStats = useMemo(() => {
+    const monthKey = today.slice(0, 7);
+    const assignedBatches = new Map(data.webProducts.flatMap((product) => getWebProductBatches(product))
+      .map((batch) => [batch.id, batch]));
+    const monthSales = data.sales.filter((sale) => (
+      sale.status === 'issued' && sale.invoice_date?.startsWith(monthKey)
+    ));
+    const monthRevenue = monthSales.reduce((sum, sale) => sum + number(sale.total), 0);
+    const monthCost = monthSales.reduce((sum, sale) => sum
+      + (sale.sale_items || []).reduce((itemsSum, item) => itemsSum + number(item.cost_total), 0), 0);
+    const monthExpenses = data.expenses
+      .filter((expense) => expense.expense_date?.startsWith(monthKey))
+      .reduce((sum, expense) => sum + number(expense.amount), 0);
+    const monthAdditionalIncome = data.additionalIncomes
+      .filter((income) => income.income_date?.startsWith(monthKey))
+      .reduce((sum, income) => sum + number(income.amount), 0);
+    const monthBadDebt = data.sales
+      .filter((sale) => sale.payment_status === 'lost' && sale.written_off_at?.startsWith(monthKey))
+      .reduce((sum, sale) => sum + number(sale.total), 0);
+    const monthlyTrend = Array.from({ length: 6 }, (_, index) => {
+      const month = new Date();
+      month.setDate(1);
+      month.setMonth(month.getMonth() - (5 - index));
+      const key = `${month.getFullYear()}-${String(month.getMonth() + 1).padStart(2, '0')}`;
+      const revenue = data.sales.filter((sale) => sale.status === 'issued' && sale.invoice_date?.startsWith(key))
+        .reduce((sum, sale) => sum + number(sale.total), 0);
+      const expenses = data.expenses.filter((expense) => expense.expense_date?.startsWith(key))
+        .reduce((sum, expense) => sum + number(expense.amount), 0);
+      return {
+        key,
+        label: new Intl.DateTimeFormat('es-HN', { month: 'short' }).format(month),
+        revenue,
+        expenses,
+      };
+    });
+    const alertCount = data.materials.filter((item) => item.initial + item.purchased - item.used <= item.min).length
+      + data.indirects.filter((item) => item.stock <= item.minimumStock).length;
+    const producedThisMonth = data.batches.filter((batch) => batch.batch_date?.startsWith(monthKey))
+      .reduce((sum, batch) => sum + number(batch.quantity), 0);
+    return {
+      monthRevenue,
+      monthExpenses,
+      monthNet: monthRevenue + monthAdditionalIncome - monthCost - monthExpenses - monthBadDebt,
+      monthSalesCount: monthSales.length,
+      producedThisMonth,
+      alertCount,
+      availableStock: [...assignedBatches.values()].reduce((sum, batch) => sum + availableWebBatchStock(batch), 0),
+      receivables: reports.receivables,
+      cash: reports.cash,
+      loanBalance: reports.loanReceivables,
+      pendingWebOrders: activeWebOrderCount,
+      potentialOrderValue: potentialCustomOrderIncome,
+      monthlyTrend,
+      trendMax: Math.max(1, ...monthlyTrend.flatMap((month) => [month.revenue, month.expenses])),
+    };
+  }, [activeWebOrderCount, data, potentialCustomOrderIncome, reports]);
+
+  const calendarDays = useMemo(() => {
+    const first = new Date(calendarMonth.getFullYear(), calendarMonth.getMonth(), 1, 12);
+    const mondayOffset = (first.getDay() + 6) % 7;
+    const gridStart = new Date(first);
+    gridStart.setDate(first.getDate() - mondayOffset);
+    return Array.from({ length: 42 }, (_, index) => {
+      const day = new Date(gridStart);
+      day.setDate(gridStart.getDate() + index);
+      const key = dateKey(day);
+      return {
+        key,
+        day,
+        inMonth: day.getMonth() === calendarMonth.getMonth(),
+        events: data.promotionEvents.filter((event) => event.event_date === key),
+      };
+    });
+  }, [calendarMonth, data.promotionEvents]);
+  const selectedDayEvents = useMemo(() => data.promotionEvents
+    .filter((event) => event.event_date === selectedCalendarDate)
+    .sort((a, b) => String(a.activity).localeCompare(String(b.activity), 'es')),
+  [data.promotionEvents, selectedCalendarDate]);
+
   function availableFinishedStock(recipeId) {
     const produced = data.batches
       .filter((batch) => batch.recipe_id === recipeId)
@@ -866,24 +996,88 @@ function App() {
     const values = modal?.values;
     if (!values) return;
     if (![values.customerName, values.customerPhone, values.design, values.fragrance, values.color]
-      .every((value) => value.trim()) || !Number.isInteger(number(values.quantity)) || number(values.quantity) < 1) {
-      toast('Completa todos los campos y verifica que la cantidad sea un entero positivo.', 'error');
+      .every((value) => value.trim()) || !Number.isInteger(number(values.quantity)) || number(values.quantity) < 1
+      || !Number.isFinite(Number(values.orderValue)) || number(values.orderValue) <= 0) {
+      toast('Completa todos los campos, ingresa un valor mayor a cero y verifica que la cantidad sea un entero positivo.', 'error');
       return;
     }
-    const { error: saveError } = await supabase.from('custom_orders').insert({
+    const orderData = {
       customer_name: values.customerName.trim(),
       customer_phone: values.customerPhone.trim(),
       design: values.design.trim(),
       fragrance: values.fragrance.trim(),
       color: values.color.trim(),
       quantity: number(values.quantity),
-    });
+      order_value: number(values.orderValue),
+    };
+    const orderWrite = modal.orderId
+      ? supabase.from('custom_orders').update(orderData).eq('id', modal.orderId)
+      : supabase.from('custom_orders').insert(orderData);
+    const { error: saveError } = await orderWrite.select('id').single();
     if (saveError) {
       toast(saveError.message, 'error');
       return;
     }
     setModal(null);
-    toast('Pedido agregado');
+    toast(modal.orderId ? 'Pedido actualizado' : 'Pedido agregado');
+    await loadData();
+  }
+
+  function openPromotionEvent(event = null, eventDate = selectedCalendarDate) {
+    setModal({
+      kind: 'promotionEvent',
+      eventId: event?.id || null,
+      values: {
+        eventDate: event?.event_date || eventDate,
+        activity: event?.activity || '',
+        resources: event?.resources || '',
+        objective: event?.objective || '',
+      },
+    });
+  }
+
+  async function savePromotionEvent(event) {
+    event.preventDefault();
+    const values = modal?.values;
+    if (!values) return;
+    if (![values.activity, values.resources, values.objective].every((value) => value.trim())) {
+      toast('Completa la actividad, los recursos necesarios y el objetivo.', 'error');
+      return;
+    }
+    const eventData = {
+      event_date: values.eventDate,
+      activity: values.activity.trim(),
+      resources: values.resources.trim(),
+      objective: values.objective.trim(),
+      updated_at: new Date().toISOString(),
+    };
+    const eventWrite = modal.eventId
+      ? supabase.from('promotion_events').update(eventData).eq('id', modal.eventId)
+      : supabase.from('promotion_events').insert(eventData);
+    const { error: saveError } = await eventWrite.select('id').single();
+    if (saveError) {
+      toast(saveError.message, 'error');
+      return;
+    }
+    setSelectedCalendarDate(values.eventDate);
+    setCalendarMonth(new Date(`${values.eventDate.slice(0, 7)}-01T12:00:00`));
+    setModal(null);
+    toast(modal.eventId ? 'Actividad actualizada' : 'Actividad agregada al calendario');
+    await loadData();
+  }
+
+  async function deletePromotionEvent(event) {
+    if (!window.confirm(`¿Eliminar la actividad "${event.activity}" del calendario?`)) return;
+    const { error: deleteError } = await supabase.from('promotion_events')
+      .delete()
+      .eq('id', event.id)
+      .select('id')
+      .single();
+    if (deleteError) {
+      toast(deleteError.message, 'error');
+      return;
+    }
+    toast('Actividad eliminada');
     await loadData();
   }
 
@@ -1807,7 +2001,7 @@ function App() {
       const categories = ['materials', 'indirects', 'utensils', 'recipes', 'batches'];
       const optionalCategories = [
         'sales', 'purchases', 'expenses', 'customOrders', 'additionalIncomes', 'collectionReminders',
-        'businessLoans', 'loanRepayments',
+        'businessLoans', 'loanRepayments', 'promotionEvents',
       ];
       if (!backup || categories.some((category) => !Array.isArray(backup[category]))
         || optionalCategories.some((category) => backup[category] !== undefined && !Array.isArray(backup[category]))) {
@@ -2094,10 +2288,25 @@ function App() {
           fragrance: order.fragrance,
           color: order.color,
           quantity: number(order.quantity),
+          order_value: number(order.order_value),
           status: order.status || 'pending',
           created_at: order.created_at,
         }, { onConflict: 'id' });
         if (orderError) throw orderError;
+      }
+
+      for (const promotionEvent of backup.promotionEvents || []) {
+        const { error: eventError } = await supabase.from('promotion_events').upsert({
+          id: promotionEvent.id,
+          owner_id: session.user.id,
+          event_date: promotionEvent.event_date,
+          activity: promotionEvent.activity,
+          resources: promotionEvent.resources || '',
+          objective: promotionEvent.objective || '',
+          created_at: promotionEvent.created_at,
+          updated_at: promotionEvent.updated_at,
+        }, { onConflict: 'id' });
+        if (eventError) throw eventError;
       }
 
       for (const income of backup.additionalIncomes || []) {
@@ -2176,7 +2385,17 @@ function App() {
   }
 
   return (
-    <div className="app-shell" data-theme={theme}>
+    <div
+      className={`app-shell nav-position-${preferences.navigationPosition}`}
+      data-theme={theme}
+      style={{
+        '--green': preferences.accentColor,
+        '--green-dark': `color-mix(in srgb, ${preferences.accentColor} 48%, #17271d)`,
+        '--green-soft': `color-mix(in srgb, ${preferences.accentColor} 13%, white)`,
+        '--app-scale': preferences.fontScale,
+        fontFamily: preferences.fontFamily,
+      }}
+    >
       <header className="topbar">
         <a className="brand" href="#" onClick={(event) => event.preventDefault()}>
           {brandLogoUrl
@@ -2236,7 +2455,7 @@ function App() {
 
       <main className="main-content">
         <div className="welcome-row">
-          <div><p className="eyebrow">PANEL DE CONTROL</p><h1>Tu taller, en orden.</h1><p className="muted">Inventario, recetas y producción en un solo lugar.</p></div>
+          <div><p className="eyebrow">{tab === 'dashboard' ? 'RESUMEN DEL NEGOCIO' : 'PANEL DE CONTROL'}</p><h1>{tab === 'dashboard' ? 'Dashboard' : 'Tu taller, en orden.'}</h1><p className="muted">{tab === 'dashboard' ? 'Indicadores financieros, inventario y actividad del mes.' : 'Inventario, recetas y producción en un solo lugar.'}</p></div>
           <div className="welcome-actions">
             {installPrompt && <button className="button secondary" onClick={installApp}>↓ Instalar aplicación</button>}
             <button className="button primary" onClick={() => { setProductionRecipeSearch(''); setProductionRecipeId(''); setModal({ kind: 'production' }); }}>＋ Registrar producción</button>
@@ -2245,6 +2464,230 @@ function App() {
 
         {error && <Notice type="error">{error}</Notice>}
         {loading && <div className="loading-inline">Sincronizando datos con Supabase…</div>}
+        {tab === 'dashboard' && (
+          <div className="dashboard-layout">
+            <section className="dashboard-hero">
+              <div>
+                <p className="eyebrow">RESUMEN MENSUAL · {new Intl.DateTimeFormat('es-HN', { month: 'long', year: 'numeric' }).format(new Date(`${today}T12:00:00`))}</p>
+                <h2>Una mirada clara a tu negocio.</h2>
+                <p>Ventas, operación e inventario en un solo lugar.</p>
+              </div>
+              <div className="dashboard-hero-actions">
+                <button className="button secondary" onClick={() => setTab('finance')}>Ver finanzas</button>
+                <button className="button primary" onClick={() => { setSalesFilter('all'); setTab('sales'); }}>＋ Registrar venta</button>
+              </div>
+            </section>
+            <section className="metrics-grid dashboard-metrics-grid">
+              <Metric label="Ventas del mes" value={money(dashboardStats.monthRevenue)} detail={`${dashboardStats.monthSalesCount} facturas emitidas`} icon="↗" />
+              <Metric label="Utilidad estimada" value={money(dashboardStats.monthNet)} detail="Después de costos y gastos" icon="◈" warning={dashboardStats.monthNet < 0} />
+              <Metric label="Stock disponible" value={`${dashboardStats.availableStock} jabones`} detail="Inventario terminado" icon="▦" />
+              <Metric label="Producción del mes" value={`${dashboardStats.producedThisMonth} jabones`} detail={`${data.batches.length} lotes registrados`} icon="▤" />
+              <Metric label="Cuentas por cobrar" value={money(dashboardStats.receivables)} detail={`Préstamos incluidos · ${money(dashboardStats.loanBalance)}`} icon="＄" warning={dashboardStats.receivables > 0} />
+              <Metric label="Pedidos web pendientes" value={dashboardStats.pendingWebOrders} detail={`Pedidos a crear · ${money(dashboardStats.potentialOrderValue)} potencial`} icon="◷" warning={dashboardStats.pendingWebOrders > 0} />
+            </section>
+            <div className="dashboard-content-grid">
+              <Section title="Ventas y gastos" subtitle="Tendencia de los últimos seis meses">
+                <div className="dashboard-chart-legend">
+                  <span><i className="chart-dot revenue" /> Ventas</span>
+                  <span><i className="chart-dot expenses" /> Gastos</span>
+                </div>
+                <div className="dashboard-chart" role="img" aria-label="Gráfico de ventas y gastos mensuales">
+                  {dashboardStats.monthlyTrend.map((month) => (
+                    <div className="dashboard-chart-month" key={month.key}>
+                      <div className="dashboard-chart-bars">
+                        <span className="dashboard-bar revenue" title={`Ventas ${money(month.revenue)}`} style={{ height: `${Math.max(3, month.revenue / dashboardStats.trendMax * 100)}%` }} />
+                        <span className="dashboard-bar expenses" title={`Gastos ${money(month.expenses)}`} style={{ height: `${Math.max(3, month.expenses / dashboardStats.trendMax * 100)}%` }} />
+                      </div>
+                      <small>{month.label}</small>
+                      <span className="dashboard-chart-value">{money(month.revenue)}</span>
+                    </div>
+                  ))}
+                </div>
+              </Section>
+              <Section title="Pulso del negocio" subtitle="Saldos y puntos que requieren atención">
+                <div className="dashboard-business-list">
+                  <div><span>Efectivo y bancos</span><strong>{money(dashboardStats.cash)}</strong></div>
+                  <div><span>Préstamos por devolver</span><strong>{money(dashboardStats.loanBalance)}</strong></div>
+                  <div><span>Ingreso potencial de pedidos</span><strong>{money(dashboardStats.potentialOrderValue)}</strong></div>
+                  <div className={dashboardStats.alertCount ? 'dashboard-alert' : ''}>
+                    <span>Alertas de inventario</span><strong>{dashboardStats.alertCount}</strong>
+                  </div>
+                </div>
+                <div className="dashboard-shortcuts">
+                  <button type="button" onClick={() => setTab('materials')}>Revisar insumos <span>→</span></button>
+                  <button type="button" onClick={() => setTab('loans')}>Administrar préstamos <span>→</span></button>
+                  <button type="button" onClick={() => setTab('marketing')}>Planificar promoción <span>→</span></button>
+                </div>
+              </Section>
+            </div>
+            <Section
+              title="Agenda de promoción"
+              subtitle="Próximas actividades para impulsar las ventas"
+              action="＋ Agregar actividad"
+              onAction={() => { setSelectedCalendarDate(today); openPromotionEvent(null, today); }}
+            >
+              <div className="dashboard-agenda">
+                {data.promotionEvents.filter((event) => event.event_date >= today).slice(0, 4).map((event) => (
+                  <button type="button" className="dashboard-agenda-item" key={event.id} onClick={() => { setTab('marketing'); setSelectedCalendarDate(event.event_date); }}>
+                    <span>{new Date(`${event.event_date}T12:00:00`).toLocaleDateString('es-HN', { day: 'numeric', month: 'short' })}</span>
+                    <strong>{event.activity}</strong>
+                    <small>{event.objective}</small>
+                  </button>
+                ))}
+                {data.promotionEvents.filter((event) => event.event_date >= today).length === 0 && (
+                  <p className="dashboard-agenda-empty">Todavía no hay actividades planificadas. Agrega una para organizar tu próxima promoción.</p>
+                )}
+              </div>
+            </Section>
+          </div>
+        )}
+        {tab === 'settings' && (
+          <div className="settings-layout">
+            <Section title="Apariencia de la aplicación" subtitle="Tus preferencias se guardan en este navegador y solo afectan esta instalación">
+              <div className="settings-content">
+                <div className="settings-control">
+                  <div><h3>Tema</h3><p>Elige el modo de color de la aplicación.</p></div>
+                  <div className="settings-choice-row">
+                    {[
+                      ['light', 'Claro', '☀'],
+                      ['dark', 'Oscuro', '☾'],
+                    ].map(([value, label, icon]) => (
+                      <button type="button" key={value} className={`settings-choice${theme === value ? ' active' : ''}`} aria-pressed={theme === value} onClick={() => setTheme(value)}>
+                        <span>{icon}</span>{label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="settings-control settings-color-control">
+                  <div><h3>Color de la aplicación</h3><p>Personaliza el color de énfasis, botones e indicadores.</p></div>
+                  <div className="settings-palette">
+                    {accentPresets.map(([color, label]) => (
+                      <button
+                        type="button"
+                        key={color}
+                        className={`settings-color-choice${preferences.accentColor === color ? ' active' : ''}`}
+                        style={{ '--swatch-color': color }}
+                        aria-label={`Usar tema ${label}`}
+                        aria-pressed={preferences.accentColor === color}
+                        onClick={() => setPreferences({ ...preferences, accentColor: color })}
+                      ><span />{label}</button>
+                    ))}
+                    <label className="settings-custom-color">
+                      <span>Color personalizado</span>
+                      <input type="color" value={preferences.accentColor} aria-label="Elegir color personalizado" onChange={(event) => setPreferences({ ...preferences, accentColor: event.target.value })} />
+                    </label>
+                  </div>
+                </div>
+                <div className="settings-control settings-form-control">
+                  <div><h3>Tipografía</h3><p>Selecciona una fuente para leer y trabajar.</p></div>
+                  <label className="settings-select">
+                    <span>Tipo de letra</span>
+                    <select value={preferences.fontFamily} onChange={(event) => setPreferences({ ...preferences, fontFamily: event.target.value })}>
+                      {fontOptions.map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+                    </select>
+                  </label>
+                  <label className="settings-select">
+                    <span>Tamaño de letra</span>
+                    <select value={preferences.fontScale} onChange={(event) => setPreferences({ ...preferences, fontScale: Number(event.target.value) })}>
+                      <option value="0.9">Pequeño</option>
+                      <option value="1">Mediano</option>
+                      <option value="1.1">Grande</option>
+                      <option value="1.2">Muy grande</option>
+                    </select>
+                  </label>
+                </div>
+                <div className="settings-control settings-position-control">
+                  <div><h3>Posición del menú</h3><p>Elige dónde quieres acceder a las secciones de la aplicación.</p></div>
+                  <div className="settings-position-grid">
+                    {navigationPositions.map(([value, label]) => (
+                      <button type="button" key={value} className={`settings-position-choice${preferences.navigationPosition === value ? ' active' : ''}`} aria-pressed={preferences.navigationPosition === value} onClick={() => setPreferences({ ...preferences, navigationPosition: value })}>
+                        <span className={`settings-position-preview ${value}`}><i /></span>
+                        <strong>{label}</strong>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <div className="settings-preview">
+                  <div><p className="eyebrow">VISTA PREVIA</p><h3>Tu espacio, a tu manera.</h3><p>Las preferencias se conservan aunque cierres o actualices la aplicación.</p></div>
+                  <span className="settings-preview-mark">✿</span>
+                </div>
+                <div className="settings-footer">
+                  <span>Guardado automáticamente en el almacenamiento local de este navegador.</span>
+                  <button type="button" className="button secondary" onClick={() => { setPreferences(defaultPreferences); setTheme('light'); toast('Apariencia restablecida'); }}>Restablecer apariencia</button>
+                </div>
+              </div>
+            </Section>
+          </div>
+        )}
+        {tab === 'marketing' && (
+          <div className="marketing-layout">
+            <Section
+              title="Trabajo de venta y promoción"
+              subtitle="Organiza las acciones comerciales y los recursos que necesitas cada día"
+              action="＋ Planificar actividad"
+              onAction={() => openPromotionEvent(null, selectedCalendarDate)}
+            >
+              <div className="calendar-toolbar">
+                <div>
+                  <p className="eyebrow">CALENDARIO COMERCIAL</p>
+                  <h3>{new Intl.DateTimeFormat('es-HN', { month: 'long', year: 'numeric' }).format(calendarMonth)}</h3>
+                </div>
+                <div className="calendar-toolbar-actions">
+                  <button type="button" className="button secondary small" onClick={() => { setCalendarMonth(new Date(`${today.slice(0, 7)}-01T12:00:00`)); setSelectedCalendarDate(today); }}>Hoy</button>
+                  <button type="button" className="icon-button calendar-step" aria-label="Mes anterior" onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() - 1, 1, 12))}>‹</button>
+                  <button type="button" className="icon-button calendar-step" aria-label="Mes siguiente" onClick={() => setCalendarMonth(new Date(calendarMonth.getFullYear(), calendarMonth.getMonth() + 1, 1, 12))}>›</button>
+                </div>
+              </div>
+              <div className="promotion-calendar">
+                {['Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb', 'Dom'].map((day) => <div className="calendar-weekday" key={day}>{day}</div>)}
+                {calendarDays.map(({ key, day, inMonth, events }) => (
+                  <button
+                    type="button"
+                    key={key}
+                    className={`calendar-day${inMonth ? '' : ' outside'}${selectedCalendarDate === key ? ' selected' : ''}${key === today ? ' today' : ''}${events.length ? ' has-events' : ''}`}
+                    aria-label={`${day.toLocaleDateString('es-HN', { day: 'numeric', month: 'long', year: 'numeric' })}${events.length ? `, ${events.length} ${events.length === 1 ? 'actividad' : 'actividades'}` : ''}`}
+                    aria-pressed={selectedCalendarDate === key}
+                    onClick={() => setSelectedCalendarDate(key)}
+                  >
+                    <span className="calendar-day-number">{day.getDate()}</span>
+                    {events.slice(0, 2).map((event) => <span className="calendar-event-chip" key={event.id}>{event.activity}</span>)}
+                    {events.length > 2 && <span className="calendar-more">+{events.length - 2} más</span>}
+                    {!events.length && inMonth && <span className="calendar-day-empty">·</span>}
+                  </button>
+                ))}
+              </div>
+            </Section>
+            <Section
+              title={`Agenda · ${new Date(`${selectedCalendarDate}T12:00:00`).toLocaleDateString('es-HN', { weekday: 'long', day: 'numeric', month: 'long' })}`}
+              subtitle={`${selectedDayEvents.length} ${selectedDayEvents.length === 1 ? 'actividad planificada' : 'actividades planificadas'}`}
+              action="＋ Agregar actividad"
+              onAction={() => openPromotionEvent(null, selectedCalendarDate)}
+            >
+              <div className="promotion-agenda">
+                {selectedDayEvents.map((event) => (
+                  <article className="promotion-event-card" key={event.id}>
+                    <div className="promotion-event-date"><span>ACTIVIDAD</span><strong>{event.activity}</strong></div>
+                    <div className="promotion-event-details">
+                      <p><span>Recursos necesarios</span>{event.resources || 'Sin recursos especificados'}</p>
+                      <p><span>Objetivo</span>{event.objective || 'Sin objetivo especificado'}</p>
+                    </div>
+                    <div className="promotion-event-actions">
+                      <button type="button" className="icon-button" aria-label={`Editar ${event.activity}`} title="Editar actividad" onClick={() => openPromotionEvent(event)}>✎</button>
+                      <button type="button" className="icon-button danger-text" aria-label={`Eliminar ${event.activity}`} title="Eliminar actividad" onClick={() => deletePromotionEvent(event)}>×</button>
+                    </div>
+                  </article>
+                ))}
+                {selectedDayEvents.length === 0 && (
+                  <div className="calendar-empty">
+                    <span>◷</span><strong>Día disponible para planificar</strong>
+                    <p>Agrega una actividad, sus recursos y el objetivo que quieres alcanzar.</p>
+                    <button type="button" className="button secondary" onClick={() => openPromotionEvent(null, selectedCalendarDate)}>＋ Crear actividad</button>
+                  </div>
+                )}
+              </div>
+            </Section>
+          </div>
+        )}
         {tab === 'soapStock' && (
           <Section title="Stock de jabones" subtitle="Existencias disponibles por nombre de producto web, con detalle por lote">
             <div className="stock-total">
@@ -2730,9 +3173,13 @@ function App() {
             action="＋ Nuevo pedido"
             onAction={() => setModal({
               kind: 'customOrder',
-              values: { customerName: '', customerPhone: '', design: '', fragrance: '', color: '', quantity: '1' },
+              values: { customerName: '', customerPhone: '', design: '', fragrance: '', color: '', quantity: '1', orderValue: '' },
             })}
           >
+            <div className="stock-total">
+              <span>Ingreso potencial · pedidos no rechazados</span>
+              <strong>{money(potentialCustomOrderIncome)}</strong>
+            </div>
             <div className="collection-filters order-filters" role="group" aria-label="Filtrar pedidos personalizados por estado">
               {customOrderFilters.map(([status, label]) => (
                 <button type="button" key={status} className={`collection-filter${customOrderFilter === status ? ' active' : ''}`}
@@ -2741,7 +3188,7 @@ function App() {
                 </button>
               ))}
             </div>
-            <Table headers={['Cliente', 'Celular', 'Diseño', 'Fragancia', 'Color', 'Cantidad', 'Fecha', 'Estado', 'Acciones']}>
+            <Table headers={['Cliente', 'Celular', 'Diseño', 'Fragancia', 'Color', 'Cantidad', 'Valor del pedido', 'Fecha', 'Estado', 'Acciones']}>
               {visibleCustomOrders.map((order) => (
                 <tr key={order.id}>
                   <td className="strong">{order.customer_name}</td>
@@ -2750,11 +3197,25 @@ function App() {
                   <td>{order.fragrance}</td>
                   <td>{order.color}</td>
                   <td className="green">{order.quantity}</td>
+                  <td className="green">{money(order.order_value)}</td>
                   <td>{new Date(order.created_at).toLocaleDateString('es-HN')}</td>
                   <td><span className={`pill ${order.status === 'created' ? 'good' : order.status === 'rejected' ? 'danger' : 'warning'}`}>
                     {{ created: 'Creado', rejected: 'Rechazado', pending: 'Pendiente' }[order.status] || 'Pendiente'}
                   </span></td>
                   <td className="sale-actions">
+                    <button className="icon-button" aria-label={`Editar pedido de ${order.customer_name}`} title="Editar pedido y valor" onClick={() => setModal({
+                      kind: 'customOrder',
+                      orderId: order.id,
+                      values: {
+                        customerName: order.customer_name,
+                        customerPhone: order.customer_phone,
+                        design: order.design,
+                        fragrance: order.fragrance,
+                        color: order.color,
+                        quantity: String(order.quantity),
+                        orderValue: String(order.order_value || ''),
+                      },
+                    })}>✎</button>
                     {customOrderFilters.filter(([status]) => status !== order.status).map(([status, label]) => (
                       <button key={status} className="button secondary small" onClick={() => updateCustomOrder(order, status)}>Marcar {label.toLowerCase()}</button>
                     ))}
@@ -3095,7 +3556,7 @@ function App() {
         </button>
       </nav>
 
-      {modal && !['production', 'sale', 'purchase', 'purchaseDetail', 'invoice', 'deleteSale', 'completeWebOrder', 'webOrderDetail', 'webProduct', 'customOrder', 'expense', 'collectionReminder', 'manualReservation', 'businessLoan', 'loanRepayment'].includes(modal.kind) && (
+      {modal && !['production', 'sale', 'purchase', 'purchaseDetail', 'invoice', 'deleteSale', 'completeWebOrder', 'webOrderDetail', 'webProduct', 'customOrder', 'expense', 'collectionReminder', 'manualReservation', 'businessLoan', 'loanRepayment', 'promotionEvent'].includes(modal.kind) && (
         <Dialog title={`${modal.item ? 'Editar' : 'Registrar'} ${modal.kind === 'materials' ? 'materia prima' : modal.kind === 'indirects' ? 'insumo indirecto' : 'utensilio'}`} onClose={() => setModal(null)}>
           <form className="stack-form" onSubmit={saveEntity}>
             <Field label="Código"><input required value={modal.values.code} onChange={(e) => setModal({ ...modal, values: { ...modal.values, code: e.target.value } })} /></Field>
@@ -3261,7 +3722,7 @@ function App() {
         </Dialog>
       )}
       {modal?.kind === 'customOrder' && (
-        <Dialog className="custom-order-dialog" title="Crear pedido personalizado" onClose={() => setModal(null)}>
+        <Dialog className="custom-order-dialog" title={modal.orderId ? 'Editar pedido personalizado' : 'Crear pedido personalizado'} onClose={() => setModal(null)}>
           <form className="stack-form" onSubmit={saveCustomOrder}>
             <Field label="Nombre del cliente">
               <input required maxLength="120" autoComplete="name" value={modal.values.customerName} onChange={(event) => setModal({ ...modal, values: { ...modal.values, customerName: event.target.value } })} />
@@ -3284,10 +3745,29 @@ function App() {
               <Field label="Cantidad">
                 <input required type="number" min="1" step="1" value={modal.values.quantity} onChange={(event) => setModal({ ...modal, values: { ...modal.values, quantity: event.target.value } })} />
               </Field>
+              <Field label="Valor total del pedido (LPS)">
+                <input required type="number" min="0.01" step="0.01" value={modal.values.orderValue} onChange={(event) => setModal({ ...modal, values: { ...modal.values, orderValue: event.target.value } })} />
+              </Field>
             </div>
             <div className="dialog-actions">
               <button type="button" className="button secondary" onClick={() => setModal(null)}>Cancelar</button>
-              <button className="button primary">Guardar pedido</button>
+              <button className="button primary">{modal.orderId ? 'Guardar cambios' : 'Guardar pedido'}</button>
+            </div>
+          </form>
+        </Dialog>
+      )}
+      {modal?.kind === 'promotionEvent' && (
+        <Dialog className="promotion-event-dialog" title={modal.eventId ? 'Editar actividad comercial' : 'Planificar actividad comercial'} onClose={() => setModal(null)}>
+          <form className="stack-form" onSubmit={savePromotionEvent}>
+            <div className="form-grid">
+              <Field label="Fecha"><input required type="date" value={modal.values.eventDate} onChange={(event) => setModal({ ...modal, values: { ...modal.values, eventDate: event.target.value } })} /></Field>
+              <Field label="Actividad"><input required maxLength="160" value={modal.values.activity} onChange={(event) => setModal({ ...modal, values: { ...modal.values, activity: event.target.value } })} placeholder="Ej. Publicar promoción de temporada" /></Field>
+            </div>
+            <Field label="Recursos necesarios"><textarea required rows="3" maxLength="1000" value={modal.values.resources} onChange={(event) => setModal({ ...modal, values: { ...modal.values, resources: event.target.value } })} placeholder="Ej. Fotos del producto, presupuesto para anuncios y muestras" /></Field>
+            <Field label="Objetivo"><textarea required rows="3" maxLength="1000" value={modal.values.objective} onChange={(event) => setModal({ ...modal, values: { ...modal.values, objective: event.target.value } })} placeholder="Ej. Generar 15 consultas y cerrar 5 ventas" /></Field>
+            <div className="dialog-actions">
+              <button type="button" className="button secondary" onClick={() => setModal(null)}>Cancelar</button>
+              <button className="button primary">{modal.eventId ? 'Guardar cambios' : 'Agregar al calendario'}</button>
             </div>
           </form>
         </Dialog>
@@ -3455,7 +3935,7 @@ function App() {
           <div className="invoice-paper">
             <header className="invoice-brand">
               <div><h1>Fragancia &amp; Miel</h1><p>Jabonería artesanal</p></div>
-              <strong>COMPROBANTE INTERNO<br />NO FISCAL</strong>
+              <strong className="no-print">COMPROBANTE INTERNO<br />NO FISCAL</strong>
             </header>
             <div className="invoice-meta">
               <p><span>Número</span><strong>{modal.sale.invoice_number}</strong></p>
