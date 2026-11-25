@@ -34,7 +34,7 @@ En **Settings → Pages → Build and deployment**, selecciona **GitHub Actions*
 - Creación de recetas con varias materias primas, insumos indirectos y utensilios; las cantidades de materia prima se ingresan por jabón, se multiplican por el tamaño del lote y se muestra el costo por barra.
 - Precios editables al detalle, por mayor y para eventos; calcula ganancia por barra y margen bruto (`(precio - costo) / precio`).
 - Registro transaccional de producción: verifica existencias y descuenta materias primas.
-- Vista **Stock de jabones** con existencias por producto web y detalle de cada lote; el total no duplica lotes.
+- Vista **Stock de jabones** con existencias por producto web y detalle de cada lote; los totales de producidos y disponibles se suman desde las filas mostradas.
 - Al eliminar un lote, se cancela cualquier pedido activo que lo use, se conserva el historial y el producto web mantiene los demás lotes asignados.
 - Ventas en borrador y comprobantes internos numerados; al emitirlos valida las existencias de jabones terminados (producción menos ventas), registra la venta y permite imprimir o reimprimir la factura.
 - Gastos tiene una vista propia para registrar, editar, eliminar y marcar gastos como pagados; Finanzas conserva su efecto en resultados y cuentas por pagar.

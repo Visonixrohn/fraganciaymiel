@@ -565,12 +565,10 @@ function App() {
   })).filter(({ product, recipe }) => recipe
     && priceTypes.some(([value]) => recipe.prices[value] != null)
     && (product.promotion_price != null || product.normal_price != null)), [data]);
-  const soapStockTotal = useMemo(() => {
-    const batches = new Map(
-      soapStockRows.filter((row) => row.batch).map((row) => [row.batch.id, row.batch]),
-    );
-    return [...batches.values()].reduce((total, batch) => total + availableWebBatchStock(batch), 0);
-  }, [data, soapStockRows]);
+  const soapStockTotals = useMemo(() => soapStockRows.reduce((totals, row) => ({
+    produced: totals.produced + number(row.batch?.quantity),
+    available: totals.available + number(row.available),
+  }), { produced: 0, available: 0 }), [soapStockRows]);
 
   const visibleMaterials = useMemo(() => {
     const query = materialSearch.trim().toLocaleLowerCase('es');
@@ -2690,10 +2688,6 @@ function App() {
         )}
         {tab === 'soapStock' && (
           <Section title="Stock de jabones" subtitle="Existencias disponibles por nombre de producto web, con detalle por lote">
-            <div className="stock-total">
-              <span>Total disponible en productos web <small>(cada lote se cuenta una sola vez)</small></span>
-              <strong>{soapStockTotal} jabones</strong>
-            </div>
             <Table headers={['Producto web', 'Receta', 'Lote', 'Fecha de producción', 'Producidos', 'Disponibles', 'Estado']}>
               {soapStockRows.map(({ product, batch, available }) => (
                 <tr key={`${product.id}-${batch?.id || 'sin-lote'}`}>
@@ -2707,6 +2701,10 @@ function App() {
                 </tr>
               ))}
             </Table>
+            <div className="stock-total" aria-label="Totales de la tabla de stock">
+              <span>Total producidos<strong>{soapStockTotals.produced} jabones</strong></span>
+              <span>Total disponibles<strong>{soapStockTotals.available} jabones</strong></span>
+            </div>
           </Section>
         )}
         {tab === 'materials' && (
