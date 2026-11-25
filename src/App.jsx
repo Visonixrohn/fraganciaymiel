@@ -25,6 +25,8 @@ const navigationGroups = [
       ['sales', 'Facturación', '▧'],
       ['collections', 'Cobros pendientes', '＄'],
       ['purchases', 'Compras', '＋'],
+      ['expenses', 'Gastos', '−'],
+      ['loans', 'Prestado', '↗'],
       ['finance', 'Finanzas', '＄'],
     ],
   },
@@ -32,6 +34,7 @@ const navigationGroups = [
     label: 'Comercial',
     items: [
       ['webOrders', 'Pedidos web', '🛍'],
+      ['reservations', 'Reservaciones', '◷'],
       ['customOrders', 'Pedidos a crear', '✎'],
     ],
   },
@@ -186,6 +189,9 @@ function App() {
     expenses: [],
     additionalIncomes: [],
     collectionReminders: [],
+    manualReservations: [],
+    businessLoans: [],
+    loanRepayments: [],
     financeSettings: null,
     webSettings: null,
     webProducts: [],
@@ -200,14 +206,6 @@ function App() {
   const [webLogoFile, setWebLogoFile] = useState(null);
   const [webLogoPreview, setWebLogoPreview] = useState('');
   const [webSettingsDraft, setWebSettingsDraft] = useState(null);
-  const [expenseForm, setExpenseForm] = useState({
-    description: '',
-    category: '',
-    amount: '',
-    expenseDate: today,
-    paymentStatus: 'paid',
-    paymentMethod: 'cash',
-  });
   const [additionalIncomeForm, setAdditionalIncomeForm] = useState({
     concept: '',
     amount: '',
@@ -327,6 +325,9 @@ function App() {
       supabase.from('expenses').select('*').order('expense_date', { ascending: false }),
       supabase.from('additional_incomes').select('*').order('income_date', { ascending: false }),
       supabase.from('collection_reminders').select('*').order('due_date', { ascending: true }),
+      supabase.from('manual_reservations').select('*').order('reservation_date', { ascending: false }),
+      supabase.from('business_loans').select('*').order('loan_date', { ascending: false }),
+      supabase.from('business_loan_repayments').select('*').order('payment_date', { ascending: false }),
       supabase.from('finance_settings').select('*').eq('id', 1).maybeSingle(),
       supabase.from('web_settings').select('*').eq('id', 1).maybeSingle(),
       supabase.from('web_products').select('*, web_product_batches(batch_id)').order('sort_order').order('name'),
@@ -339,7 +340,7 @@ function App() {
     } else {
       const [
         materials, indirects, utensils, recipes, batches, sales, purchases, expenses, additionalIncomes,
-        collectionReminders, financeSettings,
+        collectionReminders, manualReservations, businessLoans, loanRepayments, financeSettings,
         webSettings, webProducts, webOrders, customOrders,
       ] = queries.map((result) => result.data);
       setData({
@@ -353,6 +354,9 @@ function App() {
         expenses,
         additionalIncomes,
         collectionReminders,
+        manualReservations,
+        businessLoans,
+        loanRepayments,
         financeSettings,
         webSettings,
         webProducts,
@@ -414,13 +418,6 @@ function App() {
     };
   }, [session, loadData, toast]);
 
-  const metrics = useMemo(() => ({
-    materials: data.materials.length,
-    alerts: data.materials.filter((item) => item.initial + item.purchased - item.used <= item.min).length
-      + data.indirects.filter((item) => item.stock <= item.minimumStock).length,
-    recipes: data.recipes.length,
-    batches: data.batches.length,
-  }), [data]);
   const activeWebOrderCount = data.webOrders
     .filter((order) => order.status === 'pending').length;
   const webOrderCounts = useMemo(() => Object.fromEntries(webOrderFilters.map(([status]) => [
@@ -429,6 +426,41 @@ function App() {
   ])), [data.webOrders]);
   const visibleWebOrders = useMemo(() => data.webOrders
     .filter((order) => order.status === webOrderFilter), [data.webOrders, webOrderFilter]);
+  const reservationRows = useMemo(() => [
+    ...data.webOrders
+      .filter((order) => ['pending', 'confirmed'].includes(order.status))
+      .map((order) => ({
+        id: order.id,
+        source: 'web',
+        date: order.created_at,
+        customer: order.customer_name,
+        phone: order.customer_phone,
+        product: (order.web_order_items || []).map((item) => `${item.product_name} × ${item.quantity}`).join(', '),
+        quantity: (order.web_order_items || []).reduce((sum, item) => sum + number(item.quantity), 0),
+        status: order.status,
+        order,
+      })),
+    ...data.manualReservations
+      .filter((reservation) => reservation.status === 'active')
+      .map((reservation) => ({
+        id: reservation.id,
+        source: 'manual',
+        date: `${reservation.reservation_date}T12:00:00`,
+        customer: reservation.customer_name,
+        phone: reservation.customer_phone,
+        product: reservation.product_name,
+        quantity: reservation.quantity,
+        status: reservation.status,
+        reservation,
+      })),
+  ].sort((a, b) => String(b.date).localeCompare(String(a.date))),
+  [data.manualReservations, data.webOrders]);
+  const loanRows = useMemo(() => data.businessLoans.map((loan) => {
+    const repaid = data.loanRepayments
+      .filter((repayment) => repayment.business_loan_id === loan.id)
+      .reduce((sum, repayment) => sum + number(repayment.amount), 0);
+    return { ...loan, repaid, outstanding: Math.max(0, number(loan.principal) - repaid) };
+  }), [data.businessLoans, data.loanRepayments]);
   const customOrderCounts = useMemo(() => Object.fromEntries(customOrderFilters.map(([status]) => [
     status,
     data.customOrders.filter((order) => order.status === status).length,
@@ -546,7 +578,10 @@ function App() {
   }, [saleProducts, saleDraft]);
 
   const reports = useMemo(() => {
-    const withinPeriod = (date) => Boolean(date && date >= reportPeriod.from && date <= reportPeriod.to);
+    const withinPeriod = (date) => {
+      const reportDate = date?.slice(0, 10);
+      return Boolean(reportDate && reportDate >= reportPeriod.from && reportDate <= reportPeriod.to);
+    };
     const periodSales = data.sales.filter((sale) => sale.status === 'issued' && withinPeriod(sale.invoice_date));
     const periodRevenue = periodSales.reduce((sum, sale) => sum + number(sale.total), 0);
     const paidSales = periodSales.filter((sale) => sale.payment_status === 'paid');
@@ -566,6 +601,7 @@ function App() {
       .reduce((sum, sale) => sum + number(sale.total), 0);
     const openingDate = data.financeSettings?.opening_date || today;
     const afterOpening = (date) => Boolean(date && date >= openingDate);
+    const loansAfterOpening = data.businessLoans.filter((loan) => loan.loan_date >= openingDate);
     const rawInventory = data.materials.reduce((sum, material) => {
       const acquired = material.initial + material.purchased;
       const remaining = Math.max(0, acquired - material.used);
@@ -591,14 +627,20 @@ function App() {
         .reduce((sum, expense) => sum + number(expense.amount), 0)
       + data.additionalIncomes.filter((income) => income.payment_status === 'paid'
         && afterOpening(income.income_date) && afterOpening(income.paid_at?.slice(0, 10)))
-        .reduce((sum, income) => sum + number(income.amount), 0);
-    const receivables = number(settings.opening_receivables)
+        .reduce((sum, income) => sum + number(income.amount), 0)
+      - loansAfterOpening.reduce((sum, loan) => sum + number(loan.principal), 0)
+      + data.loanRepayments.filter((repayment) => afterOpening(repayment.payment_date))
+        .reduce((sum, repayment) => sum + number(repayment.amount), 0);
+    const commercialReceivables = number(settings.opening_receivables)
       + data.sales.filter((sale) => sale.status === 'issued' && sale.payment_status === 'pending'
         && afterOpening(sale.invoice_date))
         .reduce((sum, sale) => sum + number(sale.total), 0)
       + data.additionalIncomes.filter((income) => income.payment_status === 'pending'
         && afterOpening(income.income_date))
         .reduce((sum, income) => sum + number(income.amount), 0);
+    const loanReceivables = Math.max(0, data.businessLoans.reduce((sum, loan) => sum + number(loan.principal), 0)
+      - data.loanRepayments.reduce((sum, repayment) => sum + number(repayment.amount), 0));
+    const receivables = commercialReceivables + loanReceivables;
     const payables = number(settings.opening_payables)
       + data.purchases.filter((purchase) => purchase.payment_status === 'pending' && afterOpening(purchase.purchase_date))
         .reduce((sum, purchase) => sum + number(purchase.total), 0)
@@ -632,8 +674,14 @@ function App() {
       expenses: periodExpenses,
       badDebt: periodBadDebt,
       netIncome: periodRevenue + periodAdditionalIncome - periodCost - periodExpenses - periodBadDebt,
+      loanDisbursements: data.businessLoans.filter((loan) => withinPeriod(loan.loan_date))
+        .reduce((sum, loan) => sum + number(loan.principal), 0),
+      loanRepayments: data.loanRepayments.filter((repayment) => withinPeriod(repayment.payment_date))
+        .reduce((sum, repayment) => sum + number(repayment.amount), 0),
       cash,
       receivables,
+      commercialReceivables,
+      loanReceivables,
       rawInventory,
       indirectInventory,
       finishedInventory,
@@ -658,7 +706,11 @@ function App() {
       .filter((order) => order.status === 'confirmed')
       .flatMap((order) => order.web_order_items || [])
       .filter((item) => item.recipe_id === recipeId)
-      .reduce((sum, item) => sum + number(item.quantity), 0);
+      .reduce((sum, item) => sum + number(item.quantity), 0)
+      + data.manualReservations.filter((reservation) => reservation.status === 'active')
+        .flatMap((reservation) => reservation.batch_allocations || [])
+        .filter((allocation) => data.batches.find((batch) => batch.id === allocation.batch_id)?.recipe_id === recipeId)
+        .reduce((sum, allocation) => sum + number(allocation.quantity), 0);
     return produced - sold - reserved;
   }
 
@@ -692,7 +744,11 @@ function App() {
       .filter((order) => order.status === 'confirmed')
       .flatMap((order) => order.web_order_items || [])
       .filter((item) => item.batch_id === batch.id)
-      .reduce((sum, item) => sum + number(item.quantity), 0);
+      .reduce((sum, item) => sum + number(item.quantity), 0)
+      + data.manualReservations.filter((reservation) => reservation.status === 'active')
+        .flatMap((reservation) => reservation.batch_allocations || [])
+        .filter((allocation) => allocation.batch_id === batch.id)
+        .reduce((sum, allocation) => sum + number(allocation.quantity), 0);
     const earlierFree = recipeBatches
       .slice(0, recipeBatches.findIndex((item) => item.id === batch.id))
       .reduce((sum, item) => {
@@ -700,7 +756,11 @@ function App() {
           .filter((order) => order.status === 'confirmed')
           .flatMap((order) => order.web_order_items || [])
           .filter((orderItem) => orderItem.batch_id === item.id)
-          .reduce((total, orderItem) => total + number(orderItem.quantity), 0);
+          .reduce((total, orderItem) => total + number(orderItem.quantity), 0)
+          + data.manualReservations.filter((reservation) => reservation.status === 'active')
+            .flatMap((reservation) => reservation.batch_allocations || [])
+            .filter((allocation) => allocation.batch_id === item.id)
+            .reduce((total, allocation) => total + number(allocation.quantity), 0);
         return sum + Math.max(0, number(item.quantity) - reserved);
       }, 0);
     const soldHere = Math.min(
@@ -1090,7 +1150,7 @@ function App() {
   }
 
   async function deleteBatch(batch) {
-    if (!window.confirm(`¿Eliminar el lote ${batch.code}? Los pedidos activos relacionados se cancelarán; el historial se conservará y el producto web mantendrá sus otros lotes asignados.`)) return;
+    if (!window.confirm(`¿Eliminar el lote ${batch.code}? Los pedidos y las reservaciones activos relacionados se cancelarán; el historial se conservará y el producto web mantendrá sus otros lotes asignados.`)) return;
     const { data: cancelledOrders, error: deleteError } = await supabase.rpc('delete_batch', {
       p_batch_id: batch.id,
     });
@@ -1099,7 +1159,7 @@ function App() {
       return;
     }
     const count = Number(cancelledOrders || 0);
-    toast(`Lote eliminado; ${count} pedido${count === 1 ? '' : 's'} activo${count === 1 ? '' : 's'} cancelado${count === 1 ? '' : 's'}. El historial se conservó.`);
+    toast(`Lote eliminado; ${count} pedido${count === 1 ? '' : 's'} o reservación${count === 1 ? '' : 'es'} cancelado${count === 1 ? '' : 's'}. El historial se conservó.`);
     await loadData();
   }
 
@@ -1345,28 +1405,54 @@ function App() {
 
   async function saveExpense(event) {
     event.preventDefault();
-    const { error: expenseError } = await supabase.rpc('record_expense', {
-      p_description: expenseForm.description.trim(),
-      p_category: expenseForm.category.trim(),
-      p_amount: number(expenseForm.amount),
-      p_expense_date: expenseForm.expenseDate,
-      p_payment_status: expenseForm.paymentStatus,
-      p_payment_method: expenseForm.paymentMethod,
-    });
+    const values = modal?.values;
+    if (!values) return;
+    const expense = {
+      description: values.description.trim(),
+      category: values.category.trim(),
+      amount: number(values.amount),
+      expense_date: values.expenseDate,
+      payment_status: values.paymentStatus,
+      payment_method: values.paymentMethod,
+      paid_at: values.paymentStatus === 'paid' ? (values.paidAt || new Date().toISOString()) : null,
+    };
+    const expenseWrite = modal.expenseId
+      ? supabase.from('expenses').update(expense).eq('id', modal.expenseId)
+      : supabase.from('expenses').insert(expense);
+    const { error: expenseError } = await expenseWrite.select('id').single();
     if (expenseError) {
       toast(expenseError.message, 'error');
       return;
     }
-    setExpenseForm({
-      description: '',
-      category: '',
-      amount: '',
-      expenseDate: today,
-      paymentStatus: 'paid',
-      paymentMethod: 'cash',
+    setModal(null);
+    toast(modal.expenseId ? 'Gasto actualizado' : 'Gasto registrado');
+    await loadData();
+  }
+
+  function openExpenseForm(expense = null) {
+    setModal({
+      kind: 'expense',
+      expenseId: expense?.id || null,
+      values: {
+        description: expense?.description || '',
+        category: expense?.category || '',
+        amount: expense ? String(expense.amount) : '',
+        expenseDate: expense?.expense_date || today,
+        paymentStatus: expense?.payment_status || 'paid',
+        paymentMethod: expense?.payment_method || 'cash',
+        paidAt: expense?.paid_at || '',
+      },
     });
-    setMobileFormOpen(null);
-    toast('Gasto registrado');
+  }
+
+  async function deleteExpense(expense) {
+    if (!window.confirm(`¿Eliminar el gasto "${expense.description}" por ${money(expense.amount)}?`)) return;
+    const { error: deleteError } = await supabase.from('expenses').delete().eq('id', expense.id).select('id').single();
+    if (deleteError) {
+      toast(deleteError.message, 'error');
+      return;
+    }
+    toast('Gasto eliminado');
     await loadData();
   }
 
@@ -1384,8 +1470,95 @@ function App() {
       return;
     }
     setCollectionReminderForm({ customerName: '', customerPhone: '', concept: '', amount: '', dueDate: today });
-    setMobileFormOpen(null);
+    setModal(null);
     toast('Recordatorio de cobro agregado');
+    await loadData();
+  }
+
+  async function saveManualReservation(event) {
+    event.preventDefault();
+    const values = modal?.values;
+    if (!values) return;
+    const { error: reservationError } = await supabase.rpc('reserve_manual_product', {
+      p_web_product_id: values.productId,
+      p_customer_name: values.customerName.trim(),
+      p_customer_phone: values.customerPhone.trim() || null,
+      p_quantity: number(values.quantity),
+      p_reservation_date: values.reservationDate,
+    });
+    if (reservationError) {
+      toast(reservationError.message, 'error');
+      return;
+    }
+    setModal(null);
+    toast('Reservación guardada y stock apartado');
+    await loadData();
+  }
+
+  async function cancelManualReservation(reservation) {
+    if (!window.confirm(`¿Cancelar la reservación de ${reservation.product_name}? Se liberarán ${reservation.quantity} unidades.`)) return;
+    const { error: cancelError } = await supabase.from('manual_reservations')
+      .update({ status: 'cancelled' })
+      .eq('id', reservation.id)
+      .eq('status', 'active')
+      .select('id')
+      .single();
+    if (cancelError) {
+      toast(cancelError.message, 'error');
+      return;
+    }
+    toast('Reservación cancelada; el stock fue liberado');
+    await loadData();
+  }
+
+  async function saveBusinessLoan(event) {
+    event.preventDefault();
+    const values = modal?.values;
+    if (!values) return;
+    const { error: loanError } = await supabase.from('business_loans').insert({
+      description: values.description.trim(),
+      principal: number(values.principal),
+      loan_date: values.loanDate,
+    });
+    if (loanError) {
+      toast(loanError.message, 'error');
+      return;
+    }
+    setModal(null);
+    toast('Préstamo registrado como cuenta por cobrar');
+    await loadData();
+  }
+
+  async function saveLoanRepayment(event) {
+    event.preventDefault();
+    const values = modal?.values;
+    if (!values) return;
+    const { error: repaymentError } = await supabase.rpc('repay_business_loan', {
+      p_business_loan_id: modal.loan.id,
+      p_amount: number(values.amount),
+      p_payment_date: values.paymentDate,
+    });
+    if (repaymentError) {
+      toast(repaymentError.message, 'error');
+      return;
+    }
+    setModal(null);
+    toast('Abono registrado y saldo actualizado');
+    await loadData();
+  }
+
+  async function deleteBusinessLoan(loan) {
+    if (loan.repaid > 0) {
+      toast('No se puede eliminar un préstamo con abonos registrados.', 'error');
+      return;
+    }
+    if (!window.confirm(`¿Eliminar el préstamo "${loan.description}" por ${money(loan.principal)}?`)) return;
+    const { error: deleteError } = await supabase.from('business_loans').delete().eq('id', loan.id).select('id').single();
+    if (deleteError) {
+      toast(deleteError.message, 'error');
+      return;
+    }
+    toast('Préstamo eliminado');
     await loadData();
   }
 
@@ -1632,7 +1805,10 @@ function App() {
     try {
       const backup = JSON.parse(await file.text());
       const categories = ['materials', 'indirects', 'utensils', 'recipes', 'batches'];
-      const optionalCategories = ['sales', 'purchases', 'expenses', 'customOrders', 'additionalIncomes', 'collectionReminders'];
+      const optionalCategories = [
+        'sales', 'purchases', 'expenses', 'customOrders', 'additionalIncomes', 'collectionReminders',
+        'businessLoans', 'loanRepayments',
+      ];
       if (!backup || categories.some((category) => !Array.isArray(backup[category]))
         || optionalCategories.some((category) => backup[category] !== undefined && !Array.isArray(backup[category]))) {
         throw new Error('El archivo no contiene un respaldo válido de Fragancia y Miel.');
@@ -1884,6 +2060,30 @@ function App() {
         if (expenseError) throw expenseError;
       }
 
+      for (const loan of backup.businessLoans || []) {
+        const { error: loanError } = await supabase.from('business_loans').upsert({
+          id: loan.id,
+          owner_id: session.user.id,
+          description: loan.description,
+          principal: number(loan.principal),
+          loan_date: loan.loan_date,
+          created_at: loan.created_at,
+        }, { onConflict: 'id' });
+        if (loanError) throw loanError;
+      }
+
+      for (const repayment of backup.loanRepayments || []) {
+        const { error: repaymentError } = await supabase.from('business_loan_repayments').upsert({
+          id: repayment.id,
+          owner_id: session.user.id,
+          business_loan_id: repayment.business_loan_id,
+          amount: number(repayment.amount),
+          payment_date: repayment.payment_date,
+          created_at: repayment.created_at,
+        }, { onConflict: 'id' });
+        if (repaymentError) throw repaymentError;
+      }
+
       for (const order of backup.customOrders || []) {
         const { error: orderError } = await supabase.from('custom_orders').upsert({
           id: order.id,
@@ -2044,13 +2244,6 @@ function App() {
         </div>
 
         {error && <Notice type="error">{error}</Notice>}
-        <section className="metrics-grid">
-          <Metric label="Materias primas" value={metrics.materials} detail="Insumos registrados" icon="◈" />
-          <Metric label="Stock bajo" value={metrics.alerts} detail="Materias primas e indirectos" icon="⚠" warning={metrics.alerts > 0} />
-          <Metric label="Recetas" value={metrics.recipes} detail="Fichas técnicas" icon="⌗" />
-          <Metric label="Lotes producidos" value={metrics.batches} detail="Producciones registradas" icon="▤" />
-        </section>
-
         {loading && <div className="loading-inline">Sincronizando datos con Supabase…</div>}
         {tab === 'soapStock' && (
           <Section title="Stock de jabones" subtitle="Existencias disponibles por nombre de producto web, con detalle por lote">
@@ -2344,6 +2537,8 @@ function App() {
             <Section
               title="Cobros pendientes"
               subtitle="Lista independiente de recordatorios; no crea ni modifica ventas"
+              action="＋ Registrar cobro"
+              onAction={() => setModal({ kind: 'collectionReminder' })}
             >
               <div className="collection-toolbar">
                 <div className="stock-total collection-total">
@@ -2364,14 +2559,6 @@ function App() {
                   </button>
                 ))}
               </div>
-              <form className="reminder-form" onSubmit={saveCollectionReminder}>
-                <label>Cliente<input required maxLength="160" value={collectionReminderForm.customerName} onChange={(event) => setCollectionReminderForm({ ...collectionReminderForm, customerName: event.target.value })} /></label>
-                <label>Teléfono (opcional)<input type="tel" maxLength="40" value={collectionReminderForm.customerPhone} onChange={(event) => setCollectionReminderForm({ ...collectionReminderForm, customerPhone: event.target.value })} /></label>
-                <label>Concepto<input required maxLength="240" value={collectionReminderForm.concept} onChange={(event) => setCollectionReminderForm({ ...collectionReminderForm, concept: event.target.value })} placeholder="Ej. Pago acordado" /></label>
-                <label>Importe (LPS)<input type="number" min="0.01" step="0.01" required value={collectionReminderForm.amount} onChange={(event) => setCollectionReminderForm({ ...collectionReminderForm, amount: event.target.value })} /></label>
-                <label>Fecha de recordatorio<input type="date" required value={collectionReminderForm.dueDate} onChange={(event) => setCollectionReminderForm({ ...collectionReminderForm, dueDate: event.target.value })} /></label>
-                <button className="button primary">＋ Agregar recordatorio</button>
-              </form>
               <Table headers={['Cliente', 'Concepto', 'Importe recordado', 'Fecha', 'Estado', 'Acciones']}>
                 {collectionRows.map((reminder) => (
                   <tr key={reminder.id}>
@@ -2390,6 +2577,36 @@ function App() {
               </Table>
             </Section>
           </div>
+        )}
+        {tab === 'expenses' && (
+          <Section
+            title="Gastos"
+            subtitle="Registra, consulta y administra los gastos operativos del negocio"
+            action="＋ Registrar gasto"
+            onAction={() => openExpenseForm()}
+          >
+            <div className="stock-total">
+              <span>{data.expenses.length} gastos registrados</span>
+              <strong>{money(data.expenses.reduce((sum, expense) => sum + number(expense.amount), 0))}</strong>
+            </div>
+            <Table headers={['Fecha', 'Descripción', 'Categoría', 'Importe', 'Pago', 'Acciones']}>
+              {data.expenses.map((expense) => (
+                <tr key={expense.id}>
+                  <td>{new Date(`${expense.expense_date}T12:00:00`).toLocaleDateString('es-HN')}</td>
+                  <td className="strong">{expense.description}</td>
+                  <td>{expense.category}</td>
+                  <td className="green">{money(expense.amount)}</td>
+                  <td><span className={`pill ${expense.payment_status === 'paid' ? 'good' : 'warning'}`}>{expense.payment_status === 'paid' ? 'Pagado' : 'Pendiente'}</span></td>
+                  <td className="sale-actions">
+                    {expense.payment_status === 'pending' && <button className="button primary small" onClick={() => markAsPaid('expenses', expense)}>Marcar pagado</button>}
+                    <button className="icon-button" aria-label={`Editar gasto ${expense.description}`} title="Editar gasto" onClick={() => openExpenseForm(expense)}>✎</button>
+                    <button className="icon-button danger-text" aria-label={`Eliminar gasto ${expense.description}`} title="Eliminar gasto" onClick={() => deleteExpense(expense)}>×</button>
+                  </td>
+                </tr>
+              ))}
+              {data.expenses.length === 0 && <tr><td colSpan="6"><Empty text="Todavía no hay gastos registrados." /></td></tr>}
+            </Table>
+          </Section>
         )}
         {tab === 'purchases' && (
           <Section title="Compras e insumos" subtitle="Registra compras de materia prima, insumos indirectos y utensilios" action="＋ Registrar compra" onAction={openPurchaseForm}>
@@ -2410,6 +2627,52 @@ function App() {
                   </td>
                 </tr>
               ))}
+            </Table>
+          </Section>
+        )}
+        {tab === 'reservations' && (
+          <Section
+            title="Reservaciones"
+            subtitle="Pedidos web pendientes o reservados y apartados creados manualmente"
+            action="＋ Nueva reservación"
+            onAction={() => setModal({
+              kind: 'manualReservation',
+              values: {
+                productId: '',
+                customerName: '',
+                customerPhone: '',
+                quantity: '1',
+                reservationDate: today,
+              },
+            })}
+          >
+            <div className="stock-total">
+              <span>{reservationRows.filter((row) => row.status === 'pending').length} pedidos pendientes y reservas activas · el inventario se aparta al reservar</span>
+              <strong>{reservationRows.filter((row) => row.status === 'confirmed' || row.status === 'active').length}</strong>
+            </div>
+            <Table headers={['Fecha', 'Origen', 'Cliente', 'Productos', 'Unidades', 'Estado', 'Acciones']}>
+              {reservationRows.map((row) => (
+                <tr key={`${row.source}-${row.id}`}>
+                  <td>{new Date(row.date).toLocaleDateString('es-HN')}</td>
+                  <td><span className={`pill ${row.source === 'web' ? 'good' : 'warning'}`}>{row.source === 'web' ? 'Pedido web' : 'Manual'}</span></td>
+                  <td className="strong">{row.customer}<small className="table-secondary">{row.phone || 'Sin teléfono'}</small></td>
+                  <td>{row.product}</td>
+                  <td>{row.quantity}</td>
+                  <td><span className={`pill ${row.status === 'confirmed' || row.status === 'active' ? 'good' : 'warning'}`}>
+                    {row.status === 'pending' ? 'Pedido pendiente' : 'Reservado'}
+                  </span></td>
+                  <td className="sale-actions">
+                    {row.source === 'web' && <>
+                      <button className="button secondary small" onClick={() => setModal({ kind: 'webOrderDetail', order: row.order })}>Ver</button>
+                      {row.status === 'pending'
+                        ? <button className="button primary small" onClick={() => updateWebOrder(row.order, 'confirmed')}>Reservar</button>
+                        : <button className="button secondary small" onClick={() => updateWebOrder(row.order, 'cancelled')}>Liberar</button>}
+                    </>}
+                    {row.source === 'manual' && <button className="button secondary small" onClick={() => cancelManualReservation(row.reservation)}>Cancelar</button>}
+                  </td>
+                </tr>
+              ))}
+              {reservationRows.length === 0 && <tr><td colSpan="7"><Empty text="No hay pedidos pendientes ni reservaciones activas." /></td></tr>}
             </Table>
           </Section>
         )}
@@ -2599,13 +2862,66 @@ function App() {
             </form>
           </Section>
         )}
+        {tab === 'loans' && (
+          <div className="sales-page">
+            <Section
+              title="Dinero prestado"
+              subtitle="Registra dinero que tomas del negocio y devuelve el saldo mediante abonos"
+              action="＋ Registrar dinero prestado"
+              onAction={() => setModal({
+                kind: 'businessLoan',
+                values: { description: '', principal: '', loanDate: today },
+              })}
+            >
+              <div className="stock-total">
+                <span>Saldo total por devolver</span>
+                <strong>{money(loanRows.reduce((sum, loan) => sum + loan.outstanding, 0))}</strong>
+              </div>
+              <Table headers={['Fecha', 'Concepto', 'Prestado', 'Devuelto', 'Saldo pendiente', 'Acciones']}>
+                {loanRows.map((loan) => (
+                  <tr key={loan.id}>
+                    <td>{new Date(`${loan.loan_date}T12:00:00`).toLocaleDateString('es-HN')}</td>
+                    <td className="strong">{loan.description}</td>
+                    <td>{money(loan.principal)}</td>
+                    <td>{money(loan.repaid)}</td>
+                    <td className={loan.outstanding > 0 ? 'green' : ''}>{money(loan.outstanding)}</td>
+                    <td className="sale-actions">
+                      {loan.outstanding > 0 && <button className="button primary small" onClick={() => setModal({
+                        kind: 'loanRepayment',
+                        loan,
+                        values: { amount: String(loan.outstanding), paymentDate: today },
+                      })}>Registrar abono</button>}
+                      {loan.repaid === 0 && <button className="icon-button danger-text" aria-label={`Eliminar préstamo ${loan.description}`} title="Eliminar préstamo" onClick={() => deleteBusinessLoan(loan)}>×</button>}
+                    </td>
+                  </tr>
+                ))}
+                {loanRows.length === 0 && <tr><td colSpan="6"><Empty text="Todavía no hay dinero prestado registrado." /></td></tr>}
+              </Table>
+            </Section>
+            <Section title="Historial de devoluciones" subtitle={`${data.loanRepayments.length} abonos registrados`}>
+              <Table headers={['Fecha', 'Préstamo', 'Importe devuelto']}>
+                {data.loanRepayments.map((repayment) => {
+                  const loan = data.businessLoans.find((item) => item.id === repayment.business_loan_id);
+                  return (
+                    <tr key={repayment.id}>
+                      <td>{new Date(`${repayment.payment_date}T12:00:00`).toLocaleDateString('es-HN')}</td>
+                      <td className="strong">{loan?.description || 'Préstamo eliminado'}</td>
+                      <td className="green">{money(repayment.amount)}</td>
+                    </tr>
+                  );
+                })}
+                {data.loanRepayments.length === 0 && <tr><td colSpan="3"><Empty text="Los abonos aparecerán aquí." /></td></tr>}
+              </Table>
+            </Section>
+          </div>
+        )}
         {tab === 'finance' && (
           <div className="finance-layout">
             <div className="report-period">
               <label>Desde<input type="date" value={reportPeriod.from} onChange={(event) => setReportPeriod({ ...reportPeriod, from: event.target.value })} /></label>
               <label>Hasta<input type="date" value={reportPeriod.to} onChange={(event) => setReportPeriod({ ...reportPeriod, to: event.target.value })} /></label>
             </div>
-            <Section title="Estado de resultados" subtitle="Ventas emitidas, costo de productos vendidos y gastos del período seleccionado">
+            <Section title="Estado de resultados" subtitle="Ventas emitidas, costos, gastos y movimientos de préstamos del período seleccionado">
               <div className="statement-lines">
                 <div><span>Ingresos por ventas</span><strong>{money(reports.revenue)}</strong></div>
                 <div><span>Ingresos adicionales</span><strong>{money(reports.additionalIncome)}</strong></div>
@@ -2614,7 +2930,10 @@ function App() {
                 <div><span>Gastos operativos</span><strong>− {money(reports.expenses)}</strong></div>
                 <div><span>Cuentas incobrables</span><strong>− {money(reports.badDebt)}</strong></div>
                 <div className="statement-total"><span>Utilidad neta</span><strong>{money(reports.netIncome)}</strong></div>
+                <div><span>Préstamos entregados · movimiento de caja</span><strong>− {money(reports.loanDisbursements)}</strong></div>
+                <div><span>Abonos recibidos · movimiento de caja</span><strong>{money(reports.loanRepayments)}</strong></div>
               </div>
+              <p className="form-note finance-note">Los préstamos al dueño son cuentas por cobrar; ni el dinero prestado ni sus abonos se consideran ingreso o gasto y no cambian la utilidad neta.</p>
             </Section>
             <Section
               title="Ventas facturadas del período"
@@ -2677,7 +2996,8 @@ function App() {
                   <h3>Activos</h3>
                   <div className="statement-lines compact">
                     <div><span>Efectivo y bancos</span><strong>{money(reports.cash)}</strong></div>
-                    <div><span>Cuentas por cobrar</span><strong>{money(reports.receivables)}</strong></div>
+                    <div><span>Cuentas por cobrar comerciales</span><strong>{money(reports.commercialReceivables)}</strong></div>
+                    <div><span>Préstamos al dueño por cobrar</span><strong>{money(reports.loanReceivables)}</strong></div>
                     <div><span>Inventario de materias primas</span><strong>{money(reports.rawInventory)}</strong></div>
                     <div><span>Insumos indirectos disponibles</span><strong>{money(reports.indirectInventory)}</strong></div>
                     <div><span>Inventario de jabones terminados</span><strong>{money(reports.finishedInventory)}</strong></div>
@@ -2700,7 +3020,7 @@ function App() {
             </Section>
             <Section
               title="Saldos iniciales"
-              subtitle="Configura caja, cuentas por cobrar/pagar y capital a la fecha de inicio"
+              subtitle="Configura caja, cuentas por cobrar comerciales/pagar y capital a la fecha de inicio"
               className={`mobile-form-section${mobileFormOpen === 'openingBalances' ? ' mobile-form-open' : ''}`}
               action={mobileFormOpen === 'openingBalances' ? 'Cerrar formulario' : undefined}
               onAction={() => setMobileFormOpen(null)}
@@ -2709,43 +3029,12 @@ function App() {
               <form className="opening-form" onSubmit={saveOpeningBalances}>
                 <label>Fecha de apertura<input type="date" required value={openingForm.opening_date} onChange={(event) => setOpeningForm({ ...openingForm, opening_date: event.target.value })} /></label>
                 <label>Efectivo y bancos (LPS)<input type="number" min="0" step="0.01" required value={openingForm.opening_cash} onChange={(event) => setOpeningForm({ ...openingForm, opening_cash: event.target.value })} /></label>
-                <label>Cuentas por cobrar (LPS)<input type="number" min="0" step="0.01" required value={openingForm.opening_receivables} onChange={(event) => setOpeningForm({ ...openingForm, opening_receivables: event.target.value })} /></label>
+                <label>Cuentas por cobrar comerciales (LPS)<input type="number" min="0" step="0.01" required value={openingForm.opening_receivables} onChange={(event) => setOpeningForm({ ...openingForm, opening_receivables: event.target.value })} /></label>
                 <label>Cuentas por pagar (LPS)<input type="number" min="0" step="0.01" required value={openingForm.opening_payables} onChange={(event) => setOpeningForm({ ...openingForm, opening_payables: event.target.value })} /></label>
                 <label>Capital / patrimonio inicial (LPS)<input type="number" step="0.01" required value={openingForm.opening_equity} onChange={(event) => setOpeningForm({ ...openingForm, opening_equity: event.target.value })} /></label>
                 <button className="button primary">Guardar saldos</button>
-                <p className="form-note">Incluye en los saldos iniciales el efectivo, las cuentas pendientes y el valor de las existencias a la fecha de apertura.</p>
+                <p className="form-note">Incluye aquí las cuentas por cobrar comerciales, no los préstamos registrados en Prestado. Registra el efectivo, las cuentas por pagar y el valor de las existencias a la fecha de apertura.</p>
               </form>
-            </Section>
-            <Section
-              title="Registrar gasto"
-              subtitle="Los gastos reducen la utilidad; los pendientes se suman a cuentas por pagar"
-              className={`mobile-form-section${mobileFormOpen === 'expense' ? ' mobile-form-open' : ''}`}
-              action={mobileFormOpen === 'expense' ? 'Cerrar formulario' : undefined}
-              onAction={() => setMobileFormOpen(null)}
-            >
-              <button type="button" className="mobile-form-launcher" onClick={() => openMobileForm('expense')}>＋ Registrar un gasto</button>
-              <form className="expense-form" onSubmit={saveExpense}>
-                <label>Descripción<input required value={expenseForm.description} onChange={(event) => setExpenseForm({ ...expenseForm, description: event.target.value })} placeholder="Ej. Transporte" /></label>
-                <label>Categoría<input required value={expenseForm.category} onChange={(event) => setExpenseForm({ ...expenseForm, category: event.target.value })} placeholder="Ej. Operación" /></label>
-                <label>Importe (LPS)<input type="number" min="0.01" step="0.01" required value={expenseForm.amount} onChange={(event) => setExpenseForm({ ...expenseForm, amount: event.target.value })} /></label>
-                <label>Fecha<input type="date" required value={expenseForm.expenseDate} onChange={(event) => setExpenseForm({ ...expenseForm, expenseDate: event.target.value })} /></label>
-                <label>Estado de pago<select value={expenseForm.paymentStatus} onChange={(event) => setExpenseForm({ ...expenseForm, paymentStatus: event.target.value })}><option value="paid">Pagado</option><option value="pending">Pendiente</option></select></label>
-                <label>Método<select value={expenseForm.paymentMethod} onChange={(event) => setExpenseForm({ ...expenseForm, paymentMethod: event.target.value })}>{paymentMethods.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></label>
-                <button className="button primary">Guardar gasto</button>
-              </form>
-            </Section>
-            <Section title="Gastos registrados" subtitle={`${data.expenses.length} gastos`}>
-              <Table headers={['Fecha', 'Descripción', 'Categoría', 'Importe', 'Pago', '']}>
-                {data.expenses.map((expense) => (
-                  <tr key={expense.id}>
-                    <td>{new Date(`${expense.expense_date}T12:00:00`).toLocaleDateString('es-HN')}</td>
-                    <td className="strong">{expense.description}</td><td>{expense.category}</td>
-                    <td className="green">{money(expense.amount)}</td>
-                    <td><span className={`pill ${expense.payment_status === 'paid' ? 'good' : 'warning'}`}>{expense.payment_status === 'paid' ? 'Pagado' : 'Pendiente'}</span></td>
-                    <td className="sale-actions">{expense.payment_status === 'pending' && <button className="button primary small" onClick={() => markAsPaid('expenses', expense)}>Marcar pagado</button>}</td>
-                  </tr>
-                ))}
-              </Table>
             </Section>
           </div>
         )}
@@ -2806,7 +3095,7 @@ function App() {
         </button>
       </nav>
 
-      {modal && !['production', 'sale', 'purchase', 'purchaseDetail', 'invoice', 'deleteSale', 'completeWebOrder', 'webOrderDetail', 'webProduct', 'customOrder'].includes(modal.kind) && (
+      {modal && !['production', 'sale', 'purchase', 'purchaseDetail', 'invoice', 'deleteSale', 'completeWebOrder', 'webOrderDetail', 'webProduct', 'customOrder', 'expense', 'collectionReminder', 'manualReservation', 'businessLoan', 'loanRepayment'].includes(modal.kind) && (
         <Dialog title={`${modal.item ? 'Editar' : 'Registrar'} ${modal.kind === 'materials' ? 'materia prima' : modal.kind === 'indirects' ? 'insumo indirecto' : 'utensilio'}`} onClose={() => setModal(null)}>
           <form className="stack-form" onSubmit={saveEntity}>
             <Field label="Código"><input required value={modal.values.code} onChange={(e) => setModal({ ...modal, values: { ...modal.values, code: e.target.value } })} /></Field>
@@ -2848,6 +3137,88 @@ function App() {
               <Field label="Vida útil (jabones)"><input type="number" min="1" step="any" required value={modal.values.life} onChange={(e) => setModal({ ...modal, values: { ...modal.values, life: e.target.value } })} /></Field>
             </div>}
             <div className="dialog-actions"><button type="button" className="button secondary" onClick={() => setModal(null)}>Cancelar</button><button className="button primary">Guardar</button></div>
+          </form>
+        </Dialog>
+      )}
+      {modal?.kind === 'expense' && (
+        <Dialog title={modal.expenseId ? 'Editar gasto' : 'Registrar gasto'} onClose={() => setModal(null)}>
+          <form className="stack-form" onSubmit={saveExpense}>
+            <Field label="Descripción"><input required maxLength="200" value={modal.values.description} onChange={(event) => setModal({ ...modal, values: { ...modal.values, description: event.target.value } })} placeholder="Ej. Transporte" /></Field>
+            <Field label="Categoría"><input required maxLength="100" value={modal.values.category} onChange={(event) => setModal({ ...modal, values: { ...modal.values, category: event.target.value } })} placeholder="Ej. Operación" /></Field>
+            <div className="form-grid">
+              <Field label="Importe (LPS)"><input type="number" min="0.01" step="0.01" required value={modal.values.amount} onChange={(event) => setModal({ ...modal, values: { ...modal.values, amount: event.target.value } })} /></Field>
+              <Field label="Fecha"><input type="date" required value={modal.values.expenseDate} onChange={(event) => setModal({ ...modal, values: { ...modal.values, expenseDate: event.target.value } })} /></Field>
+              <Field label="Estado de pago"><select value={modal.values.paymentStatus} onChange={(event) => setModal({ ...modal, values: { ...modal.values, paymentStatus: event.target.value } })}><option value="paid">Pagado</option><option value="pending">Pendiente</option></select></Field>
+              <Field label="Método de pago"><select value={modal.values.paymentMethod} onChange={(event) => setModal({ ...modal, values: { ...modal.values, paymentMethod: event.target.value } })}>{paymentMethods.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
+            </div>
+            <div className="dialog-actions"><button type="button" className="button secondary" onClick={() => setModal(null)}>Cancelar</button><button className="button primary">Guardar gasto</button></div>
+          </form>
+        </Dialog>
+      )}
+      {modal?.kind === 'collectionReminder' && (
+        <Dialog title="Registrar cobro pendiente" onClose={() => setModal(null)}>
+          <form className="stack-form" onSubmit={saveCollectionReminder}>
+            <Field label="Cliente"><input required maxLength="160" value={collectionReminderForm.customerName} onChange={(event) => setCollectionReminderForm({ ...collectionReminderForm, customerName: event.target.value })} /></Field>
+            <Field label="Teléfono (opcional)"><input type="tel" maxLength="40" value={collectionReminderForm.customerPhone} onChange={(event) => setCollectionReminderForm({ ...collectionReminderForm, customerPhone: event.target.value })} /></Field>
+            <Field label="Concepto"><input required maxLength="240" value={collectionReminderForm.concept} onChange={(event) => setCollectionReminderForm({ ...collectionReminderForm, concept: event.target.value })} placeholder="Ej. Pago acordado" /></Field>
+            <div className="form-grid">
+              <Field label="Importe (LPS)"><input type="number" min="0.01" step="0.01" required value={collectionReminderForm.amount} onChange={(event) => setCollectionReminderForm({ ...collectionReminderForm, amount: event.target.value })} /></Field>
+              <Field label="Fecha de recordatorio"><input type="date" required value={collectionReminderForm.dueDate} onChange={(event) => setCollectionReminderForm({ ...collectionReminderForm, dueDate: event.target.value })} /></Field>
+            </div>
+            <div className="dialog-actions"><button type="button" className="button secondary" onClick={() => setModal(null)}>Cancelar</button><button className="button primary">＋ Agregar recordatorio</button></div>
+          </form>
+        </Dialog>
+      )}
+      {modal?.kind === 'manualReservation' && (() => {
+        const selectedProduct = data.webProducts.find((product) => product.id === modal.values.productId);
+        const available = selectedProduct
+          ? getWebProductBatches(selectedProduct).reduce((sum, batch) => sum + availableWebBatchStock(batch), 0)
+          : 0;
+        return (
+          <Dialog title="Nueva reservación manual" onClose={() => setModal(null)}>
+            <form className="stack-form" onSubmit={saveManualReservation}>
+              <Field label="Producto"><select required value={modal.values.productId} onChange={(event) => setModal({ ...modal, values: { ...modal.values, productId: event.target.value } })}>
+                <option value="" disabled>Selecciona un producto</option>
+                {data.webProducts.filter((product) => product.active && getWebProductBatches(product).length > 0).map((product) => (
+                  <option key={product.id} value={product.id}>{product.name}</option>
+                ))}
+              </select></Field>
+              {selectedProduct && <p className="form-note">Disponibles para reservar: {available} unidades.</p>}
+              <Field label="Nombre del cliente"><input required maxLength="160" value={modal.values.customerName} onChange={(event) => setModal({ ...modal, values: { ...modal.values, customerName: event.target.value } })} /></Field>
+              <div className="form-grid">
+                <Field label="Teléfono (opcional)"><input type="tel" maxLength="40" value={modal.values.customerPhone} onChange={(event) => setModal({ ...modal, values: { ...modal.values, customerPhone: event.target.value } })} /></Field>
+                <Field label="Cantidad"><input type="number" min="1" max="100" step="1" required value={modal.values.quantity} onChange={(event) => setModal({ ...modal, values: { ...modal.values, quantity: event.target.value } })} /></Field>
+                <Field label="Fecha"><input type="date" required value={modal.values.reservationDate} onChange={(event) => setModal({ ...modal, values: { ...modal.values, reservationDate: event.target.value } })} /></Field>
+              </div>
+              <p className="form-note">El sistema asigna las unidades a los lotes disponibles y aparta el inventario hasta que canceles la reservación.</p>
+              <div className="dialog-actions"><button type="button" className="button secondary" onClick={() => setModal(null)}>Cancelar</button><button className="button primary">Guardar y reservar stock</button></div>
+            </form>
+          </Dialog>
+        );
+      })()}
+      {modal?.kind === 'businessLoan' && (
+        <Dialog title="Registrar dinero prestado" onClose={() => setModal(null)}>
+          <form className="stack-form" onSubmit={saveBusinessLoan}>
+            <Field label="Concepto / motivo"><input required maxLength="200" value={modal.values.description} onChange={(event) => setModal({ ...modal, values: { ...modal.values, description: event.target.value } })} placeholder="Ej. Dinero tomado para uso personal" /></Field>
+            <div className="form-grid">
+              <Field label="Importe (LPS)"><input type="number" min="0.01" step="0.01" required value={modal.values.principal} onChange={(event) => setModal({ ...modal, values: { ...modal.values, principal: event.target.value } })} /></Field>
+              <Field label="Fecha"><input type="date" required value={modal.values.loanDate} onChange={(event) => setModal({ ...modal, values: { ...modal.values, loanDate: event.target.value } })} /></Field>
+            </div>
+            <p className="form-note">Se reducirá el efectivo y el saldo quedará en cuentas por cobrar; no se registrará como gasto.</p>
+            <div className="dialog-actions"><button type="button" className="button secondary" onClick={() => setModal(null)}>Cancelar</button><button className="button primary">Registrar préstamo</button></div>
+          </form>
+        </Dialog>
+      )}
+      {modal?.kind === 'loanRepayment' && (
+        <Dialog title={`Registrar abono · ${modal.loan.description}`} onClose={() => setModal(null)}>
+          <form className="stack-form" onSubmit={saveLoanRepayment}>
+            <p className="sale-total"><span>Saldo por devolver</span><strong>{money(modal.loan.outstanding)}</strong></p>
+            <div className="form-grid">
+              <Field label="Importe devuelto (LPS)"><input type="number" min="0.01" max={modal.loan.outstanding} step="0.01" required value={modal.values.amount} onChange={(event) => setModal({ ...modal, values: { ...modal.values, amount: event.target.value } })} /></Field>
+              <Field label="Fecha"><input type="date" required value={modal.values.paymentDate} onChange={(event) => setModal({ ...modal, values: { ...modal.values, paymentDate: event.target.value } })} /></Field>
+            </div>
+            <p className="form-note">El abono aumentará el efectivo y reducirá la cuenta por cobrar; no se registrará como ingreso.</p>
+            <div className="dialog-actions"><button type="button" className="button secondary" onClick={() => setModal(null)}>Cancelar</button><button className="button primary">Guardar abono</button></div>
           </form>
         </Dialog>
       )}

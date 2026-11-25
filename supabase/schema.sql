@@ -304,6 +304,20 @@ create table if not exists public.web_order_items (
   created_at timestamptz not null default now()
 );
 
+create table if not exists public.manual_reservations (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  web_product_id uuid not null references public.web_products(id) on delete cascade,
+  product_name text not null,
+  customer_name text not null check (length(btrim(customer_name)) > 0),
+  customer_phone text,
+  quantity integer not null check (quantity > 0),
+  batch_allocations jsonb not null default '[]'::jsonb check (jsonb_typeof(batch_allocations) = 'array'),
+  reservation_date date not null default current_date,
+  status text not null default 'active' check (status in ('active', 'cancelled')),
+  created_at timestamptz not null default now()
+);
+
 create table if not exists public.custom_orders (
   id uuid primary key default gen_random_uuid(),
   owner_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
@@ -517,6 +531,24 @@ create table if not exists public.finance_settings (
   updated_at timestamptz not null default now()
 );
 
+create table if not exists public.business_loans (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  description text not null check (length(btrim(description)) > 0),
+  principal numeric(14, 2) not null check (principal > 0),
+  loan_date date not null default current_date,
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.business_loan_repayments (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  business_loan_id uuid not null references public.business_loans(id) on delete cascade,
+  amount numeric(14, 2) not null check (amount > 0),
+  payment_date date not null default current_date,
+  created_at timestamptz not null default now()
+);
+
 insert into public.finance_settings (id) values (1) on conflict (id) do nothing;
 
 create index if not exists materials_owner_idx on public.materials(owner_id);
@@ -540,6 +572,9 @@ create index if not exists web_orders_created_at_idx on public.web_orders(create
 create index if not exists web_orders_status_created_idx on public.web_orders(status, created_at desc);
 create index if not exists web_order_items_order_idx on public.web_order_items(web_order_id);
 create index if not exists web_order_items_batch_idx on public.web_order_items(batch_id);
+create index if not exists manual_reservations_status_date_idx on public.manual_reservations(status, reservation_date desc);
+create index if not exists business_loans_date_idx on public.business_loans(loan_date desc);
+create index if not exists business_loan_repayments_loan_idx on public.business_loan_repayments(business_loan_id, payment_date);
 
 alter table public.materials enable row level security;
 alter table public.indirects enable row level security;
@@ -562,7 +597,10 @@ alter table public.web_products enable row level security;
 alter table public.web_product_batches enable row level security;
 alter table public.web_orders enable row level security;
 alter table public.web_order_items enable row level security;
+alter table public.manual_reservations enable row level security;
 alter table public.custom_orders enable row level security;
+alter table public.business_loans enable row level security;
+alter table public.business_loan_repayments enable row level security;
 
 drop policy if exists "Owners manage their materials" on public.materials;
 drop policy if exists "Authenticated users manage shared materials" on public.materials;
@@ -654,8 +692,20 @@ drop policy if exists "Authenticated users view web order items" on public.web_o
 create policy "Authenticated users view web order items" on public.web_order_items
   for select to authenticated using (true);
 
+drop policy if exists "Authenticated users manage manual reservations" on public.manual_reservations;
+create policy "Authenticated users manage manual reservations" on public.manual_reservations
+  for all to authenticated using (true) with check (true);
+
 drop policy if exists "Authenticated users manage custom orders" on public.custom_orders;
 create policy "Authenticated users manage custom orders" on public.custom_orders
+  for all to authenticated using (true) with check (true);
+
+drop policy if exists "Authenticated users manage business loans" on public.business_loans;
+create policy "Authenticated users manage business loans" on public.business_loans
+  for all to authenticated using (true) with check (true);
+
+drop policy if exists "Authenticated users manage business loan repayments" on public.business_loan_repayments;
+create policy "Authenticated users manage business loan repayments" on public.business_loan_repayments
   for all to authenticated using (true) with check (true);
 
 do $$
@@ -672,7 +722,7 @@ begin
 end;
 $$;
 
-grant select, insert, update, delete on public.materials, public.indirects, public.utensils, public.recipes, public.recipe_items, public.recipe_indirects, public.recipe_utensils, public.batches, public.sales, public.sale_items, public.purchases, public.purchase_items, public.expenses, public.additional_incomes, public.collection_reminders, public.finance_settings, public.web_settings, public.web_products, public.web_product_batches to authenticated;
+grant select, insert, update, delete on public.materials, public.indirects, public.utensils, public.recipes, public.recipe_items, public.recipe_indirects, public.recipe_utensils, public.batches, public.sales, public.sale_items, public.purchases, public.purchase_items, public.expenses, public.additional_incomes, public.collection_reminders, public.finance_settings, public.web_settings, public.web_products, public.web_product_batches, public.manual_reservations, public.business_loans, public.business_loan_repayments to authenticated;
 grant select on public.web_orders, public.web_order_items to authenticated;
 grant select, insert, update, delete on public.custom_orders to authenticated;
 grant usage, select on sequence public.sales_invoice_number_seq, public.purchases_number_seq, public.web_order_number_seq to authenticated;
@@ -1546,8 +1596,9 @@ as $$
   select greatest(
     b.quantity
       - coalesce(current_reservation.quantity, 0)
+      - coalesce(manual_reservation.quantity, 0)
       - least(
-        greatest(b.quantity - coalesce(current_reservation.quantity, 0), 0),
+        greatest(b.quantity - coalesce(current_reservation.quantity, 0) - coalesce(manual_reservation.quantity, 0), 0),
         greatest(coalesce(recipe_sales.quantity, 0) - coalesce(previous_free_stock.quantity, 0), 0)
       ),
     0
@@ -1560,13 +1611,23 @@ as $$
     where woi.batch_id = b.id and wo.status = 'confirmed'
   ) current_reservation on true
   left join lateral (
+    select coalesce(sum(allocation.quantity), 0) as quantity
+    from public.manual_reservations reservation
+    cross join lateral jsonb_to_recordset(reservation.batch_allocations) as allocation(batch_id uuid, quantity integer)
+    where allocation.batch_id = b.id and reservation.status = 'active'
+  ) manual_reservation on true
+  left join lateral (
     select coalesce(sum(si.quantity), 0) as quantity
     from public.sales s
     join public.sale_items si on si.sale_id = s.id
     where s.status = 'issued' and si.recipe_id = b.recipe_id
   ) recipe_sales on true
   left join lateral (
-    select coalesce(sum(greatest(previous_batch.quantity - coalesce(previous_reservation.quantity, 0), 0)), 0) as quantity
+    select coalesce(sum(greatest(
+      previous_batch.quantity - coalesce(previous_reservation.quantity, 0)
+        - coalesce(previous_manual_reservation.quantity, 0),
+      0
+    )), 0) as quantity
     from public.batches previous_batch
     left join lateral (
       select coalesce(sum(woi.quantity), 0) as quantity
@@ -1574,6 +1635,12 @@ as $$
       join public.web_orders wo on wo.id = woi.web_order_id
       where woi.batch_id = previous_batch.id and wo.status = 'confirmed'
     ) previous_reservation on true
+    left join lateral (
+      select coalesce(sum(allocation.quantity), 0) as quantity
+      from public.manual_reservations reservation
+      cross join lateral jsonb_to_recordset(reservation.batch_allocations) as allocation(batch_id uuid, quantity integer)
+      where allocation.batch_id = previous_batch.id and reservation.status = 'active'
+    ) previous_manual_reservation on true
     where previous_batch.recipe_id = b.recipe_id
       and (previous_batch.batch_date, previous_batch.created_at, previous_batch.id)
         < (b.batch_date, b.created_at, b.id)
@@ -1852,6 +1919,150 @@ begin
 end;
 $$;
 
+create or replace function public.reserve_manual_product(
+  p_web_product_id uuid,
+  p_customer_name text,
+  p_customer_phone text,
+  p_quantity integer,
+  p_reservation_date date
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_product public.web_products%rowtype;
+  v_batch record;
+  v_recipe_id uuid;
+  v_reservation_id uuid;
+  v_available numeric;
+  v_remaining integer;
+  v_take integer;
+  v_allocations jsonb := '[]'::jsonb;
+begin
+  if auth.uid() is null then
+    raise exception 'Debes iniciar sesión para registrar una reservación.';
+  end if;
+  if nullif(trim(p_customer_name), '') is null or length(trim(p_customer_name)) > 160
+     or (p_customer_phone is not null and length(trim(p_customer_phone)) > 40)
+     or p_quantity is null or p_quantity < 1 or p_quantity > 100
+     or p_reservation_date is null then
+    raise exception 'Completa un cliente, una fecha y una cantidad válida (1 a 100).';
+  end if;
+
+  select * into v_product
+  from public.web_products
+  where id = p_web_product_id and active
+  for share;
+  if not found then
+    raise exception 'El producto no existe o no está activo.';
+  end if;
+
+  select b.recipe_id into v_recipe_id
+  from public.web_product_batches wpb
+  join public.batches b on b.id = wpb.batch_id
+  where wpb.web_product_id = v_product.id
+  order by b.batch_date, b.created_at, b.id
+  limit 1;
+  if v_recipe_id is null or exists (
+    select 1
+    from public.web_product_batches wpb
+    join public.batches b on b.id = wpb.batch_id
+    where wpb.web_product_id = v_product.id and b.recipe_id is distinct from v_recipe_id
+  ) then
+    raise exception 'El producto no tiene lotes compatibles para reservar.';
+  end if;
+
+  perform r.id
+  from public.recipes r
+  where r.id = v_recipe_id
+  for update;
+
+  v_remaining := p_quantity;
+  for v_batch in
+    select b.id
+    from public.web_product_batches wpb
+    join public.batches b on b.id = wpb.batch_id
+    where wpb.web_product_id = v_product.id
+    order by b.batch_date, b.created_at, b.id
+  loop
+    v_available := public.web_available_batch_stock(v_batch.id);
+    v_take := least(v_remaining, greatest(v_available, 0)::integer);
+    if v_take > 0 then
+      v_allocations := v_allocations || jsonb_build_array(
+        jsonb_build_object('batch_id', v_batch.id, 'quantity', v_take)
+      );
+      v_remaining := v_remaining - v_take;
+    end if;
+    exit when v_remaining = 0;
+  end loop;
+
+  if v_remaining > 0 then
+    raise exception 'No hay suficientes unidades disponibles de "%". Faltan: %.',
+      v_product.name, v_remaining;
+  end if;
+
+  insert into public.manual_reservations (
+    web_product_id, product_name, customer_name, customer_phone, quantity,
+    batch_allocations, reservation_date
+  )
+  values (
+    v_product.id, v_product.name, trim(p_customer_name), nullif(trim(p_customer_phone), ''),
+    p_quantity, v_allocations, p_reservation_date
+  )
+  returning id into v_reservation_id;
+
+  return v_reservation_id;
+end;
+$$;
+
+create or replace function public.repay_business_loan(
+  p_business_loan_id uuid,
+  p_amount numeric,
+  p_payment_date date
+)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_principal numeric;
+  v_repaid numeric;
+  v_loan_date date;
+begin
+  if auth.uid() is null then
+    raise exception 'Debes iniciar sesión para registrar un abono.';
+  end if;
+  if p_amount is null or p_amount <= 0 or p_payment_date is null then
+    raise exception 'Ingresa un importe y una fecha válidos.';
+  end if;
+
+  select principal, loan_date into v_principal, v_loan_date
+  from public.business_loans
+  where id = p_business_loan_id
+  for update;
+  if not found then
+    raise exception 'No se encontró el préstamo.';
+  end if;
+  if p_payment_date < v_loan_date then
+    raise exception 'La fecha del abono no puede ser anterior a la fecha del préstamo.';
+  end if;
+
+  select coalesce(sum(amount), 0) into v_repaid
+  from public.business_loan_repayments
+  where business_loan_id = p_business_loan_id;
+  if v_repaid + p_amount > v_principal then
+    raise exception 'El abono supera el saldo pendiente de L %.',
+      pg_catalog.to_char(v_principal - v_repaid, 'FM999999999990.00');
+  end if;
+
+  insert into public.business_loan_repayments (business_loan_id, amount, payment_date)
+  values (p_business_loan_id, p_amount, p_payment_date);
+end;
+$$;
+
 create or replace function public.delete_batch(p_batch_id uuid)
 returns integer
 language plpgsql
@@ -1860,6 +2071,7 @@ set search_path = ''
 as $$
 declare
   v_cancelled_orders integer;
+  v_cancelled_reservations integer;
 begin
   if auth.uid() is null then
     raise exception 'Debes iniciar sesión para eliminar lotes.';
@@ -1874,12 +2086,28 @@ begin
     );
   get diagnostics v_cancelled_orders = row_count;
 
+  perform r.id
+  from public.recipes r
+  join public.batches b on b.recipe_id = r.id
+  where b.id = p_batch_id
+  for update of r;
+
+  update public.manual_reservations reservation
+  set status = 'cancelled'
+  where reservation.status = 'active'
+    and exists (
+      select 1
+      from jsonb_to_recordset(reservation.batch_allocations) as allocation(batch_id uuid, quantity integer)
+      where allocation.batch_id = p_batch_id
+    );
+  get diagnostics v_cancelled_reservations = row_count;
+
   delete from public.batches where id = p_batch_id;
   if not found then
     raise exception 'No se encontró el lote.';
   end if;
 
-  return v_cancelled_orders;
+  return v_cancelled_orders + v_cancelled_reservations;
 end;
 $$;
 
@@ -2009,6 +2237,8 @@ revoke all on function public.mark_sale_paid(uuid, text) from public;
 revoke all on function public.mark_sale_lost(uuid) from public;
 revoke all on function public.record_expense(text, text, numeric, date, text, text) from public;
 revoke all on function public.mark_expense_paid(uuid, text) from public;
+revoke all on function public.reserve_manual_product(uuid, text, text, integer, date) from public;
+revoke all on function public.repay_business_loan(uuid, numeric, date) from public;
 revoke all on function public.delete_batch(uuid) from public;
 grant execute on function public.save_recipe(uuid, text, integer, numeric, numeric, numeric, numeric, numeric, jsonb, jsonb, jsonb) to authenticated;
 grant execute on function public.produce_batch(uuid, text, integer, uuid) to authenticated;
@@ -2023,6 +2253,8 @@ grant execute on function public.mark_sale_paid(uuid, text) to authenticated;
 grant execute on function public.mark_sale_lost(uuid) to authenticated;
 grant execute on function public.record_expense(text, text, numeric, date, text, text) to authenticated;
 grant execute on function public.mark_expense_paid(uuid, text) to authenticated;
+grant execute on function public.reserve_manual_product(uuid, text, text, integer, date) to authenticated;
+grant execute on function public.repay_business_loan(uuid, numeric, date) to authenticated;
 grant execute on function public.delete_batch(uuid) to authenticated;
 
 notify pgrst, 'reload schema';
