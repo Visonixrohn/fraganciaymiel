@@ -552,11 +552,10 @@ function App() {
 
   const soapStockRows = useMemo(() => data.webProducts.flatMap((product) => {
     const batches = getWebProductBatches(product);
-    const availableBatches = batches
-      .map((batch) => ({ product, batch, available: availableWebBatchStock(batch) }))
-      .filter((row) => row.available > 0);
-    return availableBatches.length
-      ? availableBatches
+    const batchRows = batches
+      .map((batch) => ({ product, batch, available: availableWebBatchStock(batch) }));
+    return batchRows.length
+      ? batchRows
       : [{ product, batch: null, available: 0 }];
   }), [data]);
   const saleProducts = useMemo(() => data.webProducts.map((product) => ({
