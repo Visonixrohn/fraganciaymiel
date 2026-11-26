@@ -85,19 +85,20 @@ const inventoryTakeCategories = [
 const themeStorageKey = 'fragancia-y-miel-theme';
 const preferencesStorageKey = 'fragancia-y-miel-preferences';
 const defaultPreferences = {
-  accentColor: '#e6a000',
-  fontFamily: '"DM Sans", sans-serif',
+  accentColor: '#2563eb',
+  fontFamily: 'Inter, sans-serif',
   fontScale: 1,
   navigationPosition: 'left',
 };
 const accentPresets = [
-  ['#e6a000', 'Miel'],
+  ['#2563eb', 'Azul'],
   ['#28865a', 'Bosque'],
   ['#3478bd', 'Océano'],
   ['#aa536f', 'Rosa'],
   ['#7652a8', 'Violeta'],
 ];
 const fontOptions = [
+  ['Inter, sans-serif', 'Inter'],
   ['"DM Sans", sans-serif', 'DM Sans'],
   ['Arial, sans-serif', 'Arial'],
   ['Georgia, serif', 'Georgia'],
@@ -233,6 +234,7 @@ function App() {
   const [salesSearch, setSalesSearch] = useState('');
   const [salesFilter, setSalesFilter] = useState('all');
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
   const [mobileFormOpen, setMobileFormOpen] = useState(null);
   const [materialSearch, setMaterialSearch] = useState('');
   const [webProductSearch, setWebProductSearch] = useState('');
@@ -2561,7 +2563,7 @@ function App() {
 
   return (
     <div
-      className={`app-shell nav-position-${preferences.navigationPosition}`}
+      className={`app-shell nav-position-${preferences.navigationPosition}${sidebarCollapsed ? ' sidebar-collapsed' : ''}`}
       data-theme={theme}
       style={{
         '--green': preferences.accentColor,
@@ -2601,6 +2603,13 @@ function App() {
       <div className="app-workspace">
         {mobileNavOpen && <button type="button" className="sidebar-backdrop" aria-label="Cerrar menú" onClick={() => setMobileNavOpen(false)} />}
         <aside id="primary-navigation" className={`sidebar${mobileNavOpen ? ' open' : ''}`} aria-label="Navegación principal">
+          <button
+            type="button"
+            className="sidebar-collapse-toggle"
+            aria-label={sidebarCollapsed ? 'Expandir menú' : 'Contraer menú'}
+            aria-expanded={!sidebarCollapsed}
+            onClick={() => setSidebarCollapsed(!sidebarCollapsed)}
+          >{sidebarCollapsed ? '›' : '‹'}<span>{sidebarCollapsed ? 'Expandir' : 'Contraer'}</span></button>
           {navigationGroups.map((group) => (
             <section
               className={`nav-group${['header', 'bottom'].includes(preferences.navigationPosition) ? ' nav-group-horizontal' : ''}${!['header', 'bottom'].includes(preferences.navigationPosition) && collapsedNavigationGroups.has(group.label) ? ' collapsed' : ''}${['header', 'bottom'].includes(preferences.navigationPosition) && openHorizontalNavigationGroup === group.label ? ' expanded' : ''}`}
@@ -2637,6 +2646,7 @@ function App() {
                     key={id}
                     className={`nav-item${tab === id ? ' active' : ''}`}
                     aria-current={tab === id ? 'page' : undefined}
+                    title={sidebarCollapsed ? title : undefined}
                     onClick={() => {
                       setTab(id);
                       setMobileNavOpen(false);
