@@ -1437,3 +1437,147 @@ input:focus, select:focus, textarea:focus { border-color: #3b82f6; box-shadow: 0
   .app-workspace { min-height: calc(100vh - 65px); }
   .brand { font-size: 15px; }
 }
+
+:root { font-weight: 400; }
+.app-shell { color: #1f2937; font-size: 14px; font-weight: 400; }
+.app-shell :is(button, input, select, textarea) { font-family: inherit; }
+.app-shell :is(p, small, .muted, .form-note, .section-heading p) { color: #64748b; }
+.app-shell :is(.section-heading h2, .dialog-heading h2, .settings-control h3, .settings-preview h3) {
+  color: #1e293b;
+  font-family: inherit;
+  font-weight: 600;
+}
+.app-shell :is(.stack-form label, .dialog label, .sales-search, .sales-filter, .inventory-search,
+  .report-period label, .opening-form label, .expense-form label, .reminder-form label,
+  .income-form label, .settings-select) {
+  color: #475569;
+  font-size: 12px;
+  font-weight: 500;
+}
+.app-shell :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea) {
+  border-color: #cbd5e1;
+  border-radius: 6px;
+  background: #fff;
+  color: #1e293b;
+  font-family: inherit;
+  font-size: 13px;
+  font-weight: 400;
+}
+.app-shell :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select) { height: 40px; }
+.app-shell textarea { min-height: 88px; padding: 10px 12px; line-height: 1.5; }
+.app-shell :is(input, select, textarea):focus {
+  border-color: #3b82f6;
+  box-shadow: 0 0 0 3px #3b82f61f;
+}
+.app-shell :is(input, textarea)::placeholder { color: #94a3b8; }
+.app-shell input[type="checkbox"], .app-shell input[type="radio"] {
+  width: 16px;
+  height: 16px;
+  accent-color: #2563eb;
+}
+.app-shell input[type="file"] {
+  height: auto;
+  border-color: #cbd5e1;
+  background: #fff;
+  color: #475569;
+  font-size: 12px;
+}
+.stack-form, .dialog .stack-form { gap: 16px; }
+.form-grid { gap: 16px; }
+.dialog-backdrop { background: rgb(15 23 42 / 48%); backdrop-filter: blur(2px); }
+.dialog {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  background: #fff;
+  box-shadow: 0 24px 64px rgb(15 23 42 / 20%);
+}
+.dialog-heading { gap: 16px; margin-bottom: 18px; padding-bottom: 14px; border-bottom: 1px solid #e2e8f0; }
+.dialog-heading h2 { font-size: 18px; line-height: 1.35; }
+.dialog-heading .icon-button { flex: 0 0 auto; }
+.dialog-actions { gap: 10px; margin-top: 12px; }
+.dialog-actions .button { min-width: 96px; }
+.button { min-height: 40px; border-radius: 6px; font-size: 13px; font-weight: 500; }
+.button.primary { border-color: #2563eb; background: #2563eb; color: #fff; }
+.button.primary:hover { border-color: #1d4ed8; background: #1d4ed8; }
+.button.secondary, .button.ghost {
+  border-color: #cbd5e1;
+  background: #fff;
+  color: #334155;
+}
+.button.secondary:hover, .button.ghost:hover { border-color: #94a3b8; background: #f8fafc; }
+.button.danger-button { border-color: #dc2626; background: #dc2626; color: #fff; }
+.button.danger-button:hover { border-color: #b91c1c; background: #b91c1c; }
+.icon-button {
+  width: 34px;
+  height: 34px;
+  border-color: #e2e8f0;
+  border-radius: 6px;
+  color: #475569;
+}
+.icon-button:hover { border-color: #bfdbfe; background: #eff6ff; color: #1d4ed8; }
+.sale-item-row select, .sale-item-row input,
+.purchase-item-row select, .purchase-item-row input { height: 38px; font-size: 12px; }
+.sale-line-price { color: #64748b; font-size: 12px; }
+.sale-total, .invoice-total, .stock-total {
+  border: 1px solid #dbeafe;
+  border-radius: 6px;
+  background: #eff6ff;
+  color: #334155;
+}
+.sale-total strong, .invoice-total strong, .stock-total strong { color: #1d4ed8; }
+.collection-filter, .inventory-take-tab, .settings-choice, .settings-color-choice, .settings-position-choice {
+  border-color: #e2e8f0;
+  border-radius: 6px;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 500;
+}
+.collection-filter.active, .inventory-take-tab.active,
+.settings-choice.active, .settings-color-choice.active, .settings-position-choice.active {
+  border-color: #93c5fd;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+.settings-control h3 { font-size: 14px; }
+.settings-control p, .settings-preview p:last-child { color: #64748b; font-size: 12px; }
+.settings-preview {
+  border-color: #dbeafe;
+  border-radius: 8px;
+  background: #eff6ff;
+}
+.settings-preview h3 { color: #1e293b; }
+.settings-custom-color { border-color: #cbd5e1; border-radius: 6px; color: #475569 !important; }
+.inventory-take-intro { border-color: #e2e8f0; background: #f8fafc; }
+.inventory-take-intro strong, .inventory-take-item strong, .inventory-take-step strong { color: #1e293b; }
+.inventory-take-intro p, .inventory-take-item small, .inventory-take-step small,
+.inventory-take-summary, .inventory-take-actions > span { color: #64748b; }
+.inventory-take-line { border-color: #e2e8f0; border-radius: 6px; }
+.inventory-take-success { border-color: #bbf7d0; border-radius: 6px; background: #f0fdf4; color: #166534; }
+.notice { border-radius: 6px; }
+.notice.error { border-color: #fecaca; background: #fef2f2; color: #b91c1c; }
+.toast { border-radius: 8px; background: #1e293b; font-size: 13px; }
+.toast.error { background: #b91c1c; }
+
+@media (max-width: 900px) {
+  .dialog {
+    border-color: #e2e8f0;
+    border-radius: 14px 14px 0 0;
+  }
+  .dialog-heading {
+    margin: -18px -17px 18px;
+    padding: 16px 17px 13px;
+    background: #fff;
+  }
+  .dialog-actions .button { min-height: 44px; }
+  .settings-control { gap: 14px; }
+}
+.app-shell[data-theme="dark"] :is(input:not([type="checkbox"]):not([type="radio"]):not([type="file"]), select, textarea) {
+  border-color: #46544a;
+  background: #202b23;
+  color: #edf2ed;
+}
+.app-shell[data-theme="dark"] :is(input, textarea)::placeholder { color: #9aa79d; }
+.app-shell[data-theme="dark"] :is(input, select, textarea):focus {
+  border-color: #60a5fa;
+  box-shadow: 0 0 0 3px #60a5fa30;
+}
