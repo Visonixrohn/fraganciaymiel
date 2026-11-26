@@ -1613,3 +1613,80 @@ input:focus, select:focus, textarea:focus { border-color: #3b82f6; box-shadow: 0
 @media (max-width: 900px) {
   .dialog { padding: 18px; }
 }
+
+.app-shell,
+.app-shell * {
+  font-weight: 700 !important;
+}
+.app-shell ::placeholder { font-weight: 700 !important; }
+
+.app-shell .brand i,
+.app-shell .brand-icon:not(.brand-logo),
+.app-shell .metric-icon,
+.app-shell .metric-warning .metric-icon,
+.app-shell .nav-icon,
+.app-shell .mobile-menu-icon,
+.app-shell .mobile-bottom-item.active > span {
+  color: var(--green);
+}
+.app-shell .brand-icon:not(.brand-logo) {
+  border-color: color-mix(in srgb, var(--green) 48%, transparent);
+  background: var(--green-soft);
+}
+.app-shell :is(.metric-icon, .metric-warning .metric-icon, .mobile-menu-icon) {
+  background: var(--green-soft);
+}
+.app-shell :is(.nav-item.active, .mobile-menu-item.active, .mobile-bottom-item.active) {
+  background: var(--green-soft);
+  color: var(--green-dark);
+}
+.app-shell .nav-item.active { box-shadow: inset 3px 0 var(--green); }
+.app-shell.nav-position-right .nav-item.active { box-shadow: inset -3px 0 var(--green); }
+.app-shell.nav-position-header .nav-item.active,
+.app-shell.nav-position-bottom .nav-item.active { box-shadow: inset 0 -3px var(--green); }
+
+.app-shell .app-workspace { width: 100%; align-items: stretch; }
+.app-shell:not(.nav-position-header) .main-content {
+  flex: 1 1 0%;
+  width: 0;
+  min-width: 0;
+  max-width: none;
+  margin-right: 0;
+  margin-left: 0;
+}
+.app-shell .panel,
+.app-shell .table-wrap { width: 100%; min-width: 0; }
+@media (min-width: 901px) {
+  .app-shell .table-wrap table {
+    width: max-content;
+    min-width: 100%;
+  }
+}
+
+@media (min-width: 901px) {
+  .app-shell.nav-position-bottom .sidebar {
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+  .app-shell.nav-position-bottom .nav-group-horizontal {
+    display: flex;
+    align-items: center;
+  }
+  .app-shell.nav-position-bottom .nav-group-horizontal .nav-group-toggle { display: none; }
+  .app-shell.nav-position-bottom .nav-group-horizontal .nav-group-items {
+    position: static;
+    display: flex !important;
+    width: auto;
+    max-height: none;
+    gap: 2px;
+    overflow: visible;
+    padding: 0;
+    border: 0;
+    background: transparent;
+    box-shadow: none;
+  }
+  .app-shell.nav-position-bottom .nav-group-horizontal .nav-item {
+    min-height: 48px;
+    padding: 0 10px;
+  }
+}
