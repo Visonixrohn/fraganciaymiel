@@ -1,3 +1,4 @@
+import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { Children, isValidElement, useCallback, useEffect, useMemo, useState } from 'react';
 import { isSupabaseConfigured, supabase } from './supabase.js';
 
@@ -4611,7 +4612,30 @@ function Notice({ type, children }) {
   return <div className={`notice ${type}`} role="alert">{children}</div>;
 }
 function Dialog({ title, onClose, children, className = '', closeOnBackdrop = true }) {
-  return <div className="dialog-backdrop" onMouseDown={(event) => { if (closeOnBackdrop && event.target === event.currentTarget) onClose(); }}><section className={`dialog ${className}`} role="dialog" aria-modal="true" aria-label={title}><div className="dialog-heading"><h2>{title}</h2><button type="button" className="icon-button" aria-label="Cerrar" onClick={onClose}>×</button></div>{children}</section></div>;
+  return (
+    <DialogPrimitive.Root open onOpenChange={(open) => { if (!open) onClose(); }}>
+      <DialogPrimitive.Portal>
+        <DialogPrimitive.Overlay className="dialog-backdrop">
+          <DialogPrimitive.Content
+            className={`dialog ${className}`}
+            onInteractOutside={(event) => { if (!closeOnBackdrop) event.preventDefault(); }}
+          >
+            <div className="dialog-heading">
+              <DialogPrimitive.Title asChild><h2>{title}</h2></DialogPrimitive.Title>
+              <DialogPrimitive.Close asChild>
+                <button
+                  type="button"
+                  className="icon-button focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
+                  aria-label="Cerrar"
+                >×</button>
+              </DialogPrimitive.Close>
+            </div>
+            {children}
+          </DialogPrimitive.Content>
+        </DialogPrimitive.Overlay>
+      </DialogPrimitive.Portal>
+    </DialogPrimitive.Root>
+  );
 }
 function Field({ label, children }) {
   return <label>{label}{children}</label>;
