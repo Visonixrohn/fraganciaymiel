@@ -97,9 +97,36 @@ create table if not exists public.utensils (
   name text not null,
   cost numeric(14, 2) not null default 0 check (cost >= 0),
   useful_life numeric(14, 3) not null check (useful_life > 0),
+  stock numeric(14, 3) not null default 0 check (stock >= 0),
   created_at timestamptz not null default now(),
   unique (owner_id, code)
 );
+
+alter table public.utensils add column if not exists stock numeric(14, 3) not null default 0 check (stock >= 0);
+
+create table if not exists public.inventory_takes (
+  id uuid primary key default gen_random_uuid(),
+  owner_id uuid not null default auth.uid() references auth.users(id) on delete cascade,
+  notes text check (notes is null or length(notes) <= 500),
+  created_at timestamptz not null default now()
+);
+
+create table if not exists public.inventory_take_items (
+  id uuid primary key default gen_random_uuid(),
+  take_id uuid not null references public.inventory_takes(id) on delete cascade,
+  category text not null check (category in ('soap', 'utensils', 'materials')),
+  item_id uuid not null,
+  item_code text not null default '',
+  item_name text not null,
+  system_quantity numeric(14, 3) not null check (system_quantity >= 0),
+  counted_quantity numeric(14, 3) not null check (counted_quantity >= 0),
+  adjustment numeric(14, 3) not null,
+  created_at timestamptz not null default now(),
+  unique (take_id, category, item_id)
+);
+
+create index if not exists inventory_takes_created_at_idx on public.inventory_takes(created_at desc);
+create index if not exists inventory_take_items_take_idx on public.inventory_take_items(take_id);
 
 create table if not exists public.recipes (
   id uuid primary key default gen_random_uuid(),
@@ -164,6 +191,9 @@ create table if not exists public.batches (
   created_at timestamptz not null default now(),
   unique (owner_id, code)
 );
+
+alter table public.batches
+  add column if not exists inventory_adjustment numeric(14, 3) not null default 0;
 
 create table if not exists public.web_settings (
   id integer primary key default 1 check (id = 1),
@@ -594,6 +624,8 @@ create index if not exists promotion_events_date_idx on public.promotion_events(
 alter table public.materials enable row level security;
 alter table public.indirects enable row level security;
 alter table public.utensils enable row level security;
+alter table public.inventory_takes enable row level security;
+alter table public.inventory_take_items enable row level security;
 alter table public.recipes enable row level security;
 alter table public.recipe_items enable row level security;
 alter table public.recipe_indirects enable row level security;
@@ -631,6 +663,14 @@ create policy "Authenticated users manage shared indirects" on public.indirects
 drop policy if exists "Owners manage their utensils" on public.utensils;
 drop policy if exists "Authenticated users manage shared utensils" on public.utensils;
 create policy "Authenticated users manage shared utensils" on public.utensils
+  for all to authenticated using (true) with check (true);
+
+drop policy if exists "Authenticated users manage shared inventory takes" on public.inventory_takes;
+create policy "Authenticated users manage shared inventory takes" on public.inventory_takes
+  for all to authenticated using (true) with check (true);
+
+drop policy if exists "Authenticated users manage shared inventory take items" on public.inventory_take_items;
+create policy "Authenticated users manage shared inventory take items" on public.inventory_take_items
   for all to authenticated using (true) with check (true);
 
 drop policy if exists "Owners manage their recipes" on public.recipes;
@@ -742,7 +782,7 @@ begin
 end;
 $$;
 
-grant select, insert, update, delete on public.materials, public.indirects, public.utensils, public.recipes, public.recipe_items, public.recipe_indirects, public.recipe_utensils, public.batches, public.sales, public.sale_items, public.purchases, public.purchase_items, public.expenses, public.additional_incomes, public.collection_reminders, public.finance_settings, public.web_settings, public.web_products, public.web_product_batches, public.manual_reservations, public.business_loans, public.business_loan_repayments to authenticated;
+grant select, insert, update, delete on public.materials, public.indirects, public.utensils, public.inventory_takes, public.inventory_take_items, public.recipes, public.recipe_items, public.recipe_indirects, public.recipe_utensils, public.batches, public.sales, public.sale_items, public.purchases, public.purchase_items, public.expenses, public.additional_incomes, public.collection_reminders, public.finance_settings, public.web_settings, public.web_products, public.web_product_batches, public.manual_reservations, public.business_loans, public.business_loan_repayments to authenticated;
 grant select on public.web_orders, public.web_order_items to authenticated;
 grant select, insert, update, delete on public.custom_orders to authenticated;
 grant select, insert, update, delete on public.promotion_events to authenticated;
@@ -1119,7 +1159,7 @@ begin
     end if;
 
     select
-      coalesce(sum(b.quantity), 0) - coalesce((
+      coalesce(sum(b.quantity + b.inventory_adjustment), 0) - coalesce((
         select sum(si.quantity)
         from public.sales s
         join public.sale_items si on si.sale_id = s.id
@@ -1615,11 +1655,11 @@ security definer
 set search_path = ''
 as $$
   select greatest(
-    b.quantity
+    b.quantity + b.inventory_adjustment
       - coalesce(current_reservation.quantity, 0)
       - coalesce(manual_reservation.quantity, 0)
       - least(
-        greatest(b.quantity - coalesce(current_reservation.quantity, 0) - coalesce(manual_reservation.quantity, 0), 0),
+        greatest(b.quantity + b.inventory_adjustment - coalesce(current_reservation.quantity, 0) - coalesce(manual_reservation.quantity, 0), 0),
         greatest(coalesce(recipe_sales.quantity, 0) - coalesce(previous_free_stock.quantity, 0), 0)
       ),
     0
@@ -1645,7 +1685,7 @@ as $$
   ) recipe_sales on true
   left join lateral (
     select coalesce(sum(greatest(
-      previous_batch.quantity - coalesce(previous_reservation.quantity, 0)
+      previous_batch.quantity + previous_batch.inventory_adjustment - coalesce(previous_reservation.quantity, 0)
         - coalesce(previous_manual_reservation.quantity, 0),
       0
     )), 0) as quantity
@@ -2231,6 +2271,199 @@ begin
   return v_sale_id;
 end;
 $$;
+
+create or replace function public.record_inventory_take(p_notes text, p_items jsonb)
+returns uuid
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_owner uuid := auth.uid();
+  v_take_id uuid;
+  v_item record;
+  v_material public.materials%rowtype;
+  v_utensil public.utensils%rowtype;
+  v_batch public.batches%rowtype;
+  v_before numeric(14, 3);
+  v_reserved numeric(14, 3);
+  v_sold numeric(14, 3);
+  v_earlier_free numeric(14, 3);
+  v_sold_here numeric(14, 3);
+begin
+  if v_owner is null then
+    raise exception 'Debes iniciar sesión para registrar una toma de inventario.';
+  end if;
+  if p_notes is not null and length(p_notes) > 500 then
+    raise exception 'Las notas no pueden superar 500 caracteres.';
+  end if;
+  if p_items is null or jsonb_typeof(p_items) is distinct from 'array' then
+    raise exception 'La toma debe incluir una lista de artículos válida.';
+  end if;
+  if jsonb_array_length(p_items) = 0 then
+    raise exception 'La toma debe incluir al menos un artículo.';
+  end if;
+  if exists (
+    select 1
+    from jsonb_to_recordset(p_items) as item(
+      category text, item_id uuid, item_code text, item_name text,
+      system_quantity numeric, counted_quantity numeric
+    )
+    group by item.category, item.item_id
+    having count(*) > 1
+  ) then
+    raise exception 'La toma contiene artículos duplicados.';
+  end if;
+  if exists (
+    select 1
+    from jsonb_to_recordset(p_items) as item(
+      category text, item_id uuid, item_code text, item_name text,
+      system_quantity numeric, counted_quantity numeric
+    )
+    where item.category is null
+       or item.category not in ('soap', 'utensils', 'materials')
+       or item.item_id is null
+       or item.system_quantity is null or item.system_quantity < 0
+       or item.counted_quantity is null or item.counted_quantity < 0
+       or item.item_name is null or length(item.item_name) = 0
+       or (item.category in ('soap', 'utensils') and item.counted_quantity <> trunc(item.counted_quantity))
+       or (item.category = 'materials' and item.counted_quantity <> round(item.counted_quantity, 3))
+  ) then
+    raise exception 'La toma contiene cantidades o artículos inválidos.';
+  end if;
+
+  insert into public.inventory_takes (owner_id, notes)
+  values (v_owner, nullif(btrim(p_notes), ''))
+  returning id into v_take_id;
+
+  for v_item in
+    select * from jsonb_to_recordset(p_items) as item(
+      category text, item_id uuid, item_code text, item_name text,
+      system_quantity numeric, counted_quantity numeric
+    )
+  loop
+    if v_item.category = 'materials' then
+      select * into v_material
+      from public.materials
+      where id = v_item.item_id
+      for update;
+      if not found then
+        raise exception 'No se encontró la materia prima %.', v_item.item_name;
+      end if;
+      v_before := v_material.initial_stock + v_material.purchased - v_material.used;
+      if abs(v_before - v_item.system_quantity) > 0.001 then
+        raise exception 'El stock de % cambió durante la toma. Actualiza la pantalla e inténtalo de nuevo.', v_item.item_name;
+      end if;
+      if v_item.counted_quantity >= v_before then
+        update public.materials
+        set initial_stock = initial_stock + (v_item.counted_quantity - v_before),
+            total_cost = round(total_cost
+              + (v_item.counted_quantity - v_before) * unit_cost, 2)
+        where id = v_item.item_id;
+      else
+        update public.materials
+        set used = used + (v_before - v_item.counted_quantity)
+        where id = v_item.item_id;
+      end if;
+    elsif v_item.category = 'utensils' then
+      select * into v_utensil
+      from public.utensils
+      where id = v_item.item_id
+      for update;
+      if not found then
+        raise exception 'No se encontró el utensilio %.', v_item.item_name;
+      end if;
+      v_before := v_utensil.stock;
+      if abs(v_before - v_item.system_quantity) > 0.001 then
+        raise exception 'El stock de % cambió durante la toma. Actualiza la pantalla e inténtalo de nuevo.', v_item.item_name;
+      end if;
+      update public.utensils
+      set stock = v_item.counted_quantity
+      where id = v_item.item_id;
+    else
+      select * into v_batch
+      from public.batches
+      where id = v_item.item_id
+      for update;
+      if not found then
+        raise exception 'No se encontró el lote de jabón %.', v_item.item_name;
+      end if;
+
+      select coalesce(sum(item.quantity), 0) into v_reserved
+      from (
+        select woi.quantity
+        from public.web_order_items woi
+        join public.web_orders wo on wo.id = woi.web_order_id
+        where woi.batch_id = v_batch.id and wo.status = 'confirmed'
+        union all
+        select allocation.quantity
+        from public.manual_reservations reservation
+        cross join lateral jsonb_to_recordset(reservation.batch_allocations)
+          as allocation(batch_id uuid, quantity numeric)
+        where allocation.batch_id = v_batch.id and reservation.status = 'active'
+      ) item;
+
+      select coalesce(sum(item.quantity), 0) into v_sold
+      from public.sale_items item
+      join public.sales sale on sale.id = item.sale_id
+      where item.recipe_id = v_batch.recipe_id and sale.status = 'issued';
+
+      select coalesce(sum(greatest(0, earlier.quantity - earlier_reserved.quantity)), 0)
+      into v_earlier_free
+      from public.batches earlier
+      cross join lateral (
+        select coalesce(sum(woi.quantity), 0) as quantity
+        from public.web_order_items woi
+        join public.web_orders wo on wo.id = woi.web_order_id
+        where woi.batch_id = earlier.id and wo.status = 'confirmed'
+      ) web_reserved
+      cross join lateral (
+        select coalesce(sum(allocation.quantity), 0) as quantity
+        from public.manual_reservations reservation
+        cross join lateral jsonb_to_recordset(reservation.batch_allocations)
+          as allocation(batch_id uuid, quantity numeric)
+        where allocation.batch_id = earlier.id and reservation.status = 'active'
+      ) manual_reserved
+      cross join lateral (
+        select web_reserved.quantity + manual_reserved.quantity as quantity
+      ) earlier_reserved
+      where earlier.recipe_id = v_batch.recipe_id
+        and (earlier.batch_date, earlier.created_at, earlier.id)
+          < (v_batch.batch_date, v_batch.created_at, v_batch.id);
+
+      v_sold_here := least(
+        greatest(0, v_batch.quantity + v_batch.inventory_adjustment - v_reserved),
+        greatest(0, v_sold - v_earlier_free)
+      );
+      v_before := greatest(0, v_batch.quantity + v_batch.inventory_adjustment - v_sold_here);
+      if abs(v_before - v_item.system_quantity) > 0.001 then
+        raise exception 'El stock del lote % cambió durante la toma. Actualiza la pantalla e inténtalo de nuevo.', v_item.item_name;
+      end if;
+      if v_item.counted_quantity < v_reserved then
+        raise exception 'La cantidad física de % no cubre sus reservas activas. Revisa las reservas antes de ajustar.', v_item.item_name;
+      end if;
+      update public.batches
+      set inventory_adjustment = v_item.counted_quantity + v_sold_here - v_batch.quantity
+      where id = v_item.item_id;
+    end if;
+
+    insert into public.inventory_take_items (
+      take_id, category, item_id, item_code, item_name,
+      system_quantity, counted_quantity, adjustment
+    )
+    values (
+      v_take_id, v_item.category, v_item.item_id, coalesce(v_item.item_code, ''),
+      v_item.item_name, v_before, v_item.counted_quantity,
+      v_item.counted_quantity - v_before
+    );
+  end loop;
+
+  return v_take_id;
+end;
+$$;
+
+revoke all on function public.record_inventory_take(text, jsonb) from public;
+grant execute on function public.record_inventory_take(text, jsonb) to authenticated;
 
 revoke all on function public.web_available_batch_stock(uuid) from public;
 revoke all on function public.get_web_catalog() from public;

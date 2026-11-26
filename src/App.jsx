@@ -11,6 +11,7 @@ const navigationGroups = [
   {
     label: 'Inventario',
     items: [
+      ['inventoryTakes', 'Tomas de inventario', '▤'],
       ['soapStock', 'Stock de jabones', '▦'],
       ['materials', 'Materia prima', '◈'],
       ['indirects', 'Insumos indirectos', '✳'],
@@ -75,6 +76,11 @@ const mobileQuickNavigation = [
   ['materials', 'Stock', '◈'],
   ['recipes', 'Recetas', '⌗'],
   ['customOrders', 'Pedidos', '✎'],
+];
+const inventoryTakeCategories = [
+  ['soap', 'Jabones', '▦'],
+  ['utensils', 'Utensilios', '⌑'],
+  ['materials', 'Materia prima', '◈'],
 ];
 const themeStorageKey = 'fragancia-y-miel-theme';
 const preferencesStorageKey = 'fragancia-y-miel-preferences';
@@ -175,7 +181,12 @@ const fromIndirect = (row) => ({
   yieldVal: number(row.yield_value),
   cost: number(row.cost),
 });
-const fromUtensil = (row) => ({ ...row, cost: number(row.cost), life: number(row.useful_life) });
+const fromUtensil = (row) => ({
+  ...row,
+  cost: number(row.cost),
+  life: number(row.useful_life),
+  stock: number(row.stock),
+});
 const fromRecipe = (row) => ({
   ...row,
   batchSize: number(row.batch_size),
@@ -207,6 +218,8 @@ function App() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState(null);
   const [tab, setTab] = useState('dashboard');
+  const [collapsedNavigationGroups, setCollapsedNavigationGroups] = useState(() => new Set());
+  const [openHorizontalNavigationGroup, setOpenHorizontalNavigationGroup] = useState(null);
   const [theme, setTheme] = useState(getSavedTheme);
   const [preferences, setPreferences] = useState(getSavedPreferences);
   const [calendarMonth, setCalendarMonth] = useState(() => new Date(`${today.slice(0, 7)}-01T12:00:00`));
@@ -243,8 +256,13 @@ function App() {
     webProducts: [],
     webOrders: [],
     customOrders: [],
+    inventoryTakes: [],
   });
   const [modal, setModal] = useState(null);
+  const [inventoryTakeDraft, setInventoryTakeDraft] = useState([]);
+  const [inventoryTakeCategory, setInventoryTakeCategory] = useState('soap');
+  const [inventoryTakeSaving, setInventoryTakeSaving] = useState(false);
+  const [inventoryTakeSaved, setInventoryTakeSaved] = useState(false);
   const [saleDraft, setSaleDraft] = useState(null);
   const [purchaseDraft, setPurchaseDraft] = useState(null);
   const [webProductDraft, setWebProductDraft] = useState(null);
@@ -380,6 +398,7 @@ function App() {
       supabase.from('web_orders').select('*, web_order_items(*)').order('created_at', { ascending: false }),
       supabase.from('custom_orders').select('*').order('created_at', { ascending: false }),
       supabase.from('promotion_events').select('*').order('event_date'),
+      supabase.from('inventory_takes').select('*, inventory_take_items(*)').order('created_at', { ascending: false }),
     ]);
     const failed = queries.find(({ error: queryError }) => queryError);
     if (failed) {
@@ -389,6 +408,7 @@ function App() {
         materials, indirects, utensils, recipes, batches, sales, purchases, expenses, additionalIncomes,
         collectionReminders, manualReservations, businessLoans, loanRepayments, financeSettings,
         webSettings, webProducts, webOrders, customOrders, promotionEvents,
+        inventoryTakes,
       ] = queries.map((result) => result.data);
       setData({
         materials: materials.map(fromMaterial),
@@ -410,6 +430,7 @@ function App() {
         webOrders,
         customOrders,
         promotionEvents,
+        inventoryTakes,
       });
       setWebSettingsDraft(webSettings || {
         id: 1,
@@ -550,6 +571,65 @@ function App() {
     if (window.matchMedia('(max-width: 900px)').matches) setMobileFormOpen(formId);
   }
 
+  function openInventoryTake() {
+    setInventoryTakeDraft(inventoryCountItems.map((item) => ({
+      ...item,
+      countedQuantity: String(item.systemQuantity),
+    })));
+    setInventoryTakeCategory('soap');
+    setInventoryTakeSaved(false);
+    setModal({ kind: 'inventoryTake', notes: '' });
+  }
+
+  function openInventoryTakeHistory(take) {
+    setInventoryTakeCategory('soap');
+    setInventoryTakeSaved(true);
+    setModal({ kind: 'inventoryTake', history: take });
+  }
+
+  async function saveInventoryTake(event) {
+    event.preventDefault();
+    if (inventoryTakeSaving || inventoryTakeSaved) return;
+    const notes = modal?.notes?.trim() || '';
+    const invalidCount = inventoryTakeDraft.some((item) => {
+      const count = Number(item.countedQuantity);
+      return !Number.isFinite(count)
+        || count < 0
+        || (item.category !== 'materials' && !Number.isInteger(count))
+        || (item.category === 'materials' && Math.abs(count * 1000 - Math.round(count * 1000)) > 1e-8);
+    });
+    if (!inventoryTakeDraft.length || invalidCount || notes.length > 500) {
+      toast('Revisa las cantidades y las notas antes de guardar la toma.', 'error');
+      return;
+    }
+
+    setInventoryTakeSaving(true);
+    try {
+      const { error: saveError } = await supabase.rpc('record_inventory_take', {
+        p_notes: notes || null,
+        p_items: inventoryTakeDraft.map((item) => ({
+          category: item.category,
+          item_id: item.itemId,
+          item_code: item.code,
+          item_name: item.name,
+          system_quantity: item.systemQuantity,
+          counted_quantity: Number(item.countedQuantity),
+        })),
+      });
+      if (saveError) {
+        toast(saveError.message, 'error');
+        return;
+      }
+      setInventoryTakeSaved(true);
+      toast('Toma guardada y existencias ajustadas');
+      await loadData();
+    } catch (saveError) {
+      toast(saveError?.message || 'No se pudo guardar la toma de inventario.', 'error');
+    } finally {
+      setInventoryTakeSaving(false);
+    }
+  }
+
   const soapStockRows = useMemo(() => data.webProducts.flatMap((product) => {
     const batches = getWebProductBatches(product);
     const batchRows = batches
@@ -579,6 +659,37 @@ function App() {
         return stockDifference || a.name.localeCompare(b.name, 'es');
       });
   }, [data.materials, materialSearch]);
+  const inventoryCountItems = useMemo(() => {
+    const soapItems = data.batches.map((batch) => {
+      const product = data.webProducts.find((entry) => getWebProductBatches(entry)
+        .some((assignedBatch) => assignedBatch.id === batch.id));
+      return {
+        category: 'soap',
+        itemId: batch.id,
+        code: batch.code,
+        name: `${product?.name || batch.recipe_name} · ${batch.code}`,
+        unit: 'jabones',
+        systemQuantity: availableWebBatchStock(batch) + reservedWebBatchStock(batch),
+      };
+    });
+    const utensilItems = data.utensils.map((item) => ({
+      category: 'utensils',
+      itemId: item.id,
+      code: item.code,
+      name: item.name,
+      unit: 'piezas',
+      systemQuantity: item.stock,
+    }));
+    const materialItems = data.materials.map((item) => ({
+      category: 'materials',
+      itemId: item.id,
+      code: item.code,
+      name: item.name,
+      unit: item.unit,
+      systemQuantity: item.initial + item.purchased - item.used,
+    }));
+    return [...soapItems, ...utensilItems, ...materialItems];
+  }, [data.batches, data.materials, data.utensils, data.webProducts]);
   const visibleWebProducts = useMemo(() => {
     const query = webProductSearch.trim().toLocaleLowerCase('es');
     return data.webProducts.filter((product) => {
@@ -661,7 +772,8 @@ function App() {
       .filter((sale) => sale.status === 'issued')
       .reduce((sum, sale) => sum + (sale.sale_items || [])
         .reduce((itemSum, item) => itemSum + number(item.cost_total), 0), 0);
-    const finishedInventory = Math.max(0, totalProductionCost - totalCostOfSales);
+    const finishedInventory = Math.max(0, totalProductionCost - totalCostOfSales
+      + data.batches.reduce((sum, batch) => sum + number(batch.inventory_adjustment) * number(batch.unit_cost), 0));
     const settings = data.financeSettings || {};
     const cash = number(settings.opening_cash)
       + data.sales.filter((sale) => sale.status === 'issued' && sale.payment_status === 'paid'
@@ -857,6 +969,7 @@ function App() {
   }
 
   function availableWebBatchStock(batch) {
+    const batchStock = number(batch.quantity) + number(batch.inventory_adjustment);
     const recipeBatches = data.batches
       .filter((item) => item.recipe_id === batch.recipe_id)
       .sort((a, b) => String(a.batch_date).localeCompare(String(b.batch_date))
@@ -888,13 +1001,26 @@ function App() {
             .flatMap((reservation) => reservation.batch_allocations || [])
             .filter((allocation) => allocation.batch_id === item.id)
             .reduce((total, allocation) => total + number(allocation.quantity), 0);
-        return sum + Math.max(0, number(item.quantity) - reserved);
+        return sum + Math.max(0, number(item.quantity) + number(item.inventory_adjustment) - reserved);
       }, 0);
     const soldHere = Math.min(
-      Math.max(0, number(batch.quantity) - reservedForBatch),
+      Math.max(0, batchStock - reservedForBatch),
       Math.max(0, sold - earlierFree),
     );
-    return Math.max(0, number(batch.quantity) - reservedForBatch - soldHere);
+    return Math.max(0, batchStock - reservedForBatch - soldHere);
+  }
+
+  function reservedWebBatchStock(batch) {
+    return data.webOrders
+      .filter((order) => order.status === 'confirmed')
+      .flatMap((order) => order.web_order_items || [])
+      .filter((item) => item.batch_id === batch.id)
+      .reduce((sum, item) => sum + number(item.quantity), 0)
+      + data.manualReservations
+        .filter((reservation) => reservation.status === 'active')
+        .flatMap((reservation) => reservation.batch_allocations || [])
+        .filter((allocation) => allocation.batch_id === batch.id)
+        .reduce((sum, allocation) => sum + number(allocation.quantity), 0);
   }
 
   async function uploadWebImage(file, folder) {
@@ -2409,7 +2535,6 @@ function App() {
             aria-controls="primary-navigation"
             onClick={() => setMobileNavOpen(!mobileNavOpen)}
           >☰</button>
-          <span className="currency-label">LPS <span>· Lempiras</span></span>
           <button
             type="button"
             className="button ghost theme-toggle"
@@ -2425,27 +2550,56 @@ function App() {
         {mobileNavOpen && <button type="button" className="sidebar-backdrop" aria-label="Cerrar menú" onClick={() => setMobileNavOpen(false)} />}
         <aside id="primary-navigation" className={`sidebar${mobileNavOpen ? ' open' : ''}`} aria-label="Navegación principal">
           {navigationGroups.map((group) => (
-            <section className="nav-group" key={group.label}>
-              <h2>{group.label}</h2>
-              {group.items.map(([id, title, icon]) => (
-                <button
-                  type="button"
-                  key={id}
-                  className={`nav-item${tab === id ? ' active' : ''}`}
-                  aria-current={tab === id ? 'page' : undefined}
-                  onClick={() => {
-                    setTab(id);
-                    setMobileNavOpen(false);
-                  }}
-                >
-                  <span className="nav-icon">{icon}</span><span>{title}</span>
-                  {id === 'webOrders' && activeWebOrderCount > 0 && (
-                    <span className="nav-badge" aria-label={`${activeWebOrderCount} pedidos sin reservar`} aria-live="polite">
-                      {activeWebOrderCount > 99 ? '99+' : activeWebOrderCount}
-                    </span>
-                  )}
-                </button>
-              ))}
+            <section
+              className={`nav-group${['header', 'bottom'].includes(preferences.navigationPosition) ? ' nav-group-horizontal' : ''}${!['header', 'bottom'].includes(preferences.navigationPosition) && collapsedNavigationGroups.has(group.label) ? ' collapsed' : ''}${['header', 'bottom'].includes(preferences.navigationPosition) && openHorizontalNavigationGroup === group.label ? ' expanded' : ''}`}
+              key={group.label}
+            >
+              <button
+                type="button"
+                className="nav-group-toggle"
+                aria-expanded={['header', 'bottom'].includes(preferences.navigationPosition)
+                  ? openHorizontalNavigationGroup === group.label
+                  : !collapsedNavigationGroups.has(group.label)}
+                aria-controls={`nav-group-${group.label.toLowerCase().replaceAll(' ', '-')}`}
+                onClick={() => {
+                  if (['header', 'bottom'].includes(preferences.navigationPosition)) {
+                    setOpenHorizontalNavigationGroup((current) => current === group.label ? null : group.label);
+                  } else {
+                    setCollapsedNavigationGroups((groups) => {
+                      const next = new Set(groups);
+                      if (next.has(group.label)) next.delete(group.label);
+                      else next.add(group.label);
+                      return next;
+                    });
+                  }
+                }}
+              >
+                <span className="nav-group-symbol" aria-hidden="true">{group.items[0]?.[2]}</span>
+                <span className="nav-group-title">{group.label}</span>
+                <span className="nav-group-chevron" aria-hidden="true">⌄</span>
+              </button>
+              <div className="nav-group-items" id={`nav-group-${group.label.toLowerCase().replaceAll(' ', '-')}`}>
+                {group.items.map(([id, title, icon]) => (
+                  <button
+                    type="button"
+                    key={id}
+                    className={`nav-item${tab === id ? ' active' : ''}`}
+                    aria-current={tab === id ? 'page' : undefined}
+                    onClick={() => {
+                      setTab(id);
+                      setMobileNavOpen(false);
+                      setOpenHorizontalNavigationGroup(null);
+                    }}
+                  >
+                    <span className="nav-icon">{icon}</span><span>{title}</span>
+                    {id === 'webOrders' && activeWebOrderCount > 0 && (
+                      <span className="nav-badge" aria-label={`${activeWebOrderCount} pedidos sin reservar`} aria-live="polite">
+                        {activeWebOrderCount > 99 ? '99+' : activeWebOrderCount}
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
             </section>
           ))}
         </aside>
@@ -2704,6 +2858,40 @@ function App() {
               <span>Total producidos<strong>{soapStockTotals.produced} jabones</strong></span>
               <span>Total disponibles<strong>{soapStockTotals.available} jabones</strong></span>
             </div>
+          </Section>
+        )}
+        {tab === 'inventoryTakes' && (
+          <Section
+            title="Tomas de inventario"
+            subtitle="Cuenta existencias físicas, ajusta diferencias y conserva el historial en Supabase"
+            action="＋ Iniciar toma"
+            onAction={openInventoryTake}
+          >
+            <div className="inventory-take-intro">
+              <span className="inventory-take-intro-icon" aria-hidden="true">▤</span>
+              <div>
+                <strong>Conteo guiado por categoría</strong>
+                <p>Registra jabones, utensilios y materia prima. Las diferencias se aplican al inventario al guardar.</p>
+              </div>
+            </div>
+            <Table headers={['Fecha', 'Artículos contados', 'Diferencias', 'Notas', '']}>
+              {data.inventoryTakes.map((take) => {
+                const items = take.inventory_take_items || [];
+                const changed = items.filter((item) => number(item.adjustment) !== 0).length;
+                return (
+                  <tr key={take.id}>
+                    <td>{new Date(take.created_at).toLocaleString('es-HN', { dateStyle: 'medium', timeStyle: 'short' })}</td>
+                    <td className="strong">{items.length}</td>
+                    <td><span className={`pill ${changed ? 'warning' : 'good'}`}>{changed} ajustes</span></td>
+                    <td>{take.notes || '—'}</td>
+                    <td className="sale-actions">
+                      <button type="button" className="button secondary small" onClick={() => openInventoryTakeHistory(take)}>Ver detalle</button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </Table>
+            {!data.inventoryTakes.length && <Empty text="Todavía no hay tomas registradas. Inicia una para guardar el primer conteo." />}
           </Section>
         )}
         {tab === 'materials' && (
@@ -3553,7 +3741,128 @@ function App() {
         </button>
       </nav>
 
-      {modal && !['production', 'sale', 'purchase', 'purchaseDetail', 'invoice', 'deleteSale', 'completeWebOrder', 'webOrderDetail', 'webProduct', 'customOrder', 'expense', 'collectionReminder', 'manualReservation', 'businessLoan', 'loanRepayment', 'promotionEvent'].includes(modal.kind) && (
+      {modal?.kind === 'inventoryTake' && (
+        <Dialog
+          className="inventory-take-dialog"
+          title={modal.history ? 'Detalle de toma de inventario' : 'Nueva toma de inventario'}
+          onClose={() => setModal(null)}
+          closeOnBackdrop={false}
+        >
+          {modal.history ? (
+            <>
+              <div className="inventory-take-summary">
+                <span>Registrada el {new Date(modal.history.created_at).toLocaleString('es-HN', { dateStyle: 'medium', timeStyle: 'short' })}</span>
+                {modal.history.notes && <p>{modal.history.notes}</p>}
+              </div>
+              <div className="inventory-take-tabs" role="tablist" aria-label="Categorías de la toma">
+                {inventoryTakeCategories.map(([category, label, icon]) => (
+                  <button
+                    type="button"
+                    role="tab"
+                    aria-selected={inventoryTakeCategory === category}
+                    className={`inventory-take-tab${inventoryTakeCategory === category ? ' active' : ''}`}
+                    key={category}
+                    onClick={() => setInventoryTakeCategory(category)}
+                  ><span aria-hidden="true">{icon}</span>{label}</button>
+                ))}
+              </div>
+              <div className="inventory-take-lines">
+                {(modal.history.inventory_take_items || [])
+                  .filter((item) => item.category === inventoryTakeCategory)
+                  .map((item) => (
+                    <div className="inventory-take-line" key={item.id}>
+                      <div className="inventory-take-item">
+                        <strong>{item.item_name}</strong>
+                        <small>{item.item_code || 'Sin código'} · {item.category === 'materials' ? 'Materia prima' : item.category === 'utensils' ? 'Utensilios' : 'Jabones'}</small>
+                      </div>
+                      <div className="inventory-take-values">
+                        <span><small>Sistema</small><strong>{number(item.system_quantity)}</strong></span>
+                        <span><small>Contado</small><strong>{number(item.counted_quantity)}</strong></span>
+                        <span><small>Ajuste</small><strong className={number(item.adjustment) < 0 ? 'negative' : 'positive'}>{number(item.adjustment) > 0 ? '+' : ''}{number(item.adjustment)}</strong></span>
+                      </div>
+                    </div>
+                  ))}
+                {!modal.history.inventory_take_items?.some((item) => item.category === inventoryTakeCategory) && (
+                  <Empty text="No hay artículos de esta categoría en la toma." />
+                )}
+              </div>
+            </>
+          ) : (
+            <form className="inventory-take-form" onSubmit={saveInventoryTake}>
+              {inventoryTakeSaved && (
+                <div className="inventory-take-success" role="status">
+                  La toma quedó guardada y el inventario fue ajustado. Cierra esta ventana con la X.
+                </div>
+              )}
+              <div className="inventory-take-step">
+                <span className="inventory-take-step-number">1</span>
+                <div><strong>Revisa cada categoría</strong><small>Ingresa la cantidad física contada para cada artículo.</small></div>
+              </div>
+              <div className="inventory-take-tabs" role="tablist" aria-label="Categorías de inventario">
+                {inventoryTakeCategories.map(([category, label, icon]) => {
+                  const total = inventoryTakeDraft.filter((item) => item.category === category).length;
+                  return (
+                    <button
+                      type="button"
+                      role="tab"
+                      aria-selected={inventoryTakeCategory === category}
+                      className={`inventory-take-tab${inventoryTakeCategory === category ? ' active' : ''}`}
+                      key={category}
+                      onClick={() => setInventoryTakeCategory(category)}
+                    ><span aria-hidden="true">{icon}</span>{label}<small>{total}</small></button>
+                  );
+                })}
+              </div>
+              <div className="inventory-take-lines">
+                {inventoryTakeDraft.filter((item) => item.category === inventoryTakeCategory).map((item) => (
+                  <div className="inventory-take-line" key={`${item.category}-${item.itemId}`}>
+                    <div className="inventory-take-item">
+                      <strong>{item.name}</strong>
+                      <small>{item.code || 'Sin código'} · Sistema: {item.systemQuantity} {item.unit}</small>
+                    </div>
+                    <label className="inventory-take-count">
+                      <span>Cantidad física ({item.unit})</span>
+                      <input
+                        type="number"
+                        min="0"
+                        step={item.category === 'materials' ? '0.001' : '1'}
+                        required
+                        disabled={inventoryTakeSaved}
+                        value={item.countedQuantity}
+                        onChange={(event) => setInventoryTakeDraft((draft) => draft.map((row) => row.itemId === item.itemId && row.category === item.category
+                          ? { ...row, countedQuantity: event.target.value }
+                          : row))}
+                      />
+                    </label>
+                  </div>
+                ))}
+                {!inventoryTakeDraft.some((item) => item.category === inventoryTakeCategory) && (
+                  <Empty text="No hay artículos registrados en esta categoría." />
+                )}
+              </div>
+              {!inventoryTakeSaved && (
+                <>
+                  <div className="inventory-take-step">
+                    <span className="inventory-take-step-number">2</span>
+                    <div><strong>Confirma y registra</strong><small>Las diferencias actualizarán las existencias actuales.</small></div>
+                  </div>
+                  <label className="inventory-take-notes">
+                    <span>Notas de la toma <small>(opcional)</small></span>
+                    <textarea maxLength="500" rows="2" value={modal.notes} onChange={(event) => setModal({ ...modal, notes: event.target.value })} placeholder="Ej. Conteo semanal del almacén" />
+                  </label>
+                  <div className="inventory-take-actions">
+                    <span>El registro se guardará en el historial.</span>
+                    <button type="submit" className="button primary" disabled={inventoryTakeSaving || !inventoryTakeDraft.length}>
+                      {inventoryTakeSaving ? 'Guardando…' : 'Guardar toma y ajustar'}
+                    </button>
+                  </div>
+                </>
+              )}
+            </form>
+          )}
+        </Dialog>
+      )}
+      {modal && !['production', 'sale', 'purchase', 'purchaseDetail', 'invoice', 'deleteSale', 'completeWebOrder', 'webOrderDetail', 'webProduct', 'customOrder', 'expense', 'collectionReminder', 'manualReservation', 'businessLoan', 'loanRepayment', 'promotionEvent', 'inventoryTake'].includes(modal.kind) && (
         <Dialog title={`${modal.item ? 'Editar' : 'Registrar'} ${modal.kind === 'materials' ? 'materia prima' : modal.kind === 'indirects' ? 'insumo indirecto' : 'utensilio'}`} onClose={() => setModal(null)}>
           <form className="stack-form" onSubmit={saveEntity}>
             <Field label="Código"><input required value={modal.values.code} onChange={(e) => setModal({ ...modal, values: { ...modal.values, code: e.target.value } })} /></Field>
@@ -4149,8 +4458,8 @@ function Empty({ text }) {
 function Notice({ type, children }) {
   return <div className={`notice ${type}`} role="alert">{children}</div>;
 }
-function Dialog({ title, onClose, children, className = '' }) {
-  return <div className="dialog-backdrop" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose(); }}><section className={`dialog ${className}`} role="dialog" aria-modal="true" aria-label={title}><div className="dialog-heading"><h2>{title}</h2><button className="icon-button" aria-label="Cerrar" onClick={onClose}>×</button></div>{children}</section></div>;
+function Dialog({ title, onClose, children, className = '', closeOnBackdrop = true }) {
+  return <div className="dialog-backdrop" onMouseDown={(event) => { if (closeOnBackdrop && event.target === event.currentTarget) onClose(); }}><section className={`dialog ${className}`} role="dialog" aria-modal="true" aria-label={title}><div className="dialog-heading"><h2>{title}</h2><button type="button" className="icon-button" aria-label="Cerrar" onClick={onClose}>×</button></div>{children}</section></div>;
 }
 function Field({ label, children }) {
   return <label>{label}{children}</label>;

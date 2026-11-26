@@ -30,6 +30,7 @@ En **Settings → Pages → Build and deployment**, selecciona **GitHub Actions*
 - Trabajo de venta y promoción incluye un calendario de actividades con fecha, recursos y objetivo; las actividades se guardan en Supabase.
 - Navegación por áreas adaptable a escritorio y móvil; agrupa facturación, cobros, compras, gastos, préstamos y finanzas en **Ventas y finanzas**, con reservaciones y promoción en **Comercial**.
 - Inventario de materias primas con alertas, existencias y costo unitario configurable por gramo, mililitro o pieza.
+- Tomas de inventario por jabones, utensilios y materia prima, con ajustes de existencias e historial consultable guardado en Supabase.
 - Control de insumos indirectos con unidad física (g/ml/pza), existencias, mínimo de reabastecimiento, consumo por jabón, rendimiento estimado y costo unitario; producción descuenta su consumo real. Control de depreciación de utensilios.
 - Creación de recetas con varias materias primas, insumos indirectos y utensilios; las cantidades de materia prima se ingresan por jabón, se multiplican por el tamaño del lote y se muestra el costo por barra.
 - Precios editables al detalle, por mayor y para eventos; calcula ganancia por barra y margen bruto (`(precio - costo) / precio`).
@@ -50,6 +51,8 @@ En **Settings → Pages → Build and deployment**, selecciona **GitHub Actions*
 - Acceso a la interfaz mediante un código y sesión anónima de Supabase; las sesiones anónimas comparten el inventario.
 
 **Importante:** `8863` se valida en React y puede encontrarse inspeccionando los archivos del frontend; es una pantalla de acceso, no una autenticación segura. Todas las sesiones anónimas comparten el mismo inventario y pueden consultar, crear, editar o eliminar sus registros. Por tanto, cualquier persona que pueda abrir la aplicación puede acceder a esos datos; para restringir el acceso, configura autenticación real en Supabase y políticas RLS por usuario. Nunca pongas una clave secreta o `service_role` en React.
+
+Las tomas de inventario se guardan en `inventory_takes` y `inventory_take_items`. Para habilitar la vista y registrar ajustes, vuelve a ejecutar `supabase/schema.sql` en Supabase; el conteo de jabones respeta las unidades reservadas y vendidas.
 
 Los comprobantes de venta y los reportes financieros son internos/de gestión; no tienen validez fiscal ni representan estados auditados. Configura los saldos iniciales en **Finanzas** para reflejar caja, cuentas por cobrar comerciales/pagar y capital a la fecha de apertura. Los préstamos registrados aparecen aparte como cuentas por cobrar; no incluyas su saldo en las cuentas por cobrar comerciales iniciales para evitar duplicarlo. Los préstamos y devoluciones con fecha posterior a la apertura actualizan los movimientos de caja; los anteriores permanecen en el saldo por cobrar y deben quedar reflejados en el efectivo y patrimonio de apertura. Al comprar insumos indirectos, la cantidad representa unidades de rendimiento agregadas; al comprar utensilios, representa usos de vida útil agregados. Si ya habías ejecutado una versión anterior de `supabase/schema.sql`, vuelve a ejecutar el archivo actualizado para instalar las tablas de préstamos, pedidos personalizados y calendario de promoción, y las tablas/funciones de reservaciones.
 
