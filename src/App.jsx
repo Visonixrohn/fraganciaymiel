@@ -596,6 +596,15 @@ function App() {
     setInventoryTakeCategory('soap');
     setInventoryTakeSaved(true);
     setInventoryTakeApplied(Boolean(take.adjusted_at));
+    setInventoryTakeId(take.id);
+    setInventoryTakeDraft((take.inventory_take_items || []).map((item) => ({
+      category: item.category,
+      itemId: item.item_id,
+      systemQuantity: number(item.system_quantity),
+      countedQuantity: String(item.counted_quantity),
+    })));
+    setInventoryTakeCode('');
+    setInventoryTakeConfirmingAdjustment(false);
     setModal({ kind: 'inventoryTake', history: take });
   }
 
@@ -3797,8 +3806,12 @@ function App() {
             <>
               <div className="inventory-take-summary">
                 <span>Registrada el {new Date(modal.history.created_at).toLocaleString('es-HN', { dateStyle: 'medium', timeStyle: 'short' })}</span>
-                <span className={`pill ${modal.history.adjusted_at ? 'good' : 'warning'}`}>
-                  {modal.history.adjusted_at ? 'Ajuste aplicado' : 'Conteo guardado · pendiente de ajuste'}
+                <span className={`pill ${inventoryTakeApplied || !inventoryTakeDraft.some((item) => number(item.countedQuantity) !== item.systemQuantity) ? 'good' : 'warning'}`}>
+                  {inventoryTakeApplied
+                    ? 'Ajuste aplicado'
+                    : inventoryTakeDraft.some((item) => number(item.countedQuantity) !== item.systemQuantity)
+                      ? 'Conteo guardado · pendiente de ajuste'
+                      : 'Sin diferencias'}
                 </span>
                 {modal.history.notes && <p>{modal.history.notes}</p>}
               </div>
@@ -3834,6 +3847,38 @@ function App() {
                   <Empty text="No hay artículos de esta categoría en la toma." />
                 )}
               </div>
+              {inventoryTakeDraft.some((item) => number(item.countedQuantity) !== item.systemQuantity)
+                && !inventoryTakeApplied && (
+                  inventoryTakeConfirmingAdjustment ? (
+                    <form className="inventory-take-adjust-form" onSubmit={applyInventoryTake}>
+                      <label className="inventory-take-notes">
+                        <span>Clave de inicio de sesión</span>
+                        <input
+                          type="password"
+                          inputMode="numeric"
+                          autoComplete="current-password"
+                          required
+                          autoFocus
+                          value={inventoryTakeCode}
+                          onChange={(event) => setInventoryTakeCode(event.target.value)}
+                          placeholder="Ingresa tu clave de acceso"
+                        />
+                      </label>
+                      <div className="inventory-take-actions">
+                        <button type="button" className="button secondary" onClick={() => { setInventoryTakeConfirmingAdjustment(false); setInventoryTakeCode(''); }}>Volver</button>
+                        <button type="submit" className="button primary" disabled={inventoryTakeAdjusting}>
+                          {inventoryTakeAdjusting ? 'Aplicando…' : 'Confirmar ajuste'}
+                        </button>
+                      </div>
+                    </form>
+                  ) : (
+                    <div className="inventory-take-actions">
+                      <span>Diferencias pendientes de aplicar.</span>
+                      <button type="button" className="button primary" onClick={() => setInventoryTakeConfirmingAdjustment(true)}>Ajustar inventario</button>
+                    </div>
+                  )
+                )}
+              {inventoryTakeApplied && <div className="inventory-take-success" role="status">El ajuste ya fue aplicado.</div>}
             </>
           ) : (
             <form className="inventory-take-form" onSubmit={inventoryTakeSaved ? applyInventoryTake : saveInventoryTake}>

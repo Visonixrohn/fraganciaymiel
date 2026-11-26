@@ -1213,8 +1213,22 @@ td { border-top-color: #e9eee9; }
 .inventory-take-notes { display: grid; gap: 6px; margin: 1px 0 14px; color: #536157; font-size: 10px; font-weight: 700; }
 .inventory-take-notes span small { color: #87928a; font-weight: 500; }
 .inventory-take-notes textarea { font-size: 11px; }
-.inventory-take-actions { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-top: 13px; border-top: 1px solid var(--line); }
+.inventory-take-actions {
+  position: sticky;
+  z-index: 2;
+  bottom: -21px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 0 -21px -21px;
+  padding: 13px 21px calc(13px + env(safe-area-inset-bottom));
+  border-top: 1px solid var(--line);
+  background: color-mix(in srgb, white 96%, transparent);
+  box-shadow: 0 -8px 18px #172a1d0a;
+}
 .inventory-take-actions > span { color: #87928a; font-size: 9px; }
+.inventory-take-actions .button { min-height: 46px; }
 .inventory-take-success { margin-bottom: 14px; padding: 12px 14px; border: 1px solid #cfe5d4; border-radius: 9px; background: #eff8f1; color: #26724a; font-size: 11px; line-height: 1.5; }
 .app-shell[data-theme="dark"] .nav-group { border-color: #354139; background: #1b251e; }
 .app-shell[data-theme="dark"] .nav-group-toggle { color: #b2beb5; }
@@ -1233,9 +1247,16 @@ td { border-top-color: #e9eee9; }
 
 @media (max-width: 620px) {
   .inventory-take-line { grid-template-columns: minmax(0, 1fr); gap: 9px; }
-  .inventory-take-actions { align-items: stretch; flex-direction: column; }
+  .inventory-take-actions {
+    bottom: -17px;
+    align-items: stretch;
+    flex-direction: column;
+    margin: 0 -17px -17px;
+    padding: 12px 17px calc(12px + env(safe-area-inset-bottom));
+  }
   .inventory-take-actions .button { width: 100%; }
   .inventory-take-actions > span { text-align: center; }
   .inventory-take-intro { padding: 14px; }
   .inventory-take-dialog { padding: 17px; }
 }
+.app-shell[data-theme="dark"] .inventory-take-actions { background: color-mix(in srgb, #1b251e 96%, transparent); }
