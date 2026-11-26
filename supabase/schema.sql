@@ -111,6 +111,20 @@ create table if not exists public.inventory_takes (
   created_at timestamptz not null default now()
 );
 
+do $$
+begin
+  if not exists (
+    select 1 from information_schema.columns
+    where table_schema = 'public'
+      and table_name = 'inventory_takes'
+      and column_name = 'adjusted_at'
+  ) then
+    alter table public.inventory_takes add column adjusted_at timestamptz;
+    update public.inventory_takes set adjusted_at = created_at;
+  end if;
+end;
+$$;
+
 create table if not exists public.inventory_take_items (
   id uuid primary key default gen_random_uuid(),
   take_id uuid not null references public.inventory_takes(id) on delete cascade,
@@ -2354,17 +2368,6 @@ begin
       if abs(v_before - v_item.system_quantity) > 0.001 then
         raise exception 'El stock de % cambió durante la toma. Actualiza la pantalla e inténtalo de nuevo.', v_item.item_name;
       end if;
-      if v_item.counted_quantity >= v_before then
-        update public.materials
-        set initial_stock = initial_stock + (v_item.counted_quantity - v_before),
-            total_cost = round(total_cost
-              + (v_item.counted_quantity - v_before) * unit_cost, 2)
-        where id = v_item.item_id;
-      else
-        update public.materials
-        set used = used + (v_before - v_item.counted_quantity)
-        where id = v_item.item_id;
-      end if;
     elsif v_item.category = 'utensils' then
       select * into v_utensil
       from public.utensils
@@ -2377,10 +2380,10 @@ begin
       if abs(v_before - v_item.system_quantity) > 0.001 then
         raise exception 'El stock de % cambió durante la toma. Actualiza la pantalla e inténtalo de nuevo.', v_item.item_name;
       end if;
-      update public.utensils
-      set stock = v_item.counted_quantity
-      where id = v_item.item_id;
     else
+      perform 1 from public.recipes where id = (
+        select recipe_id from public.batches where id = v_item.item_id
+      ) for update;
       select * into v_batch
       from public.batches
       where id = v_item.item_id
@@ -2442,9 +2445,6 @@ begin
       if v_item.counted_quantity < v_reserved then
         raise exception 'La cantidad física de % no cubre sus reservas activas. Revisa las reservas antes de ajustar.', v_item.item_name;
       end if;
-      update public.batches
-      set inventory_adjustment = v_item.counted_quantity + v_sold_here - v_batch.quantity
-      where id = v_item.item_id;
     end if;
 
     insert into public.inventory_take_items (
@@ -2464,6 +2464,167 @@ $$;
 
 revoke all on function public.record_inventory_take(text, jsonb) from public;
 grant execute on function public.record_inventory_take(text, jsonb) to authenticated;
+
+create or replace function public.apply_inventory_take(p_take_id uuid, p_access_code text)
+returns void
+language plpgsql
+security definer
+set search_path = ''
+as $$
+declare
+  v_owner uuid := auth.uid();
+  v_take public.inventory_takes%rowtype;
+  v_item record;
+  v_material public.materials%rowtype;
+  v_utensil public.utensils%rowtype;
+  v_batch public.batches%rowtype;
+  v_before numeric(14, 3);
+  v_reserved numeric(14, 3);
+  v_sold numeric(14, 3);
+  v_earlier_free numeric(14, 3);
+  v_sold_here numeric(14, 3);
+begin
+  if v_owner is null then
+    raise exception 'Debes iniciar sesión para ajustar el inventario.';
+  end if;
+  if p_access_code is distinct from '8863' then
+    raise exception 'La clave de inicio de sesión no es válida.';
+  end if;
+
+  select * into v_take
+  from public.inventory_takes
+  where id = p_take_id and owner_id = v_owner
+  for update;
+  if not found then
+    raise exception 'No se encontró la toma de inventario.';
+  end if;
+  if v_take.adjusted_at is not null then
+    raise exception 'Esta toma ya fue aplicada.';
+  end if;
+
+  for v_item in
+    select * from public.inventory_take_items
+    where take_id = p_take_id
+    order by category, item_id
+    for update
+  loop
+    if v_item.category = 'materials' then
+      select * into v_material
+      from public.materials
+      where id = v_item.item_id
+      for update;
+      if not found then
+        raise exception 'No se encontró la materia prima %.', v_item.item_name;
+      end if;
+      v_before := v_material.initial_stock + v_material.purchased - v_material.used;
+      if abs(v_before - v_item.system_quantity) > 0.001 then
+        raise exception 'El stock de % cambió desde que se guardó la toma. Registra un nuevo conteo.', v_item.item_name;
+      end if;
+      if v_item.counted_quantity >= v_before then
+        update public.materials
+        set initial_stock = initial_stock + (v_item.counted_quantity - v_before),
+            total_cost = round(total_cost
+              + (v_item.counted_quantity - v_before) * unit_cost, 2)
+        where id = v_item.item_id;
+      else
+        update public.materials
+        set used = used + (v_before - v_item.counted_quantity)
+        where id = v_item.item_id;
+      end if;
+    elsif v_item.category = 'utensils' then
+      select * into v_utensil
+      from public.utensils
+      where id = v_item.item_id
+      for update;
+      if not found then
+        raise exception 'No se encontró el utensilio %.', v_item.item_name;
+      end if;
+      v_before := v_utensil.stock;
+      if abs(v_before - v_item.system_quantity) > 0.001 then
+        raise exception 'El stock de % cambió desde que se guardó la toma. Registra un nuevo conteo.', v_item.item_name;
+      end if;
+      update public.utensils
+      set stock = v_item.counted_quantity
+      where id = v_item.item_id;
+    else
+      perform 1 from public.recipes where id = (
+        select recipe_id from public.batches where id = v_item.item_id
+      ) for update;
+      select * into v_batch
+      from public.batches
+      where id = v_item.item_id
+      for update;
+      if not found then
+        raise exception 'No se encontró el lote de jabón %.', v_item.item_name;
+      end if;
+
+      select coalesce(sum(item.quantity), 0) into v_reserved
+      from (
+        select woi.quantity
+        from public.web_order_items woi
+        join public.web_orders wo on wo.id = woi.web_order_id
+        where woi.batch_id = v_batch.id and wo.status = 'confirmed'
+        union all
+        select allocation.quantity
+        from public.manual_reservations reservation
+        cross join lateral jsonb_to_recordset(reservation.batch_allocations)
+          as allocation(batch_id uuid, quantity numeric)
+        where allocation.batch_id = v_batch.id and reservation.status = 'active'
+      ) item;
+
+      select coalesce(sum(item.quantity), 0) into v_sold
+      from public.sale_items item
+      join public.sales sale on sale.id = item.sale_id
+      where item.recipe_id = v_batch.recipe_id and sale.status = 'issued';
+
+      select coalesce(sum(greatest(0, earlier.quantity + earlier.inventory_adjustment - earlier_reserved.quantity)), 0)
+      into v_earlier_free
+      from public.batches earlier
+      cross join lateral (
+        select coalesce(sum(woi.quantity), 0) as quantity
+        from public.web_order_items woi
+        join public.web_orders wo on wo.id = woi.web_order_id
+        where woi.batch_id = earlier.id and wo.status = 'confirmed'
+      ) web_reserved
+      cross join lateral (
+        select coalesce(sum(allocation.quantity), 0) as quantity
+        from public.manual_reservations reservation
+        cross join lateral jsonb_to_recordset(reservation.batch_allocations)
+          as allocation(batch_id uuid, quantity numeric)
+        where allocation.batch_id = earlier.id and reservation.status = 'active'
+      ) manual_reserved
+      cross join lateral (
+        select web_reserved.quantity + manual_reserved.quantity as quantity
+      ) earlier_reserved
+      where earlier.recipe_id = v_batch.recipe_id
+        and (earlier.batch_date, earlier.created_at, earlier.id)
+          < (v_batch.batch_date, v_batch.created_at, v_batch.id);
+
+      v_sold_here := least(
+        greatest(0, v_batch.quantity + v_batch.inventory_adjustment - v_reserved),
+        greatest(0, v_sold - v_earlier_free)
+      );
+      v_before := greatest(0, v_batch.quantity + v_batch.inventory_adjustment - v_sold_here);
+      if abs(v_before - v_item.system_quantity) > 0.001 then
+        raise exception 'El stock del lote % cambió desde que se guardó la toma. Registra un nuevo conteo.', v_item.item_name;
+      end if;
+      if v_item.counted_quantity < v_reserved then
+        raise exception 'La cantidad física de % no cubre sus reservas activas. Revisa las reservas antes de ajustar.', v_item.item_name;
+      end if;
+      update public.batches
+      set inventory_adjustment = v_item.counted_quantity + v_sold_here - v_batch.quantity
+      where id = v_item.item_id;
+    end if;
+  end loop;
+
+  update public.inventory_takes
+  set adjusted_at = now()
+  where id = p_take_id;
+end;
+$$;
+
+revoke all on function public.apply_inventory_take(uuid, text) from public;
+grant execute on function public.apply_inventory_take(uuid, text) to authenticated;
 
 revoke all on function public.web_available_batch_stock(uuid) from public;
 revoke all on function public.get_web_catalog() from public;

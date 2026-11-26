@@ -218,7 +218,9 @@ function App() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState(null);
   const [tab, setTab] = useState('dashboard');
-  const [collapsedNavigationGroups, setCollapsedNavigationGroups] = useState(() => new Set());
+  const [collapsedNavigationGroups, setCollapsedNavigationGroups] = useState(
+    () => new Set(navigationGroups.map(({ label }) => label)),
+  );
   const [openHorizontalNavigationGroup, setOpenHorizontalNavigationGroup] = useState(null);
   const [theme, setTheme] = useState(getSavedTheme);
   const [preferences, setPreferences] = useState(getSavedPreferences);
@@ -263,6 +265,11 @@ function App() {
   const [inventoryTakeCategory, setInventoryTakeCategory] = useState('soap');
   const [inventoryTakeSaving, setInventoryTakeSaving] = useState(false);
   const [inventoryTakeSaved, setInventoryTakeSaved] = useState(false);
+  const [inventoryTakeId, setInventoryTakeId] = useState(null);
+  const [inventoryTakeApplied, setInventoryTakeApplied] = useState(false);
+  const [inventoryTakeCode, setInventoryTakeCode] = useState('');
+  const [inventoryTakeConfirmingAdjustment, setInventoryTakeConfirmingAdjustment] = useState(false);
+  const [inventoryTakeAdjusting, setInventoryTakeAdjusting] = useState(false);
   const [saleDraft, setSaleDraft] = useState(null);
   const [purchaseDraft, setPurchaseDraft] = useState(null);
   const [webProductDraft, setWebProductDraft] = useState(null);
@@ -578,12 +585,17 @@ function App() {
     })));
     setInventoryTakeCategory('soap');
     setInventoryTakeSaved(false);
+    setInventoryTakeId(null);
+    setInventoryTakeApplied(false);
+    setInventoryTakeCode('');
+    setInventoryTakeConfirmingAdjustment(false);
     setModal({ kind: 'inventoryTake', notes: '' });
   }
 
   function openInventoryTakeHistory(take) {
     setInventoryTakeCategory('soap');
     setInventoryTakeSaved(true);
+    setInventoryTakeApplied(Boolean(take.adjusted_at));
     setModal({ kind: 'inventoryTake', history: take });
   }
 
@@ -605,7 +617,7 @@ function App() {
 
     setInventoryTakeSaving(true);
     try {
-      const { error: saveError } = await supabase.rpc('record_inventory_take', {
+      const { data: takeId, error: saveError } = await supabase.rpc('record_inventory_take', {
         p_notes: notes || null,
         p_items: inventoryTakeDraft.map((item) => ({
           category: item.category,
@@ -621,12 +633,43 @@ function App() {
         return;
       }
       setInventoryTakeSaved(true);
-      toast('Toma guardada y existencias ajustadas');
+      setInventoryTakeId(takeId);
+      toast('Conteo guardado. Revisa las diferencias antes de ajustar.');
       await loadData();
     } catch (saveError) {
       toast(saveError?.message || 'No se pudo guardar la toma de inventario.', 'error');
     } finally {
       setInventoryTakeSaving(false);
+    }
+  }
+
+  async function applyInventoryTake(event) {
+    event.preventDefault();
+    if (inventoryTakeAdjusting || !inventoryTakeId || !inventoryTakeConfirmingAdjustment || inventoryTakeApplied) return;
+    if (inventoryTakeCode !== ACCESS_CODE) {
+      toast('La clave de inicio de sesión no es válida.', 'error');
+      return;
+    }
+
+    setInventoryTakeAdjusting(true);
+    try {
+      const { error: adjustError } = await supabase.rpc('apply_inventory_take', {
+        p_take_id: inventoryTakeId,
+        p_access_code: inventoryTakeCode,
+      });
+      if (adjustError) {
+        toast(adjustError.message, 'error');
+        return;
+      }
+      setInventoryTakeApplied(true);
+      setInventoryTakeConfirmingAdjustment(false);
+      setInventoryTakeCode('');
+      toast('Ajuste de inventario aplicado');
+      await loadData();
+    } catch (adjustError) {
+      toast(adjustError?.message || 'No se pudo aplicar el ajuste de inventario.', 'error');
+    } finally {
+      setInventoryTakeAdjusting(false);
     }
   }
 
@@ -2871,7 +2914,7 @@ function App() {
               <span className="inventory-take-intro-icon" aria-hidden="true">▤</span>
               <div>
                 <strong>Conteo guiado por categoría</strong>
-                <p>Registra jabones, utensilios y materia prima. Las diferencias se aplican al inventario al guardar.</p>
+                <p>Registra jabones, utensilios y materia prima. Revisa las diferencias y confirma cualquier ajuste con la clave de acceso.</p>
               </div>
             </div>
             <Table headers={['Fecha', 'Artículos contados', 'Diferencias', 'Notas', '']}>
@@ -2882,7 +2925,9 @@ function App() {
                   <tr key={take.id}>
                     <td>{new Date(take.created_at).toLocaleString('es-HN', { dateStyle: 'medium', timeStyle: 'short' })}</td>
                     <td className="strong">{items.length}</td>
-                    <td><span className={`pill ${changed ? 'warning' : 'good'}`}>{changed} ajustes</span></td>
+                    <td><span className={`pill ${take.adjusted_at ? 'good' : changed ? 'warning' : 'good'}`}>
+                      {take.adjusted_at ? 'Ajustada' : changed ? `${changed} diferencias` : 'Sin diferencias'}
+                    </span></td>
                     <td>{take.notes || '—'}</td>
                     <td className="sale-actions">
                       <button type="button" className="button secondary small" onClick={() => openInventoryTakeHistory(take)}>Ver detalle</button>
@@ -3752,6 +3797,9 @@ function App() {
             <>
               <div className="inventory-take-summary">
                 <span>Registrada el {new Date(modal.history.created_at).toLocaleString('es-HN', { dateStyle: 'medium', timeStyle: 'short' })}</span>
+                <span className={`pill ${modal.history.adjusted_at ? 'good' : 'warning'}`}>
+                  {modal.history.adjusted_at ? 'Ajuste aplicado' : 'Conteo guardado · pendiente de ajuste'}
+                </span>
                 {modal.history.notes && <p>{modal.history.notes}</p>}
               </div>
               <div className="inventory-take-tabs" role="tablist" aria-label="Categorías de la toma">
@@ -3788,10 +3836,12 @@ function App() {
               </div>
             </>
           ) : (
-            <form className="inventory-take-form" onSubmit={saveInventoryTake}>
+            <form className="inventory-take-form" onSubmit={inventoryTakeSaved ? applyInventoryTake : saveInventoryTake}>
               {inventoryTakeSaved && (
                 <div className="inventory-take-success" role="status">
-                  La toma quedó guardada y el inventario fue ajustado. Cierra esta ventana con la X.
+                  {inventoryTakeApplied
+                    ? 'El conteo quedó guardado y el ajuste ya fue aplicado.'
+                    : 'El conteo quedó guardado. Revisa las diferencias; todavía no se ha modificado el inventario.'}
                 </div>
               )}
               <div className="inventory-take-step">
@@ -3820,20 +3870,29 @@ function App() {
                       <strong>{item.name}</strong>
                       <small>{item.code || 'Sin código'} · Sistema: {item.systemQuantity} {item.unit}</small>
                     </div>
-                    <label className="inventory-take-count">
-                      <span>Cantidad física ({item.unit})</span>
-                      <input
-                        type="number"
-                        min="0"
-                        step={item.category === 'materials' ? '0.001' : '1'}
-                        required
-                        disabled={inventoryTakeSaved}
-                        value={item.countedQuantity}
-                        onChange={(event) => setInventoryTakeDraft((draft) => draft.map((row) => row.itemId === item.itemId && row.category === item.category
-                          ? { ...row, countedQuantity: event.target.value }
-                          : row))}
-                      />
-                    </label>
+                    {inventoryTakeSaved ? (
+                      <div className="inventory-take-values">
+                        <span><small>Sistema</small><strong>{item.systemQuantity}</strong></span>
+                        <span><small>Contado</small><strong>{number(item.countedQuantity)}</strong></span>
+                        <span><small>Diferencia</small><strong className={number(item.countedQuantity) - item.systemQuantity < 0 ? 'negative' : 'positive'}>
+                          {number(item.countedQuantity) - item.systemQuantity > 0 ? '+' : ''}{number(item.countedQuantity) - item.systemQuantity}
+                        </strong></span>
+                      </div>
+                    ) : (
+                      <label className="inventory-take-count">
+                        <span>Cantidad física ({item.unit})</span>
+                        <input
+                          type="number"
+                          min="0"
+                          step={item.category === 'materials' ? '0.001' : '1'}
+                          required
+                          value={item.countedQuantity}
+                          onChange={(event) => setInventoryTakeDraft((draft) => draft.map((row) => row.itemId === item.itemId && row.category === item.category
+                            ? { ...row, countedQuantity: event.target.value }
+                            : row))}
+                        />
+                      </label>
+                    )}
                   </div>
                 ))}
                 {!inventoryTakeDraft.some((item) => item.category === inventoryTakeCategory) && (
@@ -3844,7 +3903,7 @@ function App() {
                 <>
                   <div className="inventory-take-step">
                     <span className="inventory-take-step-number">2</span>
-                    <div><strong>Confirma y registra</strong><small>Las diferencias actualizarán las existencias actuales.</small></div>
+                    <div><strong>Confirma y registra el conteo</strong><small>Guardar el conteo no modifica las existencias; podrás decidir después si aplicas el ajuste.</small></div>
                   </div>
                   <label className="inventory-take-notes">
                     <span>Notas de la toma <small>(opcional)</small></span>
@@ -3853,9 +3912,47 @@ function App() {
                   <div className="inventory-take-actions">
                     <span>El registro se guardará en el historial.</span>
                     <button type="submit" className="button primary" disabled={inventoryTakeSaving || !inventoryTakeDraft.length}>
-                      {inventoryTakeSaving ? 'Guardando…' : 'Guardar toma y ajustar'}
+                      {inventoryTakeSaving ? 'Guardando…' : 'Guardar conteo'}
                     </button>
                   </div>
+                </>
+              )}
+              {inventoryTakeSaved && (
+                <>
+                  {inventoryTakeDraft.some((item) => number(item.countedQuantity) !== item.systemQuantity) ? (
+                    inventoryTakeApplied ? (
+                      <div className="inventory-take-success" role="status">El ajuste ya fue aplicado.</div>
+                    ) : inventoryTakeConfirmingAdjustment ? (
+                      <>
+                        <label className="inventory-take-notes">
+                          <span>Clave de inicio de sesión</span>
+                          <input
+                            type="password"
+                            inputMode="numeric"
+                            autoComplete="current-password"
+                            required
+                            autoFocus
+                            value={inventoryTakeCode}
+                            onChange={(event) => setInventoryTakeCode(event.target.value)}
+                            placeholder="Ingresa tu clave de acceso"
+                          />
+                        </label>
+                        <div className="inventory-take-actions">
+                          <button type="button" className="button secondary" onClick={() => { setInventoryTakeConfirmingAdjustment(false); setInventoryTakeCode(''); }}>Volver</button>
+                          <button type="submit" className="button primary" disabled={inventoryTakeAdjusting}>
+                            {inventoryTakeAdjusting ? 'Aplicando…' : 'Confirmar ajuste'}
+                          </button>
+                        </div>
+                      </>
+                    ) : (
+                      <div className="inventory-take-actions">
+                        <span>Las diferencias aún no afectan las existencias.</span>
+                        <button type="button" className="button primary" onClick={() => setInventoryTakeConfirmingAdjustment(true)}>Ajustar inventario</button>
+                      </div>
+                    )
+                  ) : (
+                    <div className="inventory-take-success" role="status">No hay diferencias que ajustar.</div>
+                  )}
                 </>
               )}
             </form>
